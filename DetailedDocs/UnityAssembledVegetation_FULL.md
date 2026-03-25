@@ -37,7 +37,7 @@ Core principles:
 - Branch-attached canopy shells (L0/L1/L2)
 - Single GPU compute pass for LOD + occlusion + draw emission
 - SRP Batcher–friendly via scale control and shared assets
-- For color variation separate DOTS Instancing shaders
+- For color variation prefer (BRG) to keep SRP-friendly batching.  
 - do not use MaterialPropertyBlock! For per instance variation prefer to use new Unity API Renderer Shader User Value (RSUV) with a single 'uint' as a packed custom 32-bit integer per renderer for all variation data (required DOTS Instancing shader support). This preserves SRP-friendly batching.
 
 ---
@@ -46,12 +46,12 @@ Core principles:
 
 ## 1.1 High-Level Pipeline
 
-Authoring → Baking → Runtime Streaming → GPU Classification → Indirect Rendering
+Authoring → Baking → Runtime (Gather/Switch LOD) → GPU Classification → Indirect Rendering
 
 ## 1.2 Core Rules
 
 - No transparency or masked materials
-- No billboards
+- No transparency billboards (onlu opque very simplified front-sided geometry)
 - Far representation = simplified opaque mesh
 - Geometry always reduced
 - Single compute dispatch per frame
