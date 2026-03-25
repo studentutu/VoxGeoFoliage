@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="4" result="Passed" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.0375856">
+  <test-suite type="TestSuite" id="1000" name="VoxGeoFol" fullname="VoxGeoFol" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.037586" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="EditMode" />
+    </properties>
+    <test-suite type="Assembly" id="1004" name="Tests.dll" fullname="C:/Users/admin/Documents/UnityProjects/VoxGeoFol/Library/ScriptAssemblies/Tests.dll" runstate="Runnable" testcasecount="2" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.026079" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="74268" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestFixture" id="1001" name="InitialTests" fullname="InitialTests" classname="InitialTests" runstate="Runnable" testcasecount="2" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.024918" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-case id="1002" name="InitialTestsSimplePasses" fullname="InitialTests.InitialTestsSimplePasses" methodname="InitialTestsSimplePasses" classname="InitialTests" runstate="Runnable" seed="88287933" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.008159" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1003" name="InitialTestsWithEnumeratorPasses" fullname="InitialTests.InitialTestsWithEnumeratorPasses" methodname="InitialTestsWithEnumeratorPasses" classname="InitialTests" runstate="Runnable" seed="288554569" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.004297" asserts="0">
+          <properties>
+            <property name="_JOINTYPE" value="UnityCombinatorial" />
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1007" name="Unity.Addressables.DocExampleCode.Editor.Tests.dll" fullname="C:/Users/admin/Documents/UnityProjects/VoxGeoFol/Library/ScriptAssemblies/Unity.Addressables.DocExampleCode.Editor.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.002273" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="74268" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1008" name="AddressableAssets" fullname="AddressableAssets" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.001897" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1009" name="DocExampleCode" fullname="AddressableAssets.DocExampleCode" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.001503" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestFixture" id="1005" name="TestStub" fullname="AddressableAssets.DocExampleCode.TestStub" classname="AddressableAssets.DocExampleCode.TestStub" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.001099" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-case id="1006" name="RequiredTest" fullname="AddressableAssets.DocExampleCode.TestStub.RequiredTest" methodname="RequiredTest" classname="AddressableAssets.DocExampleCode.TestStub" runstate="Runnable" seed="1659252285" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.000303" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+    <test-suite type="Assembly" id="1015" name="Unity.RenderPipelines.Universal.Config.Editor.Tests.dll" fullname="C:/Users/admin/Documents/UnityProjects/VoxGeoFol/Library/ScriptAssemblies/Unity.RenderPipelines.Universal.Config.Editor.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.002706" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="74268" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1016" name="UnityEngine" fullname="UnityEngine" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.002374" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1017" name="Rendering" fullname="UnityEngine.Rendering" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.002051" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestSuite" id="1018" name="Universal" fullname="UnityEngine.Rendering.Universal" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.001702" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-suite type="TestSuite" id="1019" name="Test" fullname="UnityEngine.Rendering.Universal.Test" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.001298" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-suite type="TestFixture" id="1013" name="ConfigurationTest" fullname="UnityEngine.Rendering.Universal.Test.ConfigurationTest" classname="UnityEngine.Rendering.Universal.Test.ConfigurationTest" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.000895" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+                <properties />
+                <test-case id="1014" name="ValidateConfiguration" fullname="UnityEngine.Rendering.Universal.Test.ConfigurationTest.ValidateConfiguration" methodname="ValidateConfiguration" classname="UnityEngine.Rendering.Universal.Test.ConfigurationTest" runstate="Runnable" seed="960758886" result="Passed" start-time="2026-03-25 22:24:31Z" end-time="2026-03-25 22:24:31Z" duration="0.000126" asserts="0">
+                  <properties>
+                    <property name="retryIteration" value="0" />
+                    <property name="repeatIteration" value="0" />
+                  </properties>
+                  <output><![CDATA[Saving results to: C:/Users/admin/AppData/LocalLow/DefaultCompany/VoxGeoFol\TestResults.xml
+Saving results to: C:/Users/admin/AppData/LocalLow/DefaultCompany/VoxGeoFol\TestResults.xml
+]]></output>
+                </test-case>
+              </test-suite>
+            </test-suite>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>
