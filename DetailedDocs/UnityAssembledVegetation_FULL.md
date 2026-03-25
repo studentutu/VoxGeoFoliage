@@ -31,12 +31,14 @@ With following constraints:
 This system is intended to reproduce the performance behavior of modern large-scale foliage renderers inside Unity’s actual rendering constraints, rather than copying UE/Nanite literally.
 
 Core principles:
-- Opaque-only rendering (no transparency, no alpha test)
+- Opaque-only rendering (no transparency, no alpha test), transparency will break tile-based rendering on mobiles/handheld devices.
 - Reduced geometry at all levels (no Nanite equivalent)
 - Branch-based assembly with reusable modules
 - Branch-attached canopy shells (L0/L1/L2)
 - Single GPU compute pass for LOD + occlusion + draw emission
 - SRP Batcher–friendly via scale control and shared assets
+- For color variation separate DOTS Instancing shaders
+- do not use MaterialPropertyBlock! For per instance variation prefer to use new Unity API Renderer Shader User Value (RSUV) with a single 'uint' as a packed custom 32-bit integer per renderer for all variation data (required DOTS Instancing shader support). This preserves SRP-friendly batching.
 
 ---
 
