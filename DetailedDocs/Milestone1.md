@@ -1,8 +1,8 @@
-# Milestone 1 — MVP: Assembled Vegetation with GPU-Driven Rendering
+# Milestone 1 - MVP: Assembled Vegetation with GPU-Driven Rendering
 
 ## Goal
 
-Deliver a working end-to-end vegetation pipeline (similar to Unreal 5.7 new foliage assembly and rendering approach): author one tree species (trunk + branches with leaves), auto-generate canopy shells (L0/L1/L2) and an impostor mesh, preview all representation tiers in the Editor, render at runtime via BRG with a single GPU compute classification pass, and validate the full chain with EditMode tests and user feedback.
+Deliver a working end-to-end vegetation pipeline (similar to Unreal 5.7 new foliage assembly and rendering approach): author one tree species from reusable branch prototypes, auto-generate canopy shells (L0/L1/L2) and an impostor mesh, preview all representation tiers in the Editor, render at runtime via BRG with a single GPU compute classification pass, and validate the full chain with EditMode tests and user feedback.
 
 **Authority**: [UnityAssembledVegetation_FULL.md](UnityAssembledVegetation_FULL.md)
 
@@ -11,72 +11,82 @@ Deliver a working end-to-end vegetation pipeline (similar to Unreal 5.7 new foli
 ## MVP Scope Summary
 
 | In Scope | Out of Scope (deferred) |
-|----------|------------------------|
-| Full authoring data model (assemblies, manual baking) | Auto-baking of reduced geometry |
-| Canopy shell generation (L0/L1/L2) from branch leaf geometry | HiZ depth pyramid occlusion |
-| Impostor mesh generation (far LOD) | LOD transition dithering/cross-fade |
-| Editor preview of all representation tiers | Runtime streaming / dynamic loading |
-| BRG rendering with minimal vertex-lit opaque shader | Hierarchical wind system |
-| RSUV-only per-instance color variation for leaves (SRP-batch safe) | Placement tools (terrain scatter, paint) |
+|----------|-------------------------|
+| Full authoring data model with real two-mesh branch prototypes (wood + foliage) | Auto-baking of reduced geometry from arbitrary imported trees |
+| Readable source branch meshes as a hard validation rule | HiZ depth pyramid occlusion |
+| Canopy shell generation (L0/L1/L2) from branch foliage geometry | LOD transition dithering / cross-fade |
+| Impostor mesh generation from merged tree-space shell L2 assembly | Runtime streaming / dynamic loading |
+| Editor preview of all representation tiers | Hierarchical wind system |
+| BRG rendering with minimal vertex-lit opaque shaders | Placement tools (terrain scatter, paint) |
+| RSUV-only prototype canopy tint payload for foliage and shell draws | Random per-instance tint variation |
 | GPU compute: frustum cull + LOD selection + backside minimization + draw emission | Scale quantization optimization |
 | Spatial partitioning (uniform grid) | Advanced shadow value scoring |
 | CullingGroup API per-cell early occlusion (within sphere limits) | Cell streaming |
-| ScriptableRendererFeature with depth prepass | Unity LODGroup (replaced by GPU classification) |
-| Billboard vertex-lit opaque shader for impostor LOD | — |
-| EditMode tests for authoring validation + shell generation | Hierarchical sub-branch canopy shells (per-cell LOD within branch, see Full End-to-End Plan §3.4) |
+| ScriptableRendererFeature with depth prepass | Unity LODGroup |
+| Billboard-like opaque shader for impostor LOD | Hierarchical sub-branch canopy shells |
+| EditMode tests for authoring validation + shell generation + classification | - |
 
 ---
 
 ## Representation Tiers (MVP)
 
 | Tier | What Renders | When |
-|------|-------------|------|
-| R0 | Trunk mesh + all branch meshes (full leaf geometry) + Shell L0 | Very Close range, high projected area |
-| R1 | Trunk mesh + Shell L1 (no individual leaves and simplified branches) | Mid range |
-| R2 | Trunk mesh + Shell L2 (no individual leaves and branches) | Far-mid range |
-| R3 | Impostor mesh (billboard-like opaque simple mesh) | Far range, minimal projected area |
+|------|--------------|------|
+| R0 | Trunk mesh + branch wood meshes + branch foliage meshes + shell L0 | Very close range, high projected area |
+| R1 | Trunk mesh + shell L1 | Mid range |
+| R2 | Trunk mesh + shell L2 | Far-mid range |
+| R3 | Impostor mesh | Far range, minimal projected area |
 
 ### No Unity LODGroup
 
-This system does **not** use Unity's built-in `LODGroup` component or its default LOD culling behavior. LOD selection is fully owned by the GPU compute classification pass (`VegetationClassify.compute`), which evaluates projected area, backside penalty, and LOD profile thresholds per tree instance per frame. Unity's `LODGroup` is incompatible with BRG-driven indirect rendering and would conflict with our GPU-side tier selection.
+This system does not use Unity's built-in `LODGroup`. LOD selection is fully owned by the GPU compute classification pass (`VegetationClassify.compute`), which evaluates projected area, backside penalty, and LOD profile thresholds per tree instance per frame.Unity's `LODGroup` is incompatible with BRG-driven indirect rendering and would conflict with our GPU-side tier selection.
 
 ---
 
 ## Task 1: Authoring Data Model
 
-### 1.1 ScriptableObjects (Authoring — immutable asset data)
+### 1.1 ScriptableObjects (authoring, immutable asset data)
 
-**`BranchPrototypeSO`** — single reusable branch module
+**`BranchPrototypeSO`** - single reusable branch module
 ```
-- Mesh branchMesh           // full-geometry branch with leaves
-- Material branchMaterial   // opaque Simple Lit
-- Mesh shellL0Mesh          // generated canopy shell L0 (baked)
-- Mesh shellL1Mesh          // generated canopy shell L1 (baked)
-- Mesh shellL2Mesh          // generated canopy shell L2 (baked)
-- Material shellMaterial    // opaque Simple Lit for shells
-- Bounds localBounds        // local-space AABB
-- int triangleBudgetFull    // validation: max tris for branchMesh
-- int triangleBudgetShellL0 // validation: max tris for shellL0
-- int triangleBudgetShellL1 // validation: max tris for shellL1
-- int triangleBudgetShellL2 // validation: max tris for shellL2
+- Mesh woodMesh             // branch wood / bark mesh used in R0
+- Material woodMaterial     // opaque bark material
+- Mesh foliageMesh          // leaf / needle geometry used in R0 and shell baking
+- Material foliageMaterial  // opaque foliage source material
+- Color leafColorTint       // prototype-authored canopy tint packed into RSUV
+- Mesh shellL0Mesh          // generated canopy shell L0
+- Mesh shellL1Mesh          // generated canopy shell L1
+- Mesh shellL2Mesh          // generated canopy shell L2
+- Material shellMaterial    // opaque shell material
+- Bounds localBounds        // local-space AABB containing woodMesh + foliageMesh
+- int triangleBudgetWood
+- int triangleBudgetFoliage
+- int triangleBudgetShellL0
+- int triangleBudgetShellL1
+- int triangleBudgetShellL2
 ```
 
-**`TreeBlueprintSO`** — tree assembly definition
+**Source Branch Asset Contract**
+- MVP consumes the real source layout directly: one wood mesh plus one foliage mesh per branch prototype.
+- Source branch meshes must be readable for validation, preview, and shell baking.
+- Validation must fail explicitly if the import contract is broken. No hidden mesh-combine step is assumed.
+
+**`TreeBlueprintSO`** - tree assembly definition
 ```
 - Mesh trunkMesh
-- Material trunkMaterial    // opaque Simple Lit
+- Material trunkMaterial
 - BranchPlacement[] branches
   - BranchPrototypeSO prototype
   - Vector3 localPosition
   - Quaternion localRotation
-  - float scale             // constrained: steps of 0.25 (e.g. 0.25, 0.5, 0.75, 1.0, 1.25, 1.5...)
-- Mesh impostorMesh         // generated far-LOD opaque mesh (baked)
-- Material impostorMaterial // billboard Simple Lit opaque
+  - float scale             // constrained to 0.25 steps for MVP
+- Mesh impostorMesh         // generated far-LOD opaque mesh
+- Material impostorMaterial // billboard-like opaque material
 - LODProfileSO lodProfile
-- Bounds treeBounds         // world-space AABB for the full assembly
+- Bounds treeBounds         // local-space AABB for the assembled tree
 ```
 
-**`LODProfileSO`** — distance/projected-area thresholds for tier selection
+**`LODProfileSO`** - projected-area thresholds for tier selection
 ```
 - float r0MinProjectedArea
 - float r1MinProjectedArea
@@ -90,24 +100,26 @@ This system does **not** use Unity's built-in `LODGroup` component or its defaul
 
 ### 1.2 Runtime MonoBehaviour
 
-**`VegetationTreeAuthoring`** — placed on a GameObject in the scene
+**`VegetationTreeAuthoring`** - placed on a scene GameObject
 ```
-- TreeBlueprintSO blueprint  // reference to the tree assembly
-- [HideInInspector] int runtimeTreeIndex  // assigned at gather time
+- TreeBlueprintSO blueprint
+- [HideInInspector] int runtimeTreeIndex
 ```
 
-No runtime data stored on the MonoBehaviour — it's a pure authoring/registration component.
+No runtime data is stored on the MonoBehaviour. `leafColorTint` lives on `BranchPrototypeSO`, not on the scene component.
 
-### 1.3 Validation Rules (enforced in SO custom editors + tests)
+### 1.3 Validation Rules
 
-- All meshes must be non-null and readable
-- All materials must be opaque (no alpha clip, no transparency)
-- branchMesh triangle count ≤ triangleBudgetFull
-- Shell meshes must have fewer triangles than the tier above: L0 > L1 > L2
-- Impostor mesh must have very low triangle count (≤ 160 suggested)
-- Scale must be exactly in steps of 0.25 for MVP
-- treeBounds must fully contain trunk + all branch placements
-- LOD thresholds must be monotonically decreasing: r0 > r1 > shellL0 > shellL1 > shellL2 > absoluteCull
+- `trunkMesh`, `woodMesh`, and `foliageMesh` must be non-null and readable.
+- All materials must be opaque. No alpha clip. No transparency.
+- `woodMesh` triangle count must be within `triangleBudgetWood`.
+- `foliageMesh` triangle count must be within `triangleBudgetFoliage`.
+- Shell meshes must monotonically reduce in complexity: `L0 > L1 > L2`.
+- `localBounds` must fully contain `woodMesh + foliageMesh`.
+- `treeBounds` must fully contain trunk + all placed branches.
+- Branch scale must be exactly in steps of `0.25`.
+- LOD thresholds must be monotonically decreasing: `r0 > r1 > shellL0 > shellL1 > shellL2 > absoluteCull`.
+- Impostor mesh should stay under `160-200` triangles.
 
 ---
 
@@ -115,40 +127,38 @@ No runtime data stored on the MonoBehaviour — it's a pure authoring/registrati
 
 ### 2.1 `VegetationEditorPreview` MonoBehaviour (Editor-only, `[ExecuteInEditMode]`)
 
-Attached to the same GameObject as `VegetationTreeAuthoring`. Toggle on/off via Inspector bool.
+Attached to the same GameObject as `VegetationTreeAuthoring`. Use Unity OnValidate and Toggle on/off via Inspector bool to preview with full geometry and off to remove it.
 
-**Behavior when enabled:**
-- Spawns child GameObjects under the tree root representing the currently selected representation tier
-- Inspector enum dropdown: `PreviewTier { R0_Full, R1_ShellL1, R2_ShellL2, R3_Impostor, ShellL0_Only, ShellL1_Only, ShellL2_Only }`
-- On tier change: destroy previous preview children, spawn new ones
+**Behavior when enabled PrewviewbyGeometry**
+- Spawns child GameObjects under the tree root for the selected representation tier.
+- Inspector enum: `PreviewTier { R0_Full, R1_ShellL1, R2_ShellL2, R3_Impostor, ShellL0_Only, ShellL1_Only, ShellL2_Only }`
+- On tier change: destroy previous preview children, then spawn the new preview set.
 
-**Preview child structure per tier:**
+**Preview child structure**
 
 | Tier | Spawned Children |
-|------|-----------------|
-| R0_Full | Trunk GO + N × Branch GOs (full mesh) + N × ShellL0 GOs |
-| R1_ShellL1 | Trunk GO + N × ShellL1 GOs (at branch positions) |
-| R2_ShellL2 | Trunk GO + N × ShellL2 GOs (at branch positions) |
-| R3_Impostor | Single Impostor GO |
-| ShellL0_Only | N × ShellL0 GOs |
-| ShellL1_Only | N × ShellL1 GOs |
-| ShellL2_Only | N × ShellL2 GOs |
+|------|------------------|
+| R0_Full | Trunk GO + N x Branch Wood GOs + N x Branch Foliage GOs + N x ShellL0 GOs |
+| R1_ShellL1 | Trunk GO + N x ShellL1 GOs |
+| R2_ShellL2 | Trunk GO + N x ShellL2 GOs |
+| R3_Impostor | Single impostor GO |
+| ShellL0_Only | N x ShellL0 GOs |
+| ShellL1_Only | N x ShellL1 GOs |
+| ShellL2_Only | N x ShellL2 GOs |
 
-**Implementation notes:**
-- All preview GOs are tagged/layered for easy cleanup
-- Preview GOs are `HideFlags.DontSave | HideFlags.NotEditable`
-- Preview is transient — never serialized into the scene
-- On disable or blueprint change: clean up all preview children
-- Uses `MeshFilter` + `MeshRenderer` with the materials from the SO — no special rendering
+**Implementation notes**
+- All preview GOs are transient: `HideFlags.DontSave | HideFlags.NotEditable`.
+- On disable or blueprint change: clean up all preview children.
+- Use the source materials from the SOs. No special runtime path is required for preview.
 
-### 2.2 Custom monobehaviour Inspector
+### 2.2 Custom Inspector
 
-- `VegetationTreeAuthoringEditor` — custom editor for `VegetationTreeAuthoring`
-- Shows: blueprint summary (branch count, total tris per tier, bounds)
-- Validation warnings/errors inline
-- Preview toggle + tier selector dropdown
-- Button: "Regenerate Shells" (triggers shell baking, see Task 3)
-- Button: "Regenerate Impostor" (triggers impostor baking, see Task 3)
+`VegetationTreeAuthoringEditor`
+- Shows blueprint summary: branch count, total tris per tier, bounds.
+- Shows validation warnings and errors inline.
+- Exposes preview toggle + tier selector.
+- Button: `Regenerate Shells`
+- Button: `Regenerate Impostor`
 
 ---
 
@@ -156,78 +166,72 @@ Attached to the same GameObject as `VegetationTreeAuthoring`. Toggle on/off via 
 
 ### 3.1 Pipeline Overview
 
-Input: `BranchPrototypeSO.branchMesh` (full geometry branch with leaves)
-Output: `shellL0Mesh`, `shellL1Mesh`, `shellL2Mesh` written back into the SO
+Input: `BranchPrototypeSO.foliageMesh`  
+Output: `shellL0Mesh`, `shellL1Mesh`, `shellL2Mesh`
+
+`woodMesh` is explicitly excluded from voxelization. Shell generation represents canopy mass only.
 
 ### 3.2 Algorithm: Voxel-Based Shell Extraction
 
 ```
-1. READ all vertices + triangles from branchMesh
-2. COMPUTE local AABB of the branch mesh
-3. VOXELIZE into a 3D grid:
-   - Resolution: L0=32³, L1=16³, L2=8³ (configurable)
-   - Mark voxel as occupied if any triangle intersects it
-4. For each shell level:
-   a. L0: FLOOD-FILL from exterior to find interior vs exterior voxels (preserves holes)
-      L1/L2: DILATE occupied voxels by 1-2 steps to close gaps and collapse holes before extraction
-   b. EXTRACT surface voxels (occupied voxels adjacent to empty exterior)
-   c. GENERATE mesh via Marching Cubes or simple cube-face emission
-   d. SIMPLIFY mesh (edge collapse) to target triangle budget — L1/L2 prioritize vertex minimization over shape fidelity
-   e. RECOMPUTE normals (smooth, outward-facing)
-   f. STORE as shellLX mesh
+1. READ all vertices + triangles from foliageMesh
+2. COMPUTE local AABB of the foliage mesh
+3. VOXELIZE into a 3D grid
+   - L0 resolution = 32^3
+   - L1 resolution = 16^3
+   - L2 resolution = 8^3
+4. For each shell level
+   a. L0: flood-fill from exterior to preserve major holes
+   b. L1/L2: dilate occupancy to close gaps and collapse cavities
+   c. Extract surface voxels
+   d. Generate mesh (marching cubes or cube-face emission)
+   e. Simplify mesh to target budget
+   f. Recompute outward normals
+   g. Store shellLX mesh
 ```
 
 ### 3.3 Shell Quality Constraints
 
-- L0: highest fidelity, preserves crown lobes and major concavities
-- L1: simplified silhouette, major lobes only. **Holes and small concavities are collapsed** — vertex budget takes priority over volumetric accuracy. Interior cavities are filled.
-- L2: blobby mass, minimal detail, just gross shape. **Aggressively collapse all holes and concavities** — produce the cheapest possible closed volume that preserves only the gross crown silhouette. Vertex/triangle count minimization is the primary goal, even if the mesh becomes a single convex-ish blob.
-- All shells: stable outward-facing normals, no degenerate triangles
-- L1/L2 generation should skip the flood-fill interior detection step (or invert it) and instead **dilate** the voxel field to close gaps before surface extraction, ensuring holes are filled rather than preserved
+- L0 preserves major canopy lobes and silhouette detail.
+- L1 preserves major lobes only and intentionally fills smaller cavities.
+- L2 is the cheapest closed volume that still preserves gross silhouette.
+- All shells must have stable outward normals and no degenerate triangles.
 
 ### 3.4 Impostor Generation
 
-Input: `shellL2Mesh` (or full tree assembly baked shells)
-Output: `impostorMesh`
+Input: temporary tree-space mesh assembled from `trunkMesh` + transformed `BranchPrototypeSO.shellL2Mesh`  
+Output: `TreeBlueprintSO.impostorMesh` in tree local space
 
 ```
-1. Start from Shell L2 (coarsest shell)
-2. Further simplify: target ≤ 200 triangles
+1. Assemble a temporary tree-space mesh from trunkMesh + all placed shellL2 meshes
+2. Simplify aggressively to <= 200 triangles
 3. Remove internal cavities
-4. Ensure front-facing normals only
+4. Recompute stable outward normals
 5. Weld vertices aggressively
-6. Store as impostorMesh on the TreeBlueprintSO
+6. Store the result as impostorMesh
 ```
 
-### 3.5 Forward Compatibility: Hierarchical Sub-Branch Shells
+### 3.5 Forward Compatibility
 
-MVP treats each branch as a single unit with 3 fixed shell meshes (L0/L1/L2). The full version (see [FULL §3.4](UnityAssembledVegetation_FULL.md#34-hierarchical-sub-branch-canopy-shells-full-version)) will subdivide each branch into spatial cells, each with its own shell chain, enabling per-sub-region LOD within a single branch.
-
-**MVP is forward-compatible by design:** the current 3-mesh-per-branch model is equivalent to a hierarchical model with cell grid = 1×1×1. Upgrading later requires only:
-1. Sub-branch cell generation in the baking pipeline
-2. Per-cell AABB evaluation in the GPU classifier (additional inner loop)
-3. Per-cell indirect draw emission
-
-No authoring data model changes needed — `BranchPrototypeSO` will gain an optional cell array, defaulting to the current single-cell behavior.
+MVP treats each branch as a single shell unit with `L0/L1/L2`. The full version can later subdivide a branch into cells and give each cell its own shell chain. The current data model remains forward-compatible.
 
 ### 3.6 API
 
 ```csharp
 /// Bakes canopy shells for a single branch prototype.
-/// [INTEGRATION] Called from editor tooling (inspector button, batch bake).
-/// Range: branchMesh must be readable, non-null.
-/// Condition: voxelResolutions must be > 0.
-/// Output: populates shellL0Mesh, shellL1Mesh, shellL2Mesh on the prototype.
+/// [INTEGRATION] Called from editor tooling.
+/// Range: foliageMesh must be readable and non-null.
+/// Output: populates shellL0Mesh, shellL1Mesh, shellL2Mesh.
 static void BakeCanopyShells(BranchPrototypeSO prototype, ShellBakeSettings settings)
 
 /// Bakes the far-LOD impostor mesh for a full tree blueprint.
 /// [INTEGRATION] Called from editor tooling.
-/// Range: blueprint must have valid shells baked on all branch prototypes.
-/// Output: populates impostorMesh on the blueprint.
+/// Range: blueprint must have valid shellL2 meshes on all referenced branch prototypes.
+/// Output: populates impostorMesh.
 static void BakeImpostorMesh(TreeBlueprintSO blueprint, ImpostorBakeSettings settings)
 ```
 
-### 3.7 `ShellBakeSettings` / `ImpostorBakeSettings`
+### 3.7 Settings
 
 ```
 ShellBakeSettings:
@@ -246,143 +250,154 @@ ImpostorBakeSettings:
 
 ---
 
-## Task 4: BRG Rendering + Simple Lit Shader
+## Task 4: BRG Rendering + Shaders
 
-### 4.1 BatchRendererGroup Setup
+### 4.1 `VegetationBRGManager`
 
-**`VegetationBRGManager`** — runtime singleton, owns the BRG instance
+Responsibilities
+- Create and own `BatchRendererGroup`.
+- Register mesh/material pairs for every draw slot:
+  - trunk draw slot per tree blueprint
+  - branch wood draw slot per branch prototype
+  - branch foliage draw slot per branch prototype
+  - shell L0/L1/L2 draw slots per branch prototype
+  - impostor draw slot per tree blueprint
+- Own the draw-slot registry used by GPU classification.
+- Feed visible instance data from GPU classification results.
+- Handle GPU buffer lifecycle.
 
-```
-Responsibilities:
-- Create and own BatchRendererGroup
-- Register mesh/material pairs for each draw group:
-  - Trunk draw group
-  - Branch draw group (full geometry)
-  - Shell L0/L1/L2 draw groups
-  - Impostor draw group
-- Provide the OnPerformCulling callback
-- Feed visible instance data from GPU classification results
-- Handle buffer lifecycle (create on gather, dispose on destroy)
-```
-
-### 4.2 Draw Groups (MVP)
+### 4.2 Draw Groups
 
 | Group | Mesh Source | Shader | Instance Data |
-|-------|-----------|--------|---------------|
-| Trunk | TreeBlueprintSO.trunkMesh | VegetationTrunkLit | transform only |
-| Branch | BranchPrototypeSO.branchMesh | VegetationTrunkLit | transform only |
-| ShellL0 | BranchPrototypeSO.shellL0Mesh | VegetationCanopyLit | transform + RSUV |
-| ShellL1 | BranchPrototypeSO.shellL1Mesh | VegetationCanopyLit | transform + RSUV |
-| ShellL2 | BranchPrototypeSO.shellL2Mesh | VegetationCanopyLit | transform + RSUV |
-| Impostor | TreeBlueprintSO.impostorMesh | VegetationImpostorLit | transform + RSUV |
+|-------|-------------|--------|---------------|
+| Trunk | `TreeBlueprintSO.trunkMesh` | `VegetationTrunkLit` | transform only |
+| BranchWood | `BranchPrototypeSO.woodMesh` | `VegetationTrunkLit` | transform only |
+| BranchFoliage | `BranchPrototypeSO.foliageMesh` | `VegetationCanopyLit` | transform + packed leaf tint |
+| ShellL0 | `BranchPrototypeSO.shellL0Mesh` | `VegetationCanopyLit` | transform + packed leaf tint |
+| ShellL1 | `BranchPrototypeSO.shellL1Mesh` | `VegetationCanopyLit` | transform + packed leaf tint |
+| ShellL2 | `BranchPrototypeSO.shellL2Mesh` | `VegetationCanopyLit` | transform + packed leaf tint |
+| Impostor | `TreeBlueprintSO.impostorMesh` | `VegetationImpostorLit` | transform only |
 
-### 4.3 Vegetation Shaders — Minimal Vertex-Lit, No Textures
+### 4.3 Shaders
 
-Design principle: **as cheap as possible**. No texture sampling for canopy/impostor. All shading data comes from vertex attributes and per-instance RSUV. SRP Batcher compatibility preserved.
-
-Two shaders needed for MVP:
-
-**`VegetationCanopyLit.shader`** — for canopy shells (L0/L1/L2)
-- Custom minimal URP-compatible shader (NOT full SimpleLit — stripped down)
-- **Opaque only**, front-face culling (`Cull Back`)
-- **No albedo texture** — base color from vertex color channel
-- **No normal map texture** — normals from vertex data (outward-pointing, baked at shell generation)
-- **No emission**, no bump/height maps, no specular map
-- Lighting: single diffuse Lambert from vertex normal + URP main light
-- DOTS Instancing support for BRG transforms
-- Per-instance color variation via **RSUV only** (`unity_RenderingLayer` or custom RSUV uint)
-  - RSUV packing (32 bits):
-    - Bits [0-7]: hue shift (0-255 → mapped to 0°-30° range)
-    - Bits [8-15]: saturation adjust
-    - Bits [16-23]: brightness adjust
-    - Bits [24-31]: reserved (future wind params, etc.)
-  - Shader reads RSUV, unpacks, applies tint to vertex color
-- No wind for MVP
-- **No MaterialPropertyBlock** — all variation through RSUV only
-
-**`VegetationTrunkLit.shader`** — for trunk and branch full-geometry
-- Custom minimal URP-compatible shader
-- **Opaque only**, front-face culling (`Cull Back`)
-- Albedo from texture (trunk/bark needs texture detail)
+**`VegetationCanopyLit.shader`** - for branch foliage full geometry and canopy shells
+- Opaque only
+- No albedo texture for shells
+- Use vertex color when present; otherwise use a simple material base color multiplied by packed tint
 - **No normal map** — vertex normals only
 - **No emission**, no bump/height maps
-- Lighting: single diffuse Lambert
-- DOTS Instancing support for BRG transforms
-- No RSUV color variation (trunk color is material-fixed)
-- No wind for MVP
+- Lambert lighting from vertex normals
+- RSUV-only packed tint
+- No `MaterialPropertyBlock`
 
-**`VegetationImpostorLit.shader`** — for far-LOD impostor (see Task 8)
+**`VegetationTrunkLit.shader`** - for trunk and branch wood
+- Opaque only
+- Albedo texture allowed
+- No normal map
+- **No normal map** — vertex normals only
+- **No emission**, no bump/height maps
+- Lambert lighting from vertex normals
 
-### 4.4 Color Variation — RSUV Only
+**`VegetationImpostorLit.shader`** - for far LOD
+- Opaque only
+- No albedo textures(only vertex color driven)
+- Billboard-like Y rotation toward camera
+- **No normal map** — vertex normals only
+- **No emission**, no bump/height maps
+- Color baked into the impostor mesh / material for MVP
+- No RSUV tint required for MVP
 
-**Single variation mechanism**: Renderer Shader User Value (RSUV).
+### 4.4 Prototype Canopy Tint - RSUV Only
 
-- No `MaterialPropertyBlock` (breaks SRP batching)
-- No `UNITY_DOTS_INSTANCED_PROP` for color (adds per-instance buffer overhead)
-- RSUV provides a single `uint` per renderer that preserves SRP batching
-- `VegetationTreeAuthoring` exposes a `Color leafColorTint` in Inspector
-- At gather time, the color tint is packed into the RSUV uint
-- Shader reads RSUV via `asuint(unity_RenderingLayer)` or equivalent RSUV accessor
-- Unpacks and applies as HSB adjustment to vertex color
+- `BranchPrototypeSO` owns `leafColorTint`
+- At gather time, that color is packed into `packedLeafTint`
+- `BranchPrototypeGPU` carries the packed tint for foliage + shell draw emission
+- Shader reads RSUV and applies HSB adjustments
+- No `MaterialPropertyBlock`
+- No DOTS instanced color property
 
 ```
-Packing: uint rsuv = (hueShift) | (satAdj << 8) | (briAdj << 16) | (reserved << 24)
+Packing: uint rsuv = hueShift | (satAdj << 8) | (briAdj << 16) | (reserved << 24)
 ```
 
 ---
 
 ## Task 5: GPU Compute Classification
 
-### 5.1 Compute Shader: `VegetationClassify.compute`
+### 5.1 `VegetationClassify.compute`
 
-Single dispatch per frame. One thread per tree instance.
+Single dispatch per frame. One thread per all foliage assembly instances (all _TreeBlueprints types).
 
 ```hlsl
-Kernel: ClassifyVegetation
-
 Input buffers:
   - _TreeInstances       (StructuredBuffer<TreeInstanceGPU>)
+  - _TreeBlueprints      (StructuredBuffer<TreeBlueprintGPU>)
+  - _BranchPlacements    (StructuredBuffer<BranchPlacementGPU>)
+  - _BranchPrototypes    (StructuredBuffer<BranchPrototypeGPU>)
   - _LODProfiles         (StructuredBuffer<LODProfileGPU>)
-  - _CellVisibility      (StructuredBuffer<uint>, 1 bit per cell)
+  - _CellVisibility      (StructuredBuffer<uint>)
 
 Output buffers:
   - _VisibleRecords      (RWStructuredBuffer<VisibleVegetationRecord>)
-  - _DrawArgs            (RWStructuredBuffer<uint>, indirect args per draw group)
-  - _VisibleCount        (RWStructuredBuffer<uint>, atomic counter)
-
-Uniforms:
-  - _ViewProjectionMatrix
-  - _CameraPosition
-  - _CameraForward
-  - _FrustumPlanes[6]
-  - _AbsoluteCullProjectedMin
+  - _DrawArgs            (RWStructuredBuffer<uint>)
+  - _VisibleCount        (RWStructuredBuffer<uint>)
 ```
 
-### 5.2 Classification Steps (per thread)
+### 5.2 Classification Steps
 
 ```
-1. LOAD tree instance data
-2. CELL CHECK: if cell not visible → return (CPU pre-marks cells via frustum vs grid)
-3. FRUSTUM CULL: test tree AABB against 6 frustum planes → return if outside
-4. PROJECTED AREA: compute screen-space projected area from bounds + distance
-5. ABSOLUTE CULL: if projected area < absoluteCullProjectedMin → return
-6. BACKSIDE PENALTY: dot(cameraForward, treeToCamera) → penalize trees mostly showing backside
-7. LOD SELECTION: compare projected area against LOD profile thresholds → select tier (R0/R1/R2/R3)
-8. EMIT: atomically increment visible count, write VisibleVegetationRecord
-9. INCREMENT DRAW ARGS: atomic add to indirect draw arg counters for the selected draw group(s)
+1. LOAD TreeInstanceGPU + TreeBlueprintGPU + LODProfileGPU
+2. CELL CHECK
+3. FRUSTUM CULL
+4. PROJECTED AREA
+5. ABSOLUTE CULL
+6. BACKSIDE PENALTY
+7. LOD SELECTION (R0 / R1 / R2 / R3)
+8. EMIT tree-level VisibleVegetationRecord
+9. INCREMENT DRAW ARGS
+   - R0: trunk + each branch placement's wood + foliage + shellL0 slots
+   - R1: trunk + each branch placement's shellL1 slots
+   - R2: trunk + each branch placement's shellL2 slots
+   - R3: impostor slot only
 ```
 
-### 5.3 Runtime Data Structs (GPU side)
+### 5.3 Runtime Data Structs
 
 ```hlsl
 struct TreeInstanceGPU
 {
-    float3 position;       // world position
-    float  uniformScale;   // always 1.0 for MVP
-    uint   blueprintIndex; // index into prototype data
-    uint   cellIndex;      // spatial cell assignment
-    uint   packedColor;    // per-instance color variation (32-bit packed)
+    float3 position;
+    float  uniformScale;
+    uint   blueprintIndex;
+    uint   cellIndex;
     float  boundingSphereRadius;
+};
+
+struct TreeBlueprintGPU
+{
+    uint lodProfileIndex;
+    uint branchPlacementStartIndex;
+    uint branchPlacementCount;
+    uint trunkDrawSlot;
+    uint impostorDrawSlot;
+};
+
+struct BranchPlacementGPU
+{
+    float3 localPosition;
+    float  uniformScale;
+    float4 localRotation;
+    uint   prototypeIndex;
+};
+
+struct BranchPrototypeGPU
+{
+    uint woodDrawSlot;
+    uint foliageDrawSlot;
+    uint shellL0DrawSlot;
+    uint shellL1DrawSlot;
+    uint shellL2DrawSlot;
+    uint packedLeafTint;
 };
 
 struct LODProfileGPU
@@ -400,22 +415,19 @@ struct LODProfileGPU
 struct VisibleVegetationRecord
 {
     uint  treeIndex;
-    uint  representationType; // 0=R0, 1=R1, 2=R2, 3=R3
-    uint  shellLevel;         // 0/1/2 (meaningful for R0, R1, R2)
-    uint  packedColor;
-    float4x4 objectToWorld;   // full transform for rendering
+    uint  blueprintIndex;
+    uint  representationType;
+    uint  shellLevel;
+    float4x4 objectToWorld;
 };
 ```
 
 ### 5.4 Backside Minimization
 
-Trees where the camera is viewing primarily the "back" (interior/underside) get penalized in LOD selection, pushing them to cheaper representations faster:
-
 ```hlsl
 float backsidePenalty = saturate(dot(normalize(tree.position - _CameraPosition), _CameraForward));
 // backsidePenalty ≈ 1.0 when tree is directly behind camera dir (backside)
 // backsidePenalty ≈ 0.0 when tree faces camera (frontside)
-
 float effectiveArea = projectedArea * (1.0 - backsidePenalty * lod.backsideBiasScale);
 // Use effectiveArea for LOD thresholds instead of raw projectedArea
 ```
@@ -426,103 +438,85 @@ float effectiveArea = projectedArea * (1.0 - backsidePenalty * lod.backsideBiasS
 
 ### 6.1 Uniform Grid
 
-**`VegetationSpatialGrid`** — CPU-side spatial structure
-
-```
-- Gather all VegetationTreeAuthoring positions at startup
+`VegetationSpatialGrid`— CPU-side spatial structure
+- Gather all `VegetationTreeAuthoring` positions at startup
 - Compute world AABB of all trees
-- Divide into uniform cells (cellSize configurable, default 50m)
-- Assign each tree a cellIndex
-- Each frame: frustum-test cell AABBs on CPU → write cellVisibility bitfield
-- Upload cellVisibility to GPU before compute dispatch
-- early reject by cellVisibility (when directly behind camera)
-```
+- Divide into uniform cells
+- Assign each tree a `cellIndex`
+- Each frame: frustum-test cell AABBs on CPU and upload `cellVisibility`
 
 ### 6.2 Cell Visibility
 
-- CPU frustum test is cheap (just AABB vs 6 planes per cell)
-- Reduces GPU threads that need full classification
-- Cell count for 1km² at 50m cells = 400 cells (trivial CPU cost)
+- Cheap CPU frustum test reduces full GPU classification work
+- 50m default cell size is acceptable for MVP
 
-### 6.3 CullingGroup API — Per-Cell Early Occlusion
+### 6.3 `CullingGroup` API
 
-Unity's `CullingGroup` API can provide **free** visibility and distance-band callbacks from the engine's internal culling (tied to the camera). We use it at the **cell level** (not per-tree) to get early occlusion beyond simple frustum testing.
-
-**Setup:**
-- Create one `CullingGroup` per camera (main camera for MVP)
-- Register one `BoundingSphere` per cell (center = cell center, radius = cell diagonal / 2)
-- `CullingGroup` limit: **1024 bounding spheres per instance**
-  - At 50m cells, 1024 spheres covers ~2.56 km² — sufficient for MVP
-  - If more cells needed later: use multiple CullingGroup instances or coarser cells
-- Set distance reference point to camera position
-
-**Per-frame flow:**
-1. `CullingGroup.onStateChanged` fires when cell visibility changes
-2. Alternatively, poll `CullingGroup.IsVisible(int index)` per cell each frame
-3. Merge CullingGroup visibility with CPU frustum test → write combined `cellVisibility` bitfield
-4. Upload to GPU
-
-**Benefits:**
-- CullingGroup uses Unity's internal occlusion (including static occluders if baked)
-- Zero GPU cost — it's CPU-side engine culling
-- Catches cells hidden behind large buildings/terrain that frustum test alone would miss
+Optional early occlusion layer on top of frustum testing
+- One `BoundingSphere` per cluster of cells (cluster is 8*8*8 cells)
+- Main camera only for MVP
+- Must remain a pure optimization layer; frustum-only fallback must work
 
 **Limitations:**
 - 1024 sphere limit per CullingGroup instance
 - Sphere approximation (not tight AABB) may be slightly conservative
-- Only works with Unity's built-in occlusion data (requires baking or runtime occluders)
+- Only works with Unity's built-in occlusion data (requires baking)
 - For MVP: optional enhancement — if Unity occlusion data isn't baked, CullingGroup still provides frustum-equivalent results
-
 **Implementation note:** CullingGroup is an optimization layer on top of the existing frustum test. The system must work correctly without it (frustum-only fallback).
 
 ---
 
 ## Task 7: ScriptableRendererFeature + Depth Prepass
 
-### 7.1 `VegetationRendererFeature` — URP ScriptableRendererFeature
+### 7.1 `VegetationRendererFeature`
 
-Adds two render passes:
+Add three ordered render stages:
 
-**Pass 1: Vegetation Depth Prepass** (`RenderPassEvent.BeforeRenderingOpaques`)
-- Renders all visible vegetation with a depth-only shader
-- Populates depth buffer early so subsequent opaque passes benefit from early-Z rejection
-- Uses the same indirect draw args from classification
+**Pass 1: Clear + Classify**
+- Cache view position and rotation (skip clearing/calculating if we haven't moved and haven't rotated main camera)
+- Clear visible counters and draw-arg counters
+- Upload per-frame cell visibility
+- Dispatch `VegetationClassify.compute`
 
-**Pass 2: Vegetation Classify + Draw** (`RenderPassEvent.BeforeRenderingOpaques`, after depth)
-- Step A: Dispatch `VegetationClassify.compute`
-- Step B: Issue indirect draw calls per draw group using the populated draw args
-- All draws are opaque Simple Lit — benefits from the depth prepass
+**Pass 2: Vegetation Depth Prepass**
+- Render visible vegetation with `VegetationDepthOnly.shader`
+- Uses draw args produced by Pass 1
+
+**Pass 3: Vegetation Color Pass**
+- Render visible vegetation with the lit shaders
+- Uses the same draw args
 
 ### 7.2 Execution Order
 
 ```
 URP Frame:
-  1. [Standard URP] Setup, shadows, etc.
-  2. [VegetationRendererFeature] CPU: update cell visibility, upload buffers
-  3. [VegetationRendererFeature] GPU: dispatch ClassifyVegetation compute
-  4. [VegetationRendererFeature] GPU: vegetation depth prepass (indirect draws, depth-only)
-  5. [VegetationRendererFeature] GPU: vegetation color pass (indirect draws, Simple Lit)
-  6. [Standard URP] Other opaques, transparents, post-processing
+  1. Standard URP setup
+  2. CPU updates cell visibility
+  3. GPU clear + classify
+  4. Standard URP opaque depth pre-pass and GPU vegetation depth prepass
+  5. Standard URP opaques and GPU vegetation color pass
+  6. Standard URP remaining  transparents / post-processing 
 ```
 
 ### 7.3 Buffer Lifecycle
 
 ```
 Scene Load / Gather:
-  1. Collect all VegetationTreeAuthoring in scene
-  2. Build spatial grid, assign cell indices
-  3. Create GPU buffers (TreeInstances, LODProfiles, CellVisibility, VisibleRecords, DrawArgs)
-  4. Upload static data (tree instances, LOD profiles)
-  5. Register meshes/materials with BRG
+  1. Collect all VegetationTreeAuthoring instances
+  2. Build VegetationSpatialGrid
+  3. Build TreeInstanceGPU / TreeBlueprintGPU / BranchPlacementGPU / BranchPrototypeGPU buffers
+  4. Upload LOD profiles and static draw-slot data
+  5. Register meshes and materials with BRG
 
 Each Frame:
-  1. CPU: frustum-test cells, update CellVisibility buffer
-  2. GPU: clear VisibleRecords counter + DrawArgs counters
-  3. GPU: dispatch ClassifyVegetation
-  4. GPU: read-back not needed — indirect args drive draws directly
+  1. CPU roughly updates cell visibility (rely on Occlusion spheres and cell clusters)
+  2. GPU clears counters
+  3. GPU dispatches classification
+  4. GPU draws depth
+  5. GPU draws color
 
 Scene Unload:
-  1. Dispose all GPU buffers
+  1. Dispose buffers
   2. Unregister BRG
 ```
 
@@ -532,19 +526,16 @@ Scene Unload:
 
 ### 8.1 `VegetationImpostorLit.shader`
 
-Same minimal design philosophy as `VegetationCanopyLit.shader`:
-
-- Custom minimal URP-compatible shader
-- **Opaque only**, front-face culling (`Cull Back`)
-- **No albedo texture** — base color from vertex color (baked at impostor generation)
-- **No normal map** — vertex normals only (outward-pointing, baked)
-- **No emission**, no bump/height maps, no specular
-- Lighting: single diffuse Lambert from vertex normal + URP main light
-- DOTS Instancing support for BRG transforms
-- Per-instance color variation via **RSUV only** (same packing as canopy shader)
-- Vertex shader: cylindrical billboard rotation around Y-axis toward camera
-- Minimal vertex count (impostor mesh is ≤ 200 triangles)
+- Opaque only
+- no albedo texture
+- Minimal Lambert lighting
+- No normal map
+- Billboard-like Y rotation toward camera
+- Color baked into impostor vertex color or base material
+- No RSUV tint for MVP
 - No wind for MVP
+- **No normal map**
+- **No emission**, no bump/height maps, no specular
 
 ### 8.2 Billboard Transform
 
@@ -552,27 +543,25 @@ Same minimal design philosophy as `VegetationCanopyLit.shader`:
 float3 viewDir = normalize(_CameraPosition - objectOrigin);
 float angle = atan2(viewDir.x, viewDir.z);
 float3x3 billboardRotation = RotateY(angle);
-// Apply to vertex positions in vertex shader before standard transform
 ```
 
 ---
 
 ## Task 9: Runtime Manager (Orchestration)
 
-### 9.1 `VegetationRuntimeManager` — MonoBehaviour singleton
+### 9.1 `VegetationRuntimeManager`— MonoBehaviour singleton
 
-**Responsibilities:**
-- On scene start: gather all `VegetationTreeAuthoring` instances
+Responsibilities
+- Gather all `VegetationTreeAuthoring` instances
 - Build `VegetationSpatialGrid`
-- Create and upload GPU buffers
+- Flatten tree blueprint data into GPU static buffers
 - Initialize `VegetationBRGManager`
-- Each frame: update cell visibility, trigger compute dispatch via renderer feature
-  - use Main Camera as a cell visiblity/culling author 
-- On destroy: clean up everything
+- Drive per-frame buffer updates through the renderer feature
+- Clean up on destroy
 
 ### 9.2 Explicit Reset
 
-Per project rules, must have `static void Reset()` registered in `EditorPlayModeStaticServicesReset`.
+Per project rules, all static runtime services must expose `Reset()` and be wired into `EditorPlayModeStaticServicesReset`.
 
 ---
 
@@ -582,9 +571,12 @@ Per project rules, must have `static void Reset()` registered in `EditorPlayMode
 
 ```
 AuthoringValidationTests:
-  - BranchPrototype_NullMesh_FailsValidation
+  - BranchPrototype_NullWoodMesh_FailsValidation
+  - BranchPrototype_NullFoliageMesh_FailsValidation
+  - BranchPrototype_SourceMeshesMustBeReadable
   - BranchPrototype_TransparentMaterial_FailsValidation
-  - BranchPrototype_TriangleOverBudget_FailsValidation
+  - BranchPrototype_TriangleBudget_FailsValidation
+  - BranchPrototype_LocalBoundsContainWoodAndFoliage
   - BranchPrototype_ShellTriangleOrder_L0GreaterThanL1GreaterThanL2
   - TreeBlueprint_NullTrunk_FailsValidation
   - TreeBlueprint_EmptyBranches_FailsValidation
@@ -600,19 +592,17 @@ AuthoringValidationTests:
 CanopyShellGenerationTests:
   - Voxelize_SimpleCube_AllVoxelsOccupied
   - Voxelize_EmptyMesh_NoVoxelsOccupied
-  - Voxelize_SphereMesh_ApproximateVolumeCorrect
+  - Voxelize_FoliageMesh_ApproximateVolumeCorrect
   - ShellExtract_L0Resolution_HigherTrisThanL1
   - ShellExtract_L1Resolution_HigherTrisThanL2
   - ShellExtract_OutputMesh_HasValidNormals
   - ShellExtract_OutputMesh_NoDegenTriangles
   - ShellExtract_OutputMesh_WithinBudget
   - ShellExtract_OutputMesh_BoundsContainedInInput
-  - ImpostorGenerate_FromShellL2_UnderTriangleBudget
+  - ImpostorGenerate_FromTreeAssemblyShellL2_UnderTriangleBudget
+  - ImpostorGenerate_MergesBranchShellsInTreeSpace
   - ImpostorGenerate_OutputMesh_HasOutwardNormals
   - ImpostorGenerate_OutputMesh_NoInternalCavities
-  - ShellExtract_L1_DilationClosesSmallHoles
-  - ShellExtract_L2_DilationCollapsesAllCavities
-  - ShellExtract_L2_VertexCountMinimized_OverShapeFidelity
 ```
 
 ### 10.3 Spatial Grid Tests
@@ -625,18 +615,19 @@ SpatialGridTests:
   - Grid_FrustumTest_OccludedCellsNotMarked
 ```
 
-### 10.4 Classification Logic Tests (CPU mirror)
+### 10.4 Classification Logic Tests
 
 ```
 ClassificationTests:
   - Classify_InsideFrustum_LargeArea_SelectsR0
   - Classify_InsideFrustum_MediumArea_SelectsR1
-  - Classify_InsideFrustum_SmallArea_SelectsShell
-  - Classify_InsideFrustum_TinyArea_SelectsImpostor
+  - Classify_InsideFrustum_SmallArea_SelectsR2
+  - Classify_InsideFrustum_TinyArea_SelectsR3
   - Classify_OutsideFrustum_NotVisible
   - Classify_BelowAbsoluteCull_NotVisible
   - Classify_BacksidePenalty_ReducesEffectiveLOD
   - Classify_CellNotVisible_SkipsTree
+  - Classify_ExpandsBlueprintBranchSlots_ForSelectedTier
 ```
 
 ---
@@ -645,44 +636,48 @@ ClassificationTests:
 
 ```
 Assets/Scripts/Features/Vegetation/
-├── Authoring/
-│   ├── BranchPrototypeSO.cs
-│   ├── TreeBlueprintSO.cs
-│   ├── LODProfileSO.cs
-│   ├── VegetationTreeAuthoring.cs
-│   ├── BranchPlacement.cs          (struct)
-│   └── ShellBakeSettings.cs        (struct)
-├── Runtime/
-│   ├── VegetationRuntimeManager.cs
-│   ├── VegetationBRGManager.cs
-│   ├── VegetationSpatialGrid.cs
-│   ├── TreeInstanceGPU.cs          (struct)
-│   ├── LODProfileGPU.cs            (struct)
-│   ├── VisibleVegetationRecord.cs  (struct)
-│   └── VegetationClassifier.cs     (CPU mirror for testing)
-├── Editor/
-│   ├── VegetationEditorPreview.cs
-│   ├── VegetationTreeAuthoringEditor.cs
-│   ├── CanopyShellGenerator.cs
-│   ├── ImpostorMeshGenerator.cs
-│   ├── Voxelizer.cs
-│   └── MeshSimplifier.cs
-├── Shaders/
-│   ├── VegetationCanopyLit.shader
-│   ├── VegetationTrunkLit.shader
-│   ├── VegetationImpostorLit.shader
-│   ├── VegetationDepthOnly.shader
-│   └── VegetationClassify.compute
-├── Rendering/
-│   ├── VegetationRendererFeature.cs
-│   └── VegetationRenderPass.cs
-└── Vegetation.asmdef
+|-- Authoring/
+|   |-- BranchPrototypeSO.cs
+|   |-- TreeBlueprintSO.cs
+|   |-- LODProfileSO.cs
+|   |-- VegetationTreeAuthoring.cs
+|   |-- BranchPlacement.cs
+|   |-- ShellBakeSettings.cs
+|   `-- VegetationAuthoringValidator.cs
+|-- Runtime/
+|   |-- VegetationRuntimeManager.cs
+|   |-- VegetationBRGManager.cs
+|   |-- VegetationSpatialGrid.cs
+|   |-- TreeInstanceGPU.cs
+|   |-- TreeBlueprintGPU.cs
+|   |-- BranchPlacementGPU.cs
+|   |-- BranchPrototypeGPU.cs
+|   |-- LODProfileGPU.cs
+|   |-- VisibleVegetationRecord.cs
+|   `-- VegetationClassifier.cs
+|-- Editor/
+|   |-- VegetationEditorPreview.cs
+|   |-- VegetationTreeAuthoringEditor.cs
+|   |-- CanopyShellGenerator.cs
+|   |-- ImpostorMeshGenerator.cs
+|   |-- Voxelizer.cs
+|   `-- MeshSimplifier.cs
+|-- Shaders/
+|   |-- VegetationCanopyLit.shader
+|   |-- VegetationTrunkLit.shader
+|   |-- VegetationImpostorLit.shader
+|   |-- VegetationDepthOnly.shader
+|   `-- VegetationClassify.compute
+|-- Rendering/
+|   |-- VegetationRendererFeature.cs
+|   `-- VegetationRenderPass.cs
+`-- Vegetation.asmdef
 
 Assets/EditorTests/Vegetation/
-├── AuthoringValidationTests.cs
-├── CanopyShellGenerationTests.cs
-├── SpatialGridTests.cs
-└── ClassificationTests.cs
+|-- AuthoringValidationTests.cs
+|-- CanopyShellGenerationTests.cs
+|-- SpatialGridTests.cs
+`-- ClassificationTests.cs
 ```
 
 ---
@@ -691,66 +686,71 @@ Assets/EditorTests/Vegetation/
 
 ### Phase A: Foundation (Tasks 1 + 10.1)
 1. Create folder structure + asmdef
-2. Implement authoring SOs: `BranchPrototypeSO`, `TreeBlueprintSO`, `LODProfileSO`, `BranchPlacement`
-3. Implement `VegetationTreeAuthoring` MonoBehaviour
-4. Implement authoring validation logic (static validator class)
-5. Write authoring validation EditMode tests
-6. **Compile check + run tests**
+2. Implement `BranchPrototypeSO`, `TreeBlueprintSO`, `LODProfileSO`, `BranchPlacement`
+3. Match the real source asset contract directly: `woodMesh + foliageMesh + leafColorTint`
+4. Author first playable source assets from `branch_leaves_fullgeo` and `pine_branch_dense_needles`
+5. Create one demo `TreeBlueprintSO` and one `LODProfileSO`
+6. Implement `VegetationTreeAuthoring`
+7. Implement authoring validation logic
+8. Write authoring validation EditMode tests
+9. Compile check + run tests
 
 ### Phase B: Shell Generation (Tasks 3 + 10.2)
-1. Implement `Voxelizer` (triangle-voxel intersection on 3D grid)
-2. Implement shell extraction (surface voxel → mesh)
-3. Implement `MeshSimplifier` (edge-collapse to budget)
-4. Implement `CanopyShellGenerator` (orchestrates voxelize → extract → simplify per level)
-5. Implement `ImpostorMeshGenerator` (from L2 → further simplified)
-6. Wire into `BranchPrototypeSO` and `TreeBlueprintSO`
+1. Implement `Voxelizer` on foliage geometry
+2. Implement shell extraction
+3. Implement `MeshSimplifier`
+4. Implement `CanopyShellGenerator`
+5. Implement `ImpostorMeshGenerator` from merged tree-space shell L2 assembly (front side only!)
+6. Wire shell / impostor baking into SOs
 7. Write shell generation EditMode tests
-8. **Compile check + run tests**
+8. Compile check + run tests
 
 ### Phase C: Editor Preview (Task 2)
-1. Implement `VegetationEditorPreview` (spawn/destroy child GOs per tier)
-2. Implement `VegetationTreeAuthoringEditor` (custom inspector with preview controls)
-3. Wire "Regenerate Shells" / "Regenerate Impostor" buttons
-4. Manual visual verification in Editor
-5. **Compile check**
+1. Implement `VegetationEditorPreview`
+2. Implement `VegetationTreeAuthoringEditor`
+3. Wire `Regenerate Shells` / `Regenerate Impostor`
+4. Manual visual verification
+5. Compile check
 
-### Phase D: Spatial Grid + CPU Classification (Tasks 6 + 5-CPU + 10.3 + 10.4)
-1. Implement `VegetationSpatialGrid` (uniform grid, cell assignment, frustum test)
-2. Implement `VegetationClassifier` (CPU-side classification mirror)
-3. Write spatial grid EditMode tests
-4. Write classification EditMode tests
-5. **Compile check + run tests**
+### Phase D: Spatial Grid + CPU Classification (Tasks 6 + 5 CPU + 10.3 + 10.4)
+1. Implement `VegetationSpatialGrid`
+2. Implement `VegetationClassifier` as CPU mirror
+3. Mirror tree-blueprint expansion into branch draw-slot selection
+4. Write spatial grid EditMode tests
+5. Write classification EditMode tests
+6. Compile check + run tests
 
 ### Phase E: GPU Pipeline (Tasks 4 + 5 + 7 + 8 + 9)
-1. Implement `VegetationClassify.compute` shader
-2. Implement `VegetationCanopyLit.shader` (vertex-lit, RSUV color variation)
-3. Implement `VegetationTrunkLit.shader` (texture-lit trunk/branches)
-4. Implement `VegetationImpostorLit.shader` (billboard, vertex-lit, RSUV)
-6. Implement `VegetationDepthOnly.shader`
-7. Implement `VegetationBRGManager` (BRG lifecycle, mesh/material registration)
-8. Implement `VegetationRendererFeature` + `VegetationRenderPass`
-9. Implement `VegetationRuntimeManager` (orchestration, gather, frame loop)
-10. End-to-end manual test: place tree in scene → run → observe LOD transitions at distance
-11. **Compile check + manual verification**
+1. Implement `VegetationClassify.compute`
+2. Implement `VegetationCanopyLit.shader`
+3. Implement `VegetationTrunkLit.shader`
+4. Implement `VegetationImpostorLit.shader`
+5. Implement `VegetationDepthOnly.shader`
+6. Implement `VegetationBRGManager` with per-blueprint / per-prototype draw-slot registry
+7. Implement `VegetationRendererFeature` + `VegetationRenderPass`
+8. Implement `VegetationRuntimeManager` with GPU static-buffer flattening
+9. End-to-end manual test in a demo scene
+10. Compile check + manual verification
 
 ---
 
 ## Done Criteria
 
-- [ ] Place a single tree (trunk + branches) in a scene
-- [ ] Shell L0/L1/L2 auto-generated from branch geometry
-- [ ] Impostor mesh auto-generated from shell L2
-- [ ] Editor preview shows all 7 representation views correctly
-- [ ] At runtime: GPU classification selects correct LOD based on distance
-- [ ] BRG renders all tiers with correct batching
-- [ ] Leaf shells show per-instance color variation
-- [ ] Impostor billboards face camera
-- [ ] Depth prepass renders before color pass
-- [ ] Spatial grid reduces unnecessary GPU work
-- [ ] All authoring validation tests pass
-- [ ] All shell generation tests pass
-- [ ] All spatial grid tests pass
-- [ ] All classification tests pass
+- One tree species is authored as a `TreeBlueprintSO` using reusable two-mesh branch prototypes
+- Source branch meshes validate as readable
+- Shell L0 / L1 / L2 are auto-generated from branch foliage geometry
+- Impostor mesh is auto-generated from merged tree-space shell L2 assembly
+- Editor preview shows all 7 representation views correctly
+- Runtime GPU classification selects the correct tier by distance / projected area
+- BRG renders trunk, branch wood, branch foliage, shell tiers, and impostor with correct batching
+- Canopy draws use prototype-authored `leafColorTint`
+- Impostor billboards face the camera
+- Classification runs before depth, and depth runs before color
+- Spatial grid reduces unnecessary GPU work
+- All authoring validation tests pass
+- All shell generation tests pass
+- All spatial grid tests pass
+- All classification tests pass
 
 ---
 

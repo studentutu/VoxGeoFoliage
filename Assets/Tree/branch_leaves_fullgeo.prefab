@@ -18,7 +18,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0
+      value: 3.25
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
       propertyPath: m_LocalRotation.w
@@ -52,14 +52,26 @@ PrefabInstance:
       propertyPath: m_Name
       value: branch_leaves_fullgeo
       objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
+      propertyPath: m_Layer
+      value: 6
+      objectReference: {fileID: 0}
     - target: {fileID: 1446317025356153247, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
       objectReference: {fileID: 2100000, guid: ecaffefaa3a08ce43b2fb6c79d1b2bb4, type: 2}
+    - target: {fileID: 2578044415262143459, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
+      propertyPath: m_Layer
+      value: 6
+      objectReference: {fileID: 0}
     - target: {fileID: 6878979922625006393, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
       objectReference: {fileID: 2100000, guid: 72a7df46ac0cce54a91695e1898ab6bb, type: 2}
+    - target: {fileID: 8603806674150118374, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
+      propertyPath: m_Layer
+      value: 6
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

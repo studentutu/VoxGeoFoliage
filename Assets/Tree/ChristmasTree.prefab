@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 6160396875162012654}
   - component: {fileID: 8948829204795037856}
   - component: {fileID: 1669668019417176327}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: leaves (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -26,13 +26,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5239360810749606706}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0.0068939645, z: 0, w: 0.9999763}
+  m_LocalRotation: {x: 0, y: 0.009162842, z: 0, w: 0.99995804}
   m_LocalPosition: {x: -0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 9018322263125496267}
-  m_LocalEulerAnglesHint: {x: 0, y: 0.79, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 1.05, z: 0}
 --- !u!33 &8948829204795037856
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -141,6 +141,18 @@ PrefabInstance:
     - target: {fileID: 919132149155446097, guid: 71db083465d3dd44abb6a72004561287, type: 3}
       propertyPath: m_Name
       value: ChristmasTree
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 71db083465d3dd44abb6a72004561287, type: 3}
+      propertyPath: m_Layer
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 3681790978099765340, guid: 71db083465d3dd44abb6a72004561287, type: 3}
+      propertyPath: m_Layer
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 7061009275388539339, guid: 71db083465d3dd44abb6a72004561287, type: 3}
+      propertyPath: m_Layer
+      value: 6
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects:
