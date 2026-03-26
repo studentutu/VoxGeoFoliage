@@ -27,6 +27,8 @@ Repo-used libraries and plugins:
 
 - `Assets/Scripts`
   - runtime code, authoring data
+- `Assets/Scripts/MassPlacement`
+  - editor-triggered scatter utility that raycasts down onto physical ground
 - `Assets/EditorTests`
   - EditMode tests (faster then playmode tests)
 - `Assets/Editor`

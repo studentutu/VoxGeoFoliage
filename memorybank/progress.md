@@ -62,5 +62,5 @@ Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
 - Hierarchical sub-branch canopy shells
 - Hierarchical wind system
 - Scale quantization optimization
-- Placement tools
+- Feature-grade placement tools (terrain scatter, paint). Basic editor-only `MassPlacement` physical-ground scatter already exists under `Assets/Scripts/MassPlacement`.
 - Cell streaming

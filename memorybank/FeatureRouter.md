@@ -29,3 +29,12 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - ci
 - Read:
   - [RunUnityTestsReadme](../CI/RunUnityTestsReadme.md)
+
+## Scene Placement Utilities
+
+- Triggers:
+  - mass placement
+  - placement
+  - scatter
+- Read:
+  - [MassPlacement](../Assets/Scripts/MassPlacement/MassPlacement.cs) - editor-only downward-raycast placement utility

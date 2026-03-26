@@ -212,6 +212,38 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &277466876
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 277466877}
+  m_Layer: 0
+  m_Name: Scenes
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &277466877
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 277466876}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1685748220}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &460191516
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -280,6 +312,10 @@ PrefabInstance:
     - target: {fileID: 6034201138724349984, guid: dd3bd6cf36ed4c24d8853e010b122d79, type: 3}
       propertyPath: m_Name
       value: ChristmasTree
+      objectReference: {fileID: 0}
+    - target: {fileID: 6121748347033812855, guid: dd3bd6cf36ed4c24d8853e010b122d79, type: 3}
+      propertyPath: m_ForceMeshLod
+      value: -1
       objectReference: {fileID: 0}
     - target: {fileID: 6410339000562512538, guid: dd3bd6cf36ed4c24d8853e010b122d79, type: 3}
       propertyPath: m_LocalPosition.x
@@ -385,7 +421,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.3
-  far clip plane: 1000
+  far clip plane: 8000
   field of view: 60
   orthographic: 0
   orthographic size: 5
@@ -412,8 +448,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1100303974}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.011625478, y: -0.9812028, z: 0.062482562, w: -0.18221413}
-  m_LocalPosition: {x: 454.0127, y: -188.55331, z: 6179.5967}
+  m_LocalRotation: {x: -0.016526327, y: -0.9791036, z: 0.08955973, w: -0.18183015}
+  m_LocalPosition: {x: 518.9757, y: -203.82072, z: 6201.5903}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -602,7 +638,7 @@ GameObject:
   - component: {fileID: 1467274855}
   - component: {fileID: 1467274856}
   m_Layer: 6
-  m_Name: ALotOfHightPolyPines
+  m_Name: MassPlacementBrush
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -635,7 +671,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 36cdee2bcc1c1f240a32d175df174527, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MassPlacement
-  RootForInstancesOnScene: {fileID: 1467274853}
+  RootForInstancesOnScene: {fileID: 1838828654}
   Prefab: {fileID: 6034201138724349984, guid: dd3bd6cf36ed4c24d8853e010b122d79, type: 3}
   AreaToPlace: {fileID: 1467274856}
   UnityGroundLayer:
@@ -665,6 +701,90 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &1685748218
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1685748220}
+  - component: {fileID: 1685748219}
+  m_Layer: 0
+  m_Name: PineMassPlacementPart
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1685748219
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1685748218}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 45a335734b1572644a6a5d09d87adc65, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Scenes::Unity.Scenes.SubScene
+  _SceneAsset: {fileID: 102900000, guid: dba4d4df752137c45aa85f9f06f84120, type: 3}
+  _HierarchyColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+  AutoLoadScene: 0
+  _SceneGUID:
+    Value:
+      x: 4249701053
+      y: 1282609751
+      z: 4193618597
+      w: 34901856
+--- !u!4 &1685748220
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1685748218}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 277466877}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1838828654
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1838828655}
+  m_Layer: 0
+  m_Name: RootForplacement
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1838828655
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1838828654}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &6908995165207228698
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -791,3 +911,5 @@ SceneRoots:
   - {fileID: 8979363226228078522}
   - {fileID: 6908995165207228698}
   - {fileID: 1467274854}
+  - {fileID: 1838828655}
+  - {fileID: 277466877}
