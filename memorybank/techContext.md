@@ -18,6 +18,9 @@ Purpose: compact toolchain, package, and verification reference for the current 
 - `com.unity.collections 2.6.2`
 - `com.unity.mathematics 1.3.3`
 - `com.unity.burst 1.8.27`
+- `com.unity.entities 1.4.5`
+- `com.unity.entities.graphics 1.4.18`
+- `com.unity.physics 1.4.5`
 
 Repo-used libraries and plugins:
 
