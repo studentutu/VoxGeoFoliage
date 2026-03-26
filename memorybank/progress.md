@@ -49,10 +49,11 @@ Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
 - [ ] End-to-end manual test
 - [ ] Compile check + manual verification
 
-## Left-Over / Deferred
+## Deferred
 - Occlusion culling (HiZ depth pyramid)
 - LOD transition dithering/cross-fade
 - Runtime streaming / dynamic loading
+- Hierarchical Sub-Branch Canopy Shells
 - Hierarchical wind system
 - Scale quantization optimization
 - Placement tools
