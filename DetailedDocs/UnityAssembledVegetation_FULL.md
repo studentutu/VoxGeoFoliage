@@ -150,7 +150,75 @@ Per branch prototype:
 - Soft diffuse shading
 - Stable normals
 
-## 3.4 Wind
+## 3.4 Hierarchical Sub-Branch Canopy Shells (Full Version)
+
+### Problem with Fixed L0/L1/L2
+
+MVP uses 3 fixed shell meshes per branch prototype (L0, L1, L2). This works for small-to-medium branches but becomes a bottleneck for large, complex branches:
+
+- A large branch may have foliage clusters at very different distances from the camera
+- Fixed shells treat the entire branch as one unit — either all detailed or all simplified
+- Unreal 5.7 solves this by subdividing branches into spatial cells and generating shell variants per cell, allowing the GPU classifier to choose shell detail **per sub-region** of a branch based on each region's own AABB/projected area
+
+### Hierarchical Shell Architecture
+
+In the full version, each branch prototype is spatially subdivided:
+
+```
+Branch = Σ (BranchCell[i] → ShellChain[i])
+
+Where:
+  BranchCell = spatial subdivision of the branch volume (uniform grid or octree)
+  ShellChain = { shellL0, shellL1, shellL2 } per cell
+```
+
+**Per-cell shell generation:**
+1. Subdivide branch local AABB into cells (e.g. 2×2×2 or 3×3×3 grid)
+2. For each cell that contains geometry:
+   a. Voxelize only the triangles within that cell
+   b. Generate L0/L1/L2 shells from that cell's volume
+   c. Store as separate meshes with cell-local bounds
+3. Each cell gets its own AABB for GPU classification
+
+**GPU classification change:**
+- Instead of selecting one shell level for the entire branch, the classifier evaluates **each cell's AABB** against projected area thresholds
+- Cells close to camera → L0 (detailed shell)
+- Cells at medium distance → L1
+- Cells far away → L2 or culled entirely
+- This means a single branch instance can render a mix of L0/L1/L2 cells simultaneously
+
+### Data Model Extension
+
+```
+BranchPrototypeGPU (full version):
+  - uint cellCount
+  - uint cellDataStartIndex  // into BranchCellData buffer
+
+BranchCellData:
+  - float3 cellLocalCenter
+  - float3 cellLocalExtents   // half-size of cell AABB
+  - uint shellL0MeshIndex
+  - uint shellL1MeshIndex
+  - uint shellL2MeshIndex
+```
+
+### Benefits
+
+- **Gradual detail reduction**: nearby cells stay detailed while distant cells simplify
+- **Better silhouette preservation**: important crown lobes keep L0 while interior mass drops to L2
+- **Reduced overdraw**: cells fully behind other cells can be culled individually
+- **Matches UE 5.7 behavior**: per-region LOD within a single foliage assembly
+
+### MVP Simplification
+
+MVP treats each branch as a single cell (cell count = 1). The full hierarchical system is a superset — MVP's 3-mesh-per-branch model is equivalent to the hierarchical model with cell grid size = 1×1×1.
+
+This ensures the MVP data model is **forward-compatible**: upgrading to hierarchical shells requires no architectural changes, only:
+1. Sub-branch cell generation in the baking pipeline
+2. Per-cell AABB evaluation in the GPU classifier
+3. Per-cell indirect draw emission
+
+## 3.5 Wind
 
 - Low frequency
 - Mass motion only

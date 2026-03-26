@@ -4,6 +4,24 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
 
 ## Routing Table
 
+## Vegetation System
+
+- Triggers:
+  - vegetation
+  - tree
+  - branch
+  - shell
+  - canopy
+  - impostor
+  - foliage
+  - BRG
+  - classification
+  - LOD
+  - spatial grid
+- Read:
+  - [UnityAssembledVegetation_FULL](../DetailedDocs/UnityAssembledVegetation_FULL.md) — architecture authority
+  - [Milestone1](../DetailedDocs/Milestone1.md) — MVP plan, task breakdown, data model, folder structure
+
 ## CI and Tests
 
 - Triggers:
