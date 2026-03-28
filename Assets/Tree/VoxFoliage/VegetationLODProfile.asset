@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cdf8f2ed4c768fd4ba52a2e181c27385, type: 3}
+  m_Name: VegetationLODProfile
+  m_EditorClassIdentifier: Vegetation::VoxGeoFol.Features.Vegetation.Authoring.LODProfileSO
+  r0MinProjectedArea: 0.4
+  r1MinProjectedArea: 0.2
+  shellL0MinProjectedArea: 0.1
+  shellL1MinProjectedArea: 0.05
+  shellL2MinProjectedArea: 0.02
+  absoluteCullProjectedMin: 0.005
+  backsideBiasScale: 0.3
+  silhouetteKeepThreshold: 0.7

@@ -45,6 +45,13 @@ This system does not use Unity's built-in `LODGroup`. LOD selection is fully own
 
 ## Task 1: Authoring Data Model
 
+### Implementation Status (`2026-03-27`)
+
+- Implemented the Task 1 runtime authoring types under `Assets/Scripts/Features/Vegetation/Authoring/`.
+- Implemented explicit authoring validation via `VegetationAuthoringValidator`.
+- Added EditMode coverage in `Assets/EditorTests/Vegetation/AuthoringValidationTests.cs`.
+- Verified with `Fully Compile by Unity`; demo source assets and Unity test execution are still pending.
+
 ### 1.1 ScriptableObjects (authoring, immutable asset data)
 
 **`BranchPrototypeSO`** - single reusable branch module

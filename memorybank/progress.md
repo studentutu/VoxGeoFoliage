@@ -7,16 +7,23 @@ Purpose: track immediate tasks and current milestone status.
 Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
 
 ### Phase A: Foundation (Authoring Data Model + Validation Tests)
-- [ ] Create folder structure + `Vegetation.asmdef`
-- [ ] Implement `BranchPrototypeSO` with `woodMesh`, `foliageMesh`, and `leafColorTint`
-- [ ] Implement `TreeBlueprintSO`, `LODProfileSO`, and `BranchPlacement`
-- [ ] Match the real source asset contract directly: readable two-mesh branch prototypes
-- [ ] Author first playable source assets from `branch_leaves_fullgeo` and `pine_branch_dense_needles`
-- [ ] Create one demo `TreeBlueprintSO` and one `LODProfileSO`
-- [ ] Implement `VegetationTreeAuthoring`
-- [ ] Implement authoring validation logic (readability, opacity, budgets, bounds, scale)
-- [ ] Write authoring validation EditMode tests
-- [ ] Compile check + run tests
+- [x] Create folder structure + `Vegetation.asmdef`
+- [x] Implement `BranchPrototypeSO` with `woodMesh`, `foliageMesh`, and `leafColorTint`
+- [x] Implement `TreeBlueprintSO`, `LODProfileSO`, and `BranchPlacement`
+- [x] Match the real source asset contract directly: readable two-mesh branch prototypes
+- [x] Author first source assets from `branch_leaves_fullgeo` (only from it, see Assets/Tree/VoxFoliage)
+- [x] Create one demo `TreeBlueprintSO` and one `LODProfileSO` (see Assets/Tree/VoxFoliage)
+- [x] Implement `VegetationTreeAuthoring`
+- [x] Implement authoring validation logic (readability, opacity, budgets, bounds, scale)
+- [x] Write authoring validation EditMode tests
+- [x] Compile check + run tests
+
+Status note:
+- Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-27`.
+- `Assets/EditorTests/Vegetation/AuthoringValidationTests.cs` was added, but the Unity test runner was not executed yet.
+- developer added  `TreeBlueprintSO` and one `LODProfileSO` (see `Assets/Tree/VoxFoliage`) and setup `TreeBlueprintSO` (didn't set the individual branches, as there is no editor tools to convert gameObject branches into setup data) and assembled demo tree from branches (`Assets/Tree/tree_dense_branches.prefab`)
+
+- [ ] Missing script conversion from assembled with branches into a `TreeBlueprintSO` (fill in branches).
 
 ### Phase B: Shell Generation (Canopy Shell + Impostor Baking + Tests)
 - [ ] Implement `Voxelizer` on foliage geometry

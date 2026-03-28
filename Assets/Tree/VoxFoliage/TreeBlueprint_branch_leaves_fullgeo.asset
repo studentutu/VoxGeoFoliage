@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fecc6e4fecaceaf4488f81b7bc8cbf85, type: 3}
+  m_Name: TreeBlueprint_branch_leaves_fullgeo
+  m_EditorClassIdentifier: Vegetation::VoxGeoFol.Features.Vegetation.Authoring.TreeBlueprintSO
+  trunkMesh: {fileID: 4781277628412113339, guid: 71db083465d3dd44abb6a72004561287, type: 3}
+  trunkMaterial: {fileID: 2100000, guid: 72a7df46ac0cce54a91695e1898ab6bb, type: 2}
+  branches: []
+  impostorMesh: {fileID: 0}
+  impostorMaterial: {fileID: 0}
+  lodProfile: {fileID: 0}
+  treeBounds:
+    m_Center: {x: 0, y: 0, z: 0}
+    m_Extent: {x: 0.5, y: 0.5, z: 0.5}

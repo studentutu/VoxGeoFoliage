@@ -30,6 +30,8 @@ Repo-used libraries and plugins:
 
 - `Assets/Scripts`
   - runtime code, authoring data
+- `Assets/Scripts/Features/Vegetation`
+  - vegetation feature assemblies and Task1 authoring/validation code
 - `Assets/Scripts/MassPlacement`
   - editor-triggered scatter utility that raycasts down onto physical ground
 - `Assets/EditorTests`
@@ -57,5 +59,6 @@ Repo-used libraries and plugins:
 - EditMode tests must not rely on Unity lifecycle callbacks.
 - Because Unity generates the authoritative compile/test outputs, the Unity editor must be closed before running the required compile/test scripts.
 - New or renamed `.cs` files require Full Unity compile path so the generated solution is rebuilt from Unity itself.
+- The current scripting toolchain tops out at `LangVersion 9.0`; use block-scoped namespaces, not file-scoped namespaces.
 - Use message-bus or singleton when cross communication is needed (prefer message bus with explicit sender and data).
 - All static runtime classes must have explicit `Reset` method that is invoked once in `EditorPlayModeStaticServicesReset.cs`.
