@@ -49,6 +49,7 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 - `VegetationRendererFeature` - URP integration: schedules compute dispatch + depth prepass + color pass
 - `VegetationBRGManager` - BRG lifecycle: mesh/material registration, draw command emission
 - `VegetationAuthoringValidator` - Task 1 authoring contract authority: explicit validation for readability, opacity, budgets, bounds, scale, and LOD ordering
+- `VegetationPhaseAAuthoringSync` - editor-side Phase A authority: refreshes source bounds/budgets and rebuilds demo tree branch placements from the assembled prefab
 - `VegetationTreeAuthoringEditor` - editor integration: preview controls, bake buttons, validation display
 
 --

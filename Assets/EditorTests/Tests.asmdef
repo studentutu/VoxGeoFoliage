@@ -5,7 +5,8 @@
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "GameRuntime",
-        "Vegetation"
+        "Vegetation",
+        "Vegetation.Editor"
     ],
     "includePlatforms": [
         "Editor"

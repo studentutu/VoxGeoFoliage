@@ -16,14 +16,17 @@ Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
 - [x] Implement `VegetationTreeAuthoring`
 - [x] Implement authoring validation logic (readability, opacity, budgets, bounds, scale)
 - [x] Write authoring validation EditMode tests
+- [x] Implement Phase A authoring sync from assembled prefab into `TreeBlueprintSO` branches/bounds
+- [x] Implement `VegetationTreeAuthoring` context actions to reconstruct or clear original branch hierarchy from blueprint data
 - [x] Compile check + run tests
 
 Status note:
-- Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-27`.
-- `Assets/EditorTests/Vegetation/AuthoringValidationTests.cs` was added, but the Unity test runner was not executed yet.
-- developer added  `TreeBlueprintSO` and one `LODProfileSO` (see `Assets/Tree/VoxFoliage`) and setup `TreeBlueprintSO` (didn't set the individual branches, as there is no editor tools to convert gameObject branches into setup data) and assembled demo tree from branches (`Assets/Tree/tree_dense_branches.prefab`)
-
-- [ ] Missing script conversion from assembled with branches into a `TreeBlueprintSO` (fill in branches).
+- Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-28`.
+- Unity EditMode tests passed on `2026-03-28` (`runParsetests.sh`).
+- Added `VegetationPhaseAAuthoringSync` to rebuild the demo authoring data from `Assets/Tree/tree_dense_branches.prefab`.
+- `VegetationTreeAuthoring` now rebuilds branch children from `TreeBlueprintSO.branches` and can delete the original branch hierarchy from the assigned branch root.
+- `Assets/Tree/VoxFoliage/TreeBlueprint_branch_leaves_fullgeo.asset` now contains 52 generated branch placements plus a linked `LODProfileSO`.
+- `Assets/Tree/VoxFoliage/BranchPrototype_branch_leaves_fullgeo.asset` now uses mesh-derived `localBounds` and a foliage budget aligned with the real imported source mesh.
 
 ### Phase B: Shell Generation (Canopy Shell + Impostor Baking + Tests)
 - [ ] Implement `Voxelizer` on foliage geometry
@@ -32,6 +35,7 @@ Status note:
 - [ ] Implement `CanopyShellGenerator`
 - [ ] Implement `ImpostorMeshGenerator` from merged tree-space shell L2 assembly
 - [ ] Wire shell / impostor baking into SOs
+- [ ] Implement `VegetationTreeAuthoring` context action to reconstruct from shells (by level) from blueprint data (necessary preview for the Phase B by developer).
 - [ ] Write shell generation EditMode tests
 - [ ] Compile check + run tests
 

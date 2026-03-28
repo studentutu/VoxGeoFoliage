@@ -22,10 +22,10 @@ MonoBehaviour:
   shellL2Mesh: {fileID: 0}
   shellMaterial: {fileID: 2100000, guid: 1e8b3c0229b50f94bab471853295c8d5, type: 2}
   localBounds:
-    m_Center: {x: 0, y: 0, z: 0}
-    m_Extent: {x: 0.5, y: 0.5, z: 0.5}
+    m_Center: {x: -0.72606623, y: 0.031684875, z: 0.2255171}
+    m_Extent: {x: 0.7372974, y: 0.46414518, z: 0.2749564}
   triangleBudgetWood: 2048
-  triangleBudgetFoliage: 2048
+  triangleBudgetFoliage: 17596
   triangleBudgetShellL0: 2000
   triangleBudgetShellL1: 500
   triangleBudgetShellL2: 150

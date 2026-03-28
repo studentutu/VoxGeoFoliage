@@ -45,12 +45,14 @@ This system does not use Unity's built-in `LODGroup`. LOD selection is fully own
 
 ## Task 1: Authoring Data Model
 
-### Implementation Status (`2026-03-27`)
+### Implementation Status (`2026-03-28`)
 
 - Implemented the Task 1 runtime authoring types under `Assets/Scripts/Features/Vegetation/Authoring/`.
 - Implemented explicit authoring validation via `VegetationAuthoringValidator`.
-- Added EditMode coverage in `Assets/EditorTests/Vegetation/AuthoringValidationTests.cs`.
-- Verified with `Fully Compile by Unity`; demo source assets and Unity test execution are still pending.
+- Added demo authoring sync in `Assets/Scripts/Features/Vegetation/Editor/VegetationPhaseAAuthoringSync.cs` to rebuild branch placements/bounds from the assembled tree prefab.
+- Added `VegetationTreeAuthoring` context actions to reconstruct or clear the original branch hierarchy from saved branch placement data.
+- Added EditMode coverage in `Assets/EditorTests/Vegetation/AuthoringValidationTests.cs` and `Assets/EditorTests/Vegetation/AuthoringAssetSyncTests.cs`.
+- Verified with `Fully Compile by Unity` and the Unity EditMode test runner; the demo `branch_leaves_fullgeo` assets now validate and the demo tree blueprint is populated.
 
 ### 1.1 ScriptableObjects (authoring, immutable asset data)
 
@@ -591,6 +593,12 @@ AuthoringValidationTests:
   - TreeBlueprint_BoundsContainAllBranches
   - TreeBlueprint_ImpostorTriangleBudget_Under200
   - TreeBlueprint_ScaleConstraint_OnlyAllowedValues
+
+AuthoringAssetSyncTests:
+  - RefreshBranchPrototypeLocalBounds_EncapsulatesWoodAndFoliageMeshes
+  - RefreshBlueprintFromAssemblyAsset_RebuildsPlacementsAssignsLodProfileAndProducesValidBlueprint
+  - ReconstructFromDataAndOriginalBranch_RebuildsBranchHierarchyFromBlueprint
+  - DeleteOriginals_RemovesAllChildrenFromBranchRoot
 ```
 
 ### 10.2 Canopy Shell Generation Tests (`Assets/EditorTests/Vegetation/`)
@@ -663,6 +671,7 @@ Assets/Scripts/Features/Vegetation/
 |   |-- VisibleVegetationRecord.cs
 |   `-- VegetationClassifier.cs
 |-- Editor/
+|   |-- VegetationPhaseAAuthoringSync.cs
 |   |-- VegetationEditorPreview.cs
 |   |-- VegetationTreeAuthoringEditor.cs
 |   |-- CanopyShellGenerator.cs
@@ -681,6 +690,7 @@ Assets/Scripts/Features/Vegetation/
 `-- Vegetation.asmdef
 
 Assets/EditorTests/Vegetation/
+|-- AuthoringAssetSyncTests.cs
 |-- AuthoringValidationTests.cs
 |-- CanopyShellGenerationTests.cs
 |-- SpatialGridTests.cs
