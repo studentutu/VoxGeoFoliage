@@ -33,8 +33,8 @@ Deliver a working end-to-end vegetation pipeline (similar to Unreal 5.7 new foli
 | Tier | What Renders | When |
 |------|--------------|------|
 | R0 | Trunk mesh + branch wood meshes + branch foliage meshes + shell L0 | Very close range, high projected area |
-| R1 | Trunk mesh + shell L1 | Mid range |
-| R2 | Trunk mesh + shell L2 | Far-mid range |
+| R1 | Trunk mesh + simplified branch wood L1 + shell L1 | Mid range |
+| R2 | Trunk mesh + simplified branch wood L2 + shell L2 | Far-mid range |
 | R3 | Impostor mesh | Far range, minimal projected area |
 
 ### No Unity LODGroup
@@ -65,7 +65,9 @@ This system does not use Unity's built-in `LODGroup`. LOD selection is fully own
 - Color leafColorTint       // prototype-authored canopy tint packed into RSUV
 - Mesh shellL0Mesh          // generated canopy shell L0
 - Mesh shellL1Mesh          // generated canopy shell L1
+- Mesh shellL1WoodMesh      // generated simplified branch wood for shell L1
 - Mesh shellL2Mesh          // generated canopy shell L2
+- Mesh shellL2WoodMesh      // generated simplified branch wood for shell L2
 - Material shellMaterial    // opaque shell material
 - Bounds localBounds        // local-space AABB containing woodMesh + foliageMesh
 - int triangleBudgetWood
@@ -148,12 +150,12 @@ Attached to the same GameObject as `VegetationTreeAuthoring`. Use Unity OnValida
 | Tier | Spawned Children |
 |------|------------------|
 | R0_Full | Trunk GO + N x Branch Wood GOs + N x Branch Foliage GOs + N x ShellL0 GOs |
-| R1_ShellL1 | Trunk GO + N x ShellL1 GOs |
-| R2_ShellL2 | Trunk GO + N x ShellL2 GOs |
+| R1_ShellL1 | Trunk GO + N x WoodL1 GOs + N x ShellL1 GOs |
+| R2_ShellL2 | Trunk GO + N x WoodL2 GOs + N x ShellL2 GOs |
 | R3_Impostor | Single impostor GO |
-| ShellL0_Only | N x ShellL0 GOs |
-| ShellL1_Only | N x ShellL1 GOs |
-| ShellL2_Only | N x ShellL2 GOs |
+| ShellL0_Only | N x Wood GOs + N x ShellL0 GOs |
+| ShellL1_Only | N x WoodL1 GOs + N x ShellL1 GOs |
+| ShellL2_Only | N x WoodL2 GOs + N x ShellL2 GOs |
 
 **Implementation notes**
 - All preview GOs are transient: `HideFlags.DontSave | HideFlags.NotEditable`.
@@ -169,16 +171,33 @@ Attached to the same GameObject as `VegetationTreeAuthoring`. Use Unity OnValida
 - Button: `Regenerate Shells`
 - Button: `Regenerate Impostor`
 
+Interim status (`2026-03-29`)
+- Before the custom inspector exists, `VegetationTreeAuthoring` now exposes context-menu entry points for `BakeCanopyShells`, `BakeImpostor`, and `BakeCanopyShellsAndImpostor`.
+- Those context actions bridge to the editor-only bake pipeline, so the scene authoring component is already the main manual entry point for Phase B baking and shell preview reconstruction.
+
 ---
 
 ## Task 3: Canopy Shell Generator
 
+### Implementation Status (`2026-03-28`)
+
+- Implemented `ShellBakeSettings` and `ImpostorBakeSettings` under `Assets/Scripts/Features/Vegetation/Authoring/`.
+- Implemented `VoxelGrid`, `Voxelizer`, `MeshSimplifier`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, and `ImpostorMeshGenerator` under `Assets/Scripts/Features/Vegetation/Editor/`.
+- `CanopyShellGenerator` now bakes `shellL0Mesh`, `shellL1Mesh`, and `shellL2Mesh` directly onto `BranchPrototypeSO`.
+- `CanopyShellGenerator` also bakes `shellL1WoodMesh` and `shellL2WoodMesh` so shell preview tiers keep branch structure attached to the canopy shell.
+- `ImpostorMeshGenerator` now merges `trunkMesh` plus transformed `shellL2Mesh` and `shellL2WoodMesh` instances in tree local space and writes `impostorMesh` onto `TreeBlueprintSO`.
+- Generated shell and impostor meshes are persisted as explicit `.mesh` assets under `Assets/Scripts/Features/Vegetation/Runtime/Meshes/` so they survive editor restarts.
+- `VegetationTreeAuthoring` now exposes shell reconstruction context actions for `ShellL0`, `ShellL1`, and `ShellL2`.
+- Added EditMode coverage in `Assets/EditorTests/Vegetation/CanopyShellGenerationTests.cs` and extended `Assets/EditorTests/Vegetation/AuthoringAssetSyncTests.cs` with shell preview reconstruction coverage.
+- Verified with `Fully Compile by Unity`, `Compile by Rider MSBuild`, and the Unity EditMode test runner (`runParsetests.sh`).
+
 ### 3.1 Pipeline Overview
 
 Input: `BranchPrototypeSO.foliageMesh`  
-Output: `shellL0Mesh`, `shellL1Mesh`, `shellL2Mesh`
+Output: `shellL0Mesh`, `shellL1Mesh`, `shellL1WoodMesh`, `shellL2Mesh`, `shellL2WoodMesh`
 
-`woodMesh` is explicitly excluded from voxelization. Shell generation represents canopy mass only.
+`woodMesh` is explicitly excluded from canopy voxelization. L0 reconstruction reuses the source `woodMesh`, while L1/L2 bake simplified branch wood attachments alongside the canopy shells.
+Generated outputs are saved as standalone `.mesh` assets under `Assets/Scripts/Features/Vegetation/Runtime/Meshes/`, then referenced by the authoring assets.
 
 ### 3.2 Algorithm: Voxel-Based Shell Extraction
 
@@ -598,6 +617,7 @@ AuthoringAssetSyncTests:
   - RefreshBranchPrototypeLocalBounds_EncapsulatesWoodAndFoliageMeshes
   - RefreshBlueprintFromAssemblyAsset_RebuildsPlacementsAssignsLodProfileAndProducesValidBlueprint
   - ReconstructFromDataAndOriginalBranch_RebuildsBranchHierarchyFromBlueprint
+  - ReconstructShellL1FromData_RebuildsBranchHierarchyFromBlueprintShells
   - DeleteOriginals_RemovesAllChildrenFromBranchRoot
 ```
 
@@ -657,6 +677,7 @@ Assets/Scripts/Features/Vegetation/
 |   |-- LODProfileSO.cs
 |   |-- VegetationTreeAuthoring.cs
 |   |-- BranchPlacement.cs
+|   |-- ImpostorBakeSettings.cs
 |   |-- ShellBakeSettings.cs
 |   `-- VegetationAuthoringValidator.cs
 |-- Runtime/
@@ -675,7 +696,9 @@ Assets/Scripts/Features/Vegetation/
 |   |-- VegetationEditorPreview.cs
 |   |-- VegetationTreeAuthoringEditor.cs
 |   |-- CanopyShellGenerator.cs
+|   |-- GeneratedMeshAssetUtility.cs
 |   |-- ImpostorMeshGenerator.cs
+|   |-- VoxelGrid.cs
 |   |-- Voxelizer.cs
 |   `-- MeshSimplifier.cs
 |-- Shaders/

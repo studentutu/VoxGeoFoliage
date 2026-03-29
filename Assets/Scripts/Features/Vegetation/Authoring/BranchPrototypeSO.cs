@@ -17,7 +17,9 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         [SerializeField] private Color leafColorTint = Color.white;
         [SerializeField] private Mesh? shellL0Mesh;
         [SerializeField] private Mesh? shellL1Mesh;
+        [SerializeField] private Mesh? shellL1WoodMesh;
         [SerializeField] private Mesh? shellL2Mesh;
+        [SerializeField] private Mesh? shellL2WoodMesh;
         [SerializeField] private Material? shellMaterial;
         [SerializeField] private Bounds localBounds = new Bounds(Vector3.zero, Vector3.one);
         [SerializeField] [Min(1)] private int triangleBudgetWood = 2048;
@@ -40,7 +42,11 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
 
         public Mesh? ShellL1Mesh => shellL1Mesh;
 
+        public Mesh? ShellL1WoodMesh => shellL1WoodMesh;
+
         public Mesh? ShellL2Mesh => shellL2Mesh;
+
+        public Mesh? ShellL2WoodMesh => shellL2WoodMesh;
 
         public Material? ShellMaterial => shellMaterial;
 

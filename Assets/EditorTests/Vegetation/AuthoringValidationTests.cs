@@ -117,6 +117,18 @@ public sealed class AuthoringValidationTests
     }
 
     [Test]
+    public void BranchPrototype_WoodTriangleOrder_SourceAndL1MustNotIncreaseTowardL2()
+    {
+        BranchPrototypeSO prototype = CreateValidBranchPrototype(includeShells: true);
+        SetPrivateField(prototype, "shellL1WoodMesh", CreateMesh("ShellL1Wood", 3, new Bounds(Vector3.zero, Vector3.one)));
+        SetPrivateField(prototype, "shellL2WoodMesh", CreateMesh("ShellL2Wood", 4, new Bounds(Vector3.zero, Vector3.one * 0.5f)));
+
+        VegetationValidationResult result = prototype.Validate();
+
+        AssertHasError(result, "Wood triangle counts must not increase");
+    }
+
+    [Test]
     public void TreeBlueprint_NullTrunk_FailsValidation()
     {
         TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
@@ -218,7 +230,9 @@ public sealed class AuthoringValidationTests
         {
             SetPrivateField(prototype, "shellL0Mesh", CreateMesh("ShellL0", 7, new Bounds(Vector3.zero, Vector3.one)));
             SetPrivateField(prototype, "shellL1Mesh", CreateMesh("ShellL1", 5, new Bounds(Vector3.zero, Vector3.one * 0.8f)));
+            SetPrivateField(prototype, "shellL1WoodMesh", CreateMesh("ShellL1Wood", 2, new Bounds(Vector3.zero, Vector3.one * 0.5f)));
             SetPrivateField(prototype, "shellL2Mesh", CreateMesh("ShellL2", 3, new Bounds(Vector3.zero, Vector3.one * 0.6f)));
+            SetPrivateField(prototype, "shellL2WoodMesh", CreateMesh("ShellL2Wood", 1, new Bounds(Vector3.zero, Vector3.one * 0.3f)));
             SetPrivateField(prototype, "shellMaterial", CreateOpaqueMaterial("ShellMaterial"));
         }
 

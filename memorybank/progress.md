@@ -29,22 +29,39 @@ Status note:
 - `Assets/Tree/VoxFoliage/BranchPrototype_branch_leaves_fullgeo.asset` now uses mesh-derived `localBounds` and a foliage budget aligned with the real imported source mesh.
 
 ### Phase B: Shell Generation (Canopy Shell + Impostor Baking + Tests)
-- [ ] Implement `Voxelizer` on foliage geometry
-- [ ] Implement shell extraction (surface voxels to mesh)
-- [ ] Implement `MeshSimplifier` (edge-collapse to budget)
-- [ ] Implement `CanopyShellGenerator`
-- [ ] Implement `ImpostorMeshGenerator` from merged tree-space shell L2 assembly
-- [ ] Wire shell / impostor baking into SOs
-- [ ] Implement `VegetationTreeAuthoring` context action to reconstruct from shells (by level) from blueprint data (necessary preview for the Phase B by developer).
-- [ ] Write shell generation EditMode tests
-- [ ] Compile check + run tests
+- [x] Implement `Voxelizer` on foliage geometry
+- [x] Implement shell extraction (surface voxels to mesh)
+- [x] Implement `MeshSimplifier` (vertex clustering + weld budget reduction for generated meshes)
+- [x] Implement `CanopyShellGenerator`
+- [x] Implement `ImpostorMeshGenerator` from merged tree-space shell L2 assembly plus simplified branch wood attachments
+- [x] Wire shell / impostor baking into SOs
+- [x] Implement `VegetationTreeAuthoring` context action to reconstruct from shells (by level) from blueprint data (necessary preview for the Phase B by developer).
+- [x] Write shell generation EditMode tests
+- [x] Compile check + run tests
+
+Status note:
+- Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-28` after adding the Phase B files and regenerating the Unity solution.
+- Rider MSBuild compile (`Compile by Rider MSBuild`) passed on `2026-03-28` after the final Phase B fixes.
+- Unity EditMode tests passed on `2026-03-28` (`runParsetests.sh`).
+- Added `ShellBakeSettings` and `ImpostorBakeSettings` under `Assets/Scripts/Features/Vegetation/Authoring/`.
+- Added `VoxelGrid`, `Voxelizer`, `MeshSimplifier`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, and `ImpostorMeshGenerator` under `Assets/Scripts/Features/Vegetation/Editor/`.
+- Generated shell and impostor meshes now persist as standalone `.mesh` assets under `Assets/Scripts/Features/Vegetation/Runtime/Meshes/`.
+- `CanopyShellGenerator` now also bakes `shellL1WoodMesh` and `shellL2WoodMesh` so branch wood remains attached in shell preview tiers.
+- `VegetationTreeAuthoring` now reconstructs `ShellL0`, `ShellL1`, and `ShellL2` preview hierarchies with wood included from saved blueprint data.
+- Added `Assets/EditorTests/Vegetation/CanopyShellGenerationTests.cs` plus shell-preview coverage in `AuthoringAssetSyncTests.cs`.
 
 ### Phase C: Editor Preview
+- [x] Add interim `VegetationTreeAuthoring` context actions for `BakeCanopyShells`, `BakeImpostor`, and `BakeCanopyShellsAndImpostor`
 - [ ] Implement `VegetationEditorPreview` (R0 = trunk + branch wood + branch foliage + shellL0)
 - [ ] Implement `VegetationTreeAuthoringEditor` (custom inspector)
 - [ ] Wire bake buttons
 - [ ] Manual visual verification
 - [ ] Compile check
+
+Status note:
+- `VegetationTreeAuthoring` is now the developer-facing interim entry point for shell and impostor baking while the dedicated Phase C inspector/buttons are still pending.
+- Rider MSBuild compile passed on `2026-03-29`.
+- Unity EditMode tests passed on `2026-03-29` (`runParsetests.sh`).
 
 ### Phase D: Spatial Grid + CPU Classification
 - [ ] Implement `VegetationSpatialGrid`

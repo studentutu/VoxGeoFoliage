@@ -1,31 +1,55 @@
 <?xml version="1.0" encoding="utf-8"?>
-<test-run id="2" testcasecount="22" result="Passed" total="22" passed="22" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-03-28 21:44:55Z" end-time="2026-03-28 21:44:57Z" duration="2.0129055">
-  <test-suite type="TestSuite" id="1000" name="VoxGeoFol" fullname="VoxGeoFol" runstate="Runnable" testcasecount="22" result="Passed" start-time="2026-03-28 21:44:55Z" end-time="2026-03-28 21:44:57Z" duration="2.012906" total="22" passed="22" failed="0" inconclusive="0" skipped="0" asserts="0">
+<test-run id="2" testcasecount="41" result="Passed" total="41" passed="41" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-03-29 15:10:00Z" end-time="2026-03-29 15:10:05Z" duration="4.9106541">
+  <test-suite type="TestSuite" id="1000" name="VoxGeoFol" fullname="VoxGeoFol" runstate="Runnable" testcasecount="41" result="Passed" start-time="2026-03-29 15:10:00Z" end-time="2026-03-29 15:10:05Z" duration="4.910654" total="41" passed="41" failed="0" inconclusive="0" skipped="0" asserts="0">
     <properties>
       <property name="platform" value="EditMode" />
     </properties>
-    <test-suite type="Assembly" id="1024" name="Tests.dll" fullname="C:/Users/admin/Documents/UnityProjects/VoxGeoFol/Library/ScriptAssemblies/Tests.dll" runstate="Runnable" testcasecount="20" result="Passed" start-time="2026-03-28 21:44:55Z" end-time="2026-03-28 21:44:57Z" duration="1.996215" total="20" passed="20" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <test-suite type="Assembly" id="1044" name="Tests.dll" fullname="C:/Users/admin/Documents/UnityProjects/VoxGeoFol/Library/ScriptAssemblies/Tests.dll" runstate="Runnable" testcasecount="39" result="Passed" start-time="2026-03-29 15:10:00Z" end-time="2026-03-29 15:10:05Z" duration="4.897585" total="39" passed="39" failed="0" inconclusive="0" skipped="0" asserts="0">
       <properties>
-        <property name="_PID" value="95096" />
+        <property name="_PID" value="167980" />
         <property name="_APPDOMAIN" value="Unity Child Domain" />
         <property name="platform" value="EditMode" />
         <property name="EditorOnly" value="True" />
       </properties>
-      <test-suite type="TestFixture" id="1004" name="AuthoringAssetSyncTests" fullname="AuthoringAssetSyncTests" classname="AuthoringAssetSyncTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-03-28 21:44:55Z" end-time="2026-03-28 21:44:57Z" duration="1.954664" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestFixture" id="1004" name="AuthoringAssetSyncTests" fullname="AuthoringAssetSyncTests" classname="AuthoringAssetSyncTests" runstate="Runnable" testcasecount="8" result="Passed" start-time="2026-03-29 15:10:00Z" end-time="2026-03-29 15:10:04Z" duration="4.449662" total="8" passed="8" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-case id="1008" name="DeleteOriginals_RemovesAllChildrenFromBranchRoot" fullname="AuthoringAssetSyncTests.DeleteOriginals_RemovesAllChildrenFromBranchRoot" methodname="DeleteOriginals_RemovesAllChildrenFromBranchRoot" classname="AuthoringAssetSyncTests" runstate="Runnable" seed="1408874078" result="Passed" start-time="2026-03-28 21:44:55Z" end-time="2026-03-28 21:44:56Z" duration="0.027111" asserts="0">
+        <test-case id="1012" name="BakeCanopyShellsAndImpostor_FromVegetationTreeAuthoring_PopulatesGeneratedMeshes" fullname="AuthoringAssetSyncTests.BakeCanopyShellsAndImpostor_FromVegetationTreeAuthoring_PopulatesGeneratedMeshes" methodname="BakeCanopyShellsAndImpostor_FromVegetationTreeAuthoring_PopulatesGeneratedMeshes" classname="AuthoringAssetSyncTests" runstate="Runnable" seed="995061142" result="Passed" start-time="2026-03-29 15:10:00Z" end-time="2026-03-29 15:10:02Z" duration="2.023611" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1007" name="ReconstructFromDataAndOriginalBranch_RebuildsBranchHierarchyFromBlueprint" fullname="AuthoringAssetSyncTests.ReconstructFromDataAndOriginalBranch_RebuildsBranchHierarchyFromBlueprint" methodname="ReconstructFromDataAndOriginalBranch_RebuildsBranchHierarchyFromBlueprint" classname="AuthoringAssetSyncTests" runstate="Runnable" seed="212992334" result="Passed" start-time="2026-03-28 21:44:56Z" end-time="2026-03-28 21:44:56Z" duration="0.625857" asserts="0">
+        <test-case id="1008" name="DeleteOriginals_RemovesAllChildrenFromBranchRoot" fullname="AuthoringAssetSyncTests.DeleteOriginals_RemovesAllChildrenFromBranchRoot" methodname="DeleteOriginals_RemovesAllChildrenFromBranchRoot" classname="AuthoringAssetSyncTests" runstate="Runnable" seed="688466922" result="Passed" start-time="2026-03-29 15:10:02Z" end-time="2026-03-29 15:10:02Z" duration="0.008614" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1006" name="RefreshBlueprintFromAssemblyAsset_RebuildsPlacementsAssignsLodProfileAndProducesValidBlueprint" fullname="AuthoringAssetSyncTests.RefreshBlueprintFromAssemblyAsset_RebuildsPlacementsAssignsLodProfileAndProducesValidBlueprint" methodname="RefreshBlueprintFromAssemblyAsset_RebuildsPlacementsAssignsLodProfileAndProducesValidBlueprint" classname="AuthoringAssetSyncTests" runstate="Runnable" seed="921338732" result="Passed" start-time="2026-03-28 21:44:56Z" end-time="2026-03-28 21:44:57Z" duration="1.022878" asserts="0">
+        <test-case id="1007" name="ReconstructFromDataAndOriginalBranch_RebuildsBranchHierarchyFromBlueprint" fullname="AuthoringAssetSyncTests.ReconstructFromDataAndOriginalBranch_RebuildsBranchHierarchyFromBlueprint" methodname="ReconstructFromDataAndOriginalBranch_RebuildsBranchHierarchyFromBlueprint" classname="AuthoringAssetSyncTests" runstate="Runnable" seed="392671087" result="Passed" start-time="2026-03-29 15:10:02Z" end-time="2026-03-29 15:10:02Z" duration="0.332287" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1009" name="ReconstructShellL0FromData_RebuildsBranchHierarchyWithWoodAndShell" fullname="AuthoringAssetSyncTests.ReconstructShellL0FromData_RebuildsBranchHierarchyWithWoodAndShell" methodname="ReconstructShellL0FromData_RebuildsBranchHierarchyWithWoodAndShell" classname="AuthoringAssetSyncTests" runstate="Runnable" seed="26259883" result="Passed" start-time="2026-03-29 15:10:02Z" end-time="2026-03-29 15:10:03Z" duration="0.328559" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1010" name="ReconstructShellL1FromData_RebuildsBranchHierarchyFromBlueprintShells" fullname="AuthoringAssetSyncTests.ReconstructShellL1FromData_RebuildsBranchHierarchyFromBlueprintShells" methodname="ReconstructShellL1FromData_RebuildsBranchHierarchyFromBlueprintShells" classname="AuthoringAssetSyncTests" runstate="Runnable" seed="1108883425" result="Passed" start-time="2026-03-29 15:10:03Z" end-time="2026-03-29 15:10:03Z" duration="0.313107" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1011" name="ReconstructShellL2FromData_RebuildsBranchHierarchyWithSimplifiedWoodAndShell" fullname="AuthoringAssetSyncTests.ReconstructShellL2FromData_RebuildsBranchHierarchyWithSimplifiedWoodAndShell" methodname="ReconstructShellL2FromData_RebuildsBranchHierarchyWithSimplifiedWoodAndShell" classname="AuthoringAssetSyncTests" runstate="Runnable" seed="1829287245" result="Passed" start-time="2026-03-29 15:10:03Z" end-time="2026-03-29 15:10:03Z" duration="0.326129" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1006" name="RefreshBlueprintFromAssemblyAsset_RebuildsPlacementsAssignsLodProfileAndProducesValidBlueprint" fullname="AuthoringAssetSyncTests.RefreshBlueprintFromAssemblyAsset_RebuildsPlacementsAssignsLodProfileAndProducesValidBlueprint" methodname="RefreshBlueprintFromAssemblyAsset_RebuildsPlacementsAssignsLodProfileAndProducesValidBlueprint" classname="AuthoringAssetSyncTests" runstate="Runnable" seed="2100184225" result="Passed" start-time="2026-03-29 15:10:03Z" end-time="2026-03-29 15:10:04Z" duration="0.905029" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
@@ -34,109 +58,202 @@
 Refreshed 'Blueprint' with 2 branch placements. Quantized 1 placement scales to 0.25 steps (max delta 0.0500).
 ]]></output>
         </test-case>
-        <test-case id="1005" name="RefreshBranchPrototypeLocalBounds_EncapsulatesWoodAndFoliageMeshes" fullname="AuthoringAssetSyncTests.RefreshBranchPrototypeLocalBounds_EncapsulatesWoodAndFoliageMeshes" methodname="RefreshBranchPrototypeLocalBounds_EncapsulatesWoodAndFoliageMeshes" classname="AuthoringAssetSyncTests" runstate="Runnable" seed="151805676" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.260788" asserts="0">
+        <test-case id="1005" name="RefreshBranchPrototypeLocalBounds_EncapsulatesWoodAndFoliageMeshes" fullname="AuthoringAssetSyncTests.RefreshBranchPrototypeLocalBounds_EncapsulatesWoodAndFoliageMeshes" methodname="RefreshBranchPrototypeLocalBounds_EncapsulatesWoodAndFoliageMeshes" classname="AuthoringAssetSyncTests" runstate="Runnable" seed="1050007484" result="Passed" start-time="2026-03-29 15:10:04Z" end-time="2026-03-29 15:10:04Z" duration="0.194547" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
       </test-suite>
-      <test-suite type="TestFixture" id="1009" name="AuthoringValidationTests" fullname="AuthoringValidationTests" classname="AuthoringValidationTests" runstate="Runnable" testcasecount="14" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.028606" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestFixture" id="1013" name="AuthoringValidationTests" fullname="AuthoringValidationTests" classname="AuthoringValidationTests" runstate="Runnable" testcasecount="15" result="Passed" start-time="2026-03-29 15:10:04Z" end-time="2026-03-29 15:10:05Z" duration="0.025920" total="15" passed="15" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-case id="1015" name="BranchPrototype_LocalBoundsContainWoodAndFoliage" fullname="AuthoringValidationTests.BranchPrototype_LocalBoundsContainWoodAndFoliage" methodname="BranchPrototype_LocalBoundsContainWoodAndFoliage" classname="AuthoringValidationTests" runstate="Runnable" seed="1560637509" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.006127" asserts="0">
+        <test-case id="1019" name="BranchPrototype_LocalBoundsContainWoodAndFoliage" fullname="AuthoringValidationTests.BranchPrototype_LocalBoundsContainWoodAndFoliage" methodname="BranchPrototype_LocalBoundsContainWoodAndFoliage" classname="AuthoringValidationTests" runstate="Runnable" seed="970333557" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.005459" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1011" name="BranchPrototype_NullFoliageMesh_FailsValidation" fullname="AuthoringValidationTests.BranchPrototype_NullFoliageMesh_FailsValidation" methodname="BranchPrototype_NullFoliageMesh_FailsValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="1381305983" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.000939" asserts="0">
+        <test-case id="1015" name="BranchPrototype_NullFoliageMesh_FailsValidation" fullname="AuthoringValidationTests.BranchPrototype_NullFoliageMesh_FailsValidation" methodname="BranchPrototype_NullFoliageMesh_FailsValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="1137601941" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000757" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1010" name="BranchPrototype_NullWoodMesh_FailsValidation" fullname="AuthoringValidationTests.BranchPrototype_NullWoodMesh_FailsValidation" methodname="BranchPrototype_NullWoodMesh_FailsValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="153031652" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.000603" asserts="0">
+        <test-case id="1014" name="BranchPrototype_NullWoodMesh_FailsValidation" fullname="AuthoringValidationTests.BranchPrototype_NullWoodMesh_FailsValidation" methodname="BranchPrototype_NullWoodMesh_FailsValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="1030906240" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000551" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1016" name="BranchPrototype_ShellTriangleOrder_L0GreaterThanL1GreaterThanL2" fullname="AuthoringValidationTests.BranchPrototype_ShellTriangleOrder_L0GreaterThanL1GreaterThanL2" methodname="BranchPrototype_ShellTriangleOrder_L0GreaterThanL1GreaterThanL2" classname="AuthoringValidationTests" runstate="Runnable" seed="273791760" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.001184" asserts="0">
+        <test-case id="1020" name="BranchPrototype_ShellTriangleOrder_L0GreaterThanL1GreaterThanL2" fullname="AuthoringValidationTests.BranchPrototype_ShellTriangleOrder_L0GreaterThanL1GreaterThanL2" methodname="BranchPrototype_ShellTriangleOrder_L0GreaterThanL1GreaterThanL2" classname="AuthoringValidationTests" runstate="Runnable" seed="1763176222" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000985" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1012" name="BranchPrototype_SourceMeshesMustBeReadable" fullname="AuthoringValidationTests.BranchPrototype_SourceMeshesMustBeReadable" methodname="BranchPrototype_SourceMeshesMustBeReadable" classname="AuthoringValidationTests" runstate="Runnable" seed="1962179718" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.001114" asserts="0">
+        <test-case id="1016" name="BranchPrototype_SourceMeshesMustBeReadable" fullname="AuthoringValidationTests.BranchPrototype_SourceMeshesMustBeReadable" methodname="BranchPrototype_SourceMeshesMustBeReadable" classname="AuthoringValidationTests" runstate="Runnable" seed="1498820841" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000786" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1013" name="BranchPrototype_TransparentMaterial_FailsValidation" fullname="AuthoringValidationTests.BranchPrototype_TransparentMaterial_FailsValidation" methodname="BranchPrototype_TransparentMaterial_FailsValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="667679535" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.000967" asserts="0">
+        <test-case id="1017" name="BranchPrototype_TransparentMaterial_FailsValidation" fullname="AuthoringValidationTests.BranchPrototype_TransparentMaterial_FailsValidation" methodname="BranchPrototype_TransparentMaterial_FailsValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="517257650" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000686" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1014" name="BranchPrototype_TriangleBudget_FailsValidation" fullname="AuthoringValidationTests.BranchPrototype_TriangleBudget_FailsValidation" methodname="BranchPrototype_TriangleBudget_FailsValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="1712914297" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.000631" asserts="0">
+        <test-case id="1018" name="BranchPrototype_TriangleBudget_FailsValidation" fullname="AuthoringValidationTests.BranchPrototype_TriangleBudget_FailsValidation" methodname="BranchPrototype_TriangleBudget_FailsValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="1537189418" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000523" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1020" name="TreeBlueprint_BoundsContainAllBranches" fullname="AuthoringValidationTests.TreeBlueprint_BoundsContainAllBranches" methodname="TreeBlueprint_BoundsContainAllBranches" classname="AuthoringValidationTests" runstate="Runnable" seed="814830832" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.001451" asserts="0">
+        <test-case id="1021" name="BranchPrototype_WoodTriangleOrder_SourceAndL1MustNotIncreaseTowardL2" fullname="AuthoringValidationTests.BranchPrototype_WoodTriangleOrder_SourceAndL1MustNotIncreaseTowardL2" methodname="BranchPrototype_WoodTriangleOrder_SourceAndL1MustNotIncreaseTowardL2" classname="AuthoringValidationTests" runstate="Runnable" seed="691060148" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000897" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1018" name="TreeBlueprint_EmptyBranches_FailsValidation" fullname="AuthoringValidationTests.TreeBlueprint_EmptyBranches_FailsValidation" methodname="TreeBlueprint_EmptyBranches_FailsValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="2021798132" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.000853" asserts="0">
+        <test-case id="1025" name="TreeBlueprint_BoundsContainAllBranches" fullname="AuthoringValidationTests.TreeBlueprint_BoundsContainAllBranches" methodname="TreeBlueprint_BoundsContainAllBranches" classname="AuthoringValidationTests" runstate="Runnable" seed="442940173" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.001389" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1021" name="TreeBlueprint_ImpostorTriangleBudget_Under200" fullname="AuthoringValidationTests.TreeBlueprint_ImpostorTriangleBudget_Under200" methodname="TreeBlueprint_ImpostorTriangleBudget_Under200" classname="AuthoringValidationTests" runstate="Runnable" seed="1019392638" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.001338" asserts="0">
+        <test-case id="1023" name="TreeBlueprint_EmptyBranches_FailsValidation" fullname="AuthoringValidationTests.TreeBlueprint_EmptyBranches_FailsValidation" methodname="TreeBlueprint_EmptyBranches_FailsValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="1895380147" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000803" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1019" name="TreeBlueprint_LODThresholds_MonotonicallyDecreasing" fullname="AuthoringValidationTests.TreeBlueprint_LODThresholds_MonotonicallyDecreasing" methodname="TreeBlueprint_LODThresholds_MonotonicallyDecreasing" classname="AuthoringValidationTests" runstate="Runnable" seed="585362387" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.001076" asserts="0">
+        <test-case id="1026" name="TreeBlueprint_ImpostorTriangleBudget_Under200" fullname="AuthoringValidationTests.TreeBlueprint_ImpostorTriangleBudget_Under200" methodname="TreeBlueprint_ImpostorTriangleBudget_Under200" classname="AuthoringValidationTests" runstate="Runnable" seed="497697721" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000934" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1017" name="TreeBlueprint_NullTrunk_FailsValidation" fullname="AuthoringValidationTests.TreeBlueprint_NullTrunk_FailsValidation" methodname="TreeBlueprint_NullTrunk_FailsValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="1402531720" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.001294" asserts="0">
+        <test-case id="1024" name="TreeBlueprint_LODThresholds_MonotonicallyDecreasing" fullname="AuthoringValidationTests.TreeBlueprint_LODThresholds_MonotonicallyDecreasing" methodname="TreeBlueprint_LODThresholds_MonotonicallyDecreasing" classname="AuthoringValidationTests" runstate="Runnable" seed="1097259861" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.001005" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1022" name="TreeBlueprint_ScaleConstraint_OnlyAllowedValues" fullname="AuthoringValidationTests.TreeBlueprint_ScaleConstraint_OnlyAllowedValues" methodname="TreeBlueprint_ScaleConstraint_OnlyAllowedValues" classname="AuthoringValidationTests" runstate="Runnable" seed="1192359173" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.000885" asserts="0">
+        <test-case id="1022" name="TreeBlueprint_NullTrunk_FailsValidation" fullname="AuthoringValidationTests.TreeBlueprint_NullTrunk_FailsValidation" methodname="TreeBlueprint_NullTrunk_FailsValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="1527634800" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000728" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1023" name="TreeBlueprint_ValidBlueprint_PassesValidation" fullname="AuthoringValidationTests.TreeBlueprint_ValidBlueprint_PassesValidation" methodname="TreeBlueprint_ValidBlueprint_PassesValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="1749814290" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.001129" asserts="0">
+        <test-case id="1027" name="TreeBlueprint_ScaleConstraint_OnlyAllowedValues" fullname="AuthoringValidationTests.TreeBlueprint_ScaleConstraint_OnlyAllowedValues" methodname="TreeBlueprint_ScaleConstraint_OnlyAllowedValues" classname="AuthoringValidationTests" runstate="Runnable" seed="763643108" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000726" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1028" name="TreeBlueprint_ValidBlueprint_PassesValidation" fullname="AuthoringValidationTests.TreeBlueprint_ValidBlueprint_PassesValidation" methodname="TreeBlueprint_ValidBlueprint_PassesValidation" classname="AuthoringValidationTests" runstate="Runnable" seed="1330691404" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000966" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
       </test-suite>
-      <test-suite type="TestFixture" id="1001" name="InitialTests" fullname="InitialTests" classname="InitialTests" runstate="Runnable" testcasecount="2" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.010536" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestFixture" id="1029" name="CanopyShellGenerationTests" fullname="CanopyShellGenerationTests" classname="CanopyShellGenerationTests" runstate="Runnable" testcasecount="14" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.412059" total="14" passed="14" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-case id="1002" name="InitialTestsSimplePasses" fullname="InitialTests.InitialTestsSimplePasses" methodname="InitialTestsSimplePasses" classname="InitialTests" runstate="Runnable" seed="1351889676" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.001717" asserts="0">
+        <test-case id="1040" name="ImpostorGenerate_FromTreeAssemblyShellL2_UnderTriangleBudget" fullname="CanopyShellGenerationTests.ImpostorGenerate_FromTreeAssemblyShellL2_UnderTriangleBudget" methodname="ImpostorGenerate_FromTreeAssemblyShellL2_UnderTriangleBudget" classname="CanopyShellGenerationTests" runstate="Runnable" seed="1822528918" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.041733" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1003" name="InitialTestsWithEnumeratorPasses" fullname="InitialTests.InitialTestsWithEnumeratorPasses" methodname="InitialTestsWithEnumeratorPasses" classname="InitialTests" runstate="Runnable" seed="157512732" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.006616" asserts="0">
+        <test-case id="1041" name="ImpostorGenerate_MergesBranchShellsInTreeSpace" fullname="CanopyShellGenerationTests.ImpostorGenerate_MergesBranchShellsInTreeSpace" methodname="ImpostorGenerate_MergesBranchShellsInTreeSpace" classname="CanopyShellGenerationTests" runstate="Runnable" seed="2017689746" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.056861" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1042" name="ImpostorGenerate_OutputMesh_HasOutwardNormals" fullname="CanopyShellGenerationTests.ImpostorGenerate_OutputMesh_HasOutwardNormals" methodname="ImpostorGenerate_OutputMesh_HasOutwardNormals" classname="CanopyShellGenerationTests" runstate="Runnable" seed="973976888" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.067245" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1043" name="ImpostorGenerate_OutputMesh_NoInternalCavities" fullname="CanopyShellGenerationTests.ImpostorGenerate_OutputMesh_NoInternalCavities" methodname="ImpostorGenerate_OutputMesh_NoInternalCavities" classname="CanopyShellGenerationTests" runstate="Runnable" seed="524705233" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.047859" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1033" name="ShellExtract_L0Resolution_HigherTrisThanL1" fullname="CanopyShellGenerationTests.ShellExtract_L0Resolution_HigherTrisThanL1" methodname="ShellExtract_L0Resolution_HigherTrisThanL1" classname="CanopyShellGenerationTests" runstate="Runnable" seed="1417750046" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.028038" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1034" name="ShellExtract_L1Resolution_HigherTrisThanL2" fullname="CanopyShellGenerationTests.ShellExtract_L1Resolution_HigherTrisThanL2" methodname="ShellExtract_L1Resolution_HigherTrisThanL2" classname="CanopyShellGenerationTests" runstate="Runnable" seed="708997262" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.026409" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1039" name="ShellExtract_OutputMesh_BoundsContainedInInput" fullname="CanopyShellGenerationTests.ShellExtract_OutputMesh_BoundsContainedInInput" methodname="ShellExtract_OutputMesh_BoundsContainedInInput" classname="CanopyShellGenerationTests" runstate="Runnable" seed="1953468877" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.026818" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1035" name="ShellExtract_OutputMesh_HasValidNormals" fullname="CanopyShellGenerationTests.ShellExtract_OutputMesh_HasValidNormals" methodname="ShellExtract_OutputMesh_HasValidNormals" classname="CanopyShellGenerationTests" runstate="Runnable" seed="718174601" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.027702" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1036" name="ShellExtract_OutputMesh_NoDegenTriangles" fullname="CanopyShellGenerationTests.ShellExtract_OutputMesh_NoDegenTriangles" methodname="ShellExtract_OutputMesh_NoDegenTriangles" classname="CanopyShellGenerationTests" runstate="Runnable" seed="851854257" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.027664" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1037" name="ShellExtract_OutputMesh_WithinBudget" fullname="CanopyShellGenerationTests.ShellExtract_OutputMesh_WithinBudget" methodname="ShellExtract_OutputMesh_WithinBudget" classname="CanopyShellGenerationTests" runstate="Runnable" seed="399942031" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.027921" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1038" name="ShellExtract_OutputWoodMeshes_StrictlyDecreaseFromSourceWood" fullname="CanopyShellGenerationTests.ShellExtract_OutputWoodMeshes_StrictlyDecreaseFromSourceWood" methodname="ShellExtract_OutputWoodMeshes_StrictlyDecreaseFromSourceWood" classname="CanopyShellGenerationTests" runstate="Runnable" seed="1688071380" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.027402" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1031" name="Voxelize_EmptyMesh_NoVoxelsOccupied" fullname="CanopyShellGenerationTests.Voxelize_EmptyMesh_NoVoxelsOccupied" methodname="Voxelize_EmptyMesh_NoVoxelsOccupied" classname="CanopyShellGenerationTests" runstate="Runnable" seed="1727949269" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000469" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1032" name="Voxelize_FoliageMesh_ApproximateVolumeCorrect" fullname="CanopyShellGenerationTests.Voxelize_FoliageMesh_ApproximateVolumeCorrect" methodname="Voxelize_FoliageMesh_ApproximateVolumeCorrect" classname="CanopyShellGenerationTests" runstate="Runnable" seed="1720598676" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000805" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1030" name="Voxelize_SimpleCube_AllVoxelsOccupied" fullname="CanopyShellGenerationTests.Voxelize_SimpleCube_AllVoxelsOccupied" methodname="Voxelize_SimpleCube_AllVoxelsOccupied" classname="CanopyShellGenerationTests" runstate="Runnable" seed="1755815825" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000491" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+      </test-suite>
+      <test-suite type="TestFixture" id="1001" name="InitialTests" fullname="InitialTests" classname="InitialTests" runstate="Runnable" testcasecount="2" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.007495" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-case id="1002" name="InitialTestsSimplePasses" fullname="InitialTests.InitialTestsSimplePasses" methodname="InitialTestsSimplePasses" classname="InitialTests" runstate="Runnable" seed="1241588021" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000815" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1003" name="InitialTestsWithEnumeratorPasses" fullname="InitialTests.InitialTestsWithEnumeratorPasses" methodname="InitialTestsWithEnumeratorPasses" classname="InitialTests" runstate="Runnable" seed="1093796120" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.005002" asserts="0">
           <properties>
             <property name="_JOINTYPE" value="UnityCombinatorial" />
             <property name="retryIteration" value="0" />
@@ -145,20 +262,20 @@ Refreshed 'Blueprint' with 2 branch placements. Quantized 1 placement scales to 
         </test-case>
       </test-suite>
     </test-suite>
-    <test-suite type="Assembly" id="1027" name="Unity.Addressables.DocExampleCode.Editor.Tests.dll" fullname="C:/Users/admin/Documents/UnityProjects/VoxGeoFol/Library/ScriptAssemblies/Unity.Addressables.DocExampleCode.Editor.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.003072" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <test-suite type="Assembly" id="1047" name="Unity.Addressables.DocExampleCode.Editor.Tests.dll" fullname="C:/Users/admin/Documents/UnityProjects/VoxGeoFol/Library/ScriptAssemblies/Unity.Addressables.DocExampleCode.Editor.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.002308" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
       <properties>
-        <property name="_PID" value="95096" />
+        <property name="_PID" value="167980" />
         <property name="_APPDOMAIN" value="Unity Child Domain" />
         <property name="platform" value="EditMode" />
         <property name="EditorOnly" value="True" />
       </properties>
-      <test-suite type="TestSuite" id="1028" name="AddressableAssets" fullname="AddressableAssets" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.002567" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestSuite" id="1048" name="AddressableAssets" fullname="AddressableAssets" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.001903" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-suite type="TestSuite" id="1029" name="DocExampleCode" fullname="AddressableAssets.DocExampleCode" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.001974" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <test-suite type="TestSuite" id="1049" name="DocExampleCode" fullname="AddressableAssets.DocExampleCode" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.001476" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
           <properties />
-          <test-suite type="TestFixture" id="1025" name="TestStub" fullname="AddressableAssets.DocExampleCode.TestStub" classname="AddressableAssets.DocExampleCode.TestStub" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.001352" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <test-suite type="TestFixture" id="1045" name="TestStub" fullname="AddressableAssets.DocExampleCode.TestStub" classname="AddressableAssets.DocExampleCode.TestStub" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.001044" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
             <properties />
-            <test-case id="1026" name="RequiredTest" fullname="AddressableAssets.DocExampleCode.TestStub.RequiredTest" methodname="RequiredTest" classname="AddressableAssets.DocExampleCode.TestStub" runstate="Runnable" seed="1712091398" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.000235" asserts="0">
+            <test-case id="1046" name="RequiredTest" fullname="AddressableAssets.DocExampleCode.TestStub.RequiredTest" methodname="RequiredTest" classname="AddressableAssets.DocExampleCode.TestStub" runstate="Runnable" seed="614656172" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000155" asserts="0">
               <properties>
                 <property name="retryIteration" value="0" />
                 <property name="repeatIteration" value="0" />
@@ -168,24 +285,24 @@ Refreshed 'Blueprint' with 2 branch placements. Quantized 1 placement scales to 
         </test-suite>
       </test-suite>
     </test-suite>
-    <test-suite type="Assembly" id="1035" name="Unity.RenderPipelines.Universal.Config.Editor.Tests.dll" fullname="C:/Users/admin/Documents/UnityProjects/VoxGeoFol/Library/ScriptAssemblies/Unity.RenderPipelines.Universal.Config.Editor.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.004045" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <test-suite type="Assembly" id="1055" name="Unity.RenderPipelines.Universal.Config.Editor.Tests.dll" fullname="C:/Users/admin/Documents/UnityProjects/VoxGeoFol/Library/ScriptAssemblies/Unity.RenderPipelines.Universal.Config.Editor.Tests.dll" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.003103" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
       <properties>
-        <property name="_PID" value="95096" />
+        <property name="_PID" value="167980" />
         <property name="_APPDOMAIN" value="Unity Child Domain" />
         <property name="platform" value="EditMode" />
         <property name="EditorOnly" value="True" />
       </properties>
-      <test-suite type="TestSuite" id="1036" name="UnityEngine" fullname="UnityEngine" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.003552" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestSuite" id="1056" name="UnityEngine" fullname="UnityEngine" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.002711" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-suite type="TestSuite" id="1037" name="Rendering" fullname="UnityEngine.Rendering" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.003151" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <test-suite type="TestSuite" id="1057" name="Rendering" fullname="UnityEngine.Rendering" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.002342" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
           <properties />
-          <test-suite type="TestSuite" id="1038" name="Universal" fullname="UnityEngine.Rendering.Universal" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.002688" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <test-suite type="TestSuite" id="1058" name="Universal" fullname="UnityEngine.Rendering.Universal" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.001970" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
             <properties />
-            <test-suite type="TestSuite" id="1039" name="Test" fullname="UnityEngine.Rendering.Universal.Test" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.002206" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <test-suite type="TestSuite" id="1059" name="Test" fullname="UnityEngine.Rendering.Universal.Test" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.001522" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
               <properties />
-              <test-suite type="TestFixture" id="1033" name="ConfigurationTest" fullname="UnityEngine.Rendering.Universal.Test.ConfigurationTest" classname="UnityEngine.Rendering.Universal.Test.ConfigurationTest" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.001690" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <test-suite type="TestFixture" id="1053" name="ConfigurationTest" fullname="UnityEngine.Rendering.Universal.Test.ConfigurationTest" classname="UnityEngine.Rendering.Universal.Test.ConfigurationTest" runstate="Runnable" testcasecount="1" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.001083" total="1" passed="1" failed="0" inconclusive="0" skipped="0" asserts="0">
                 <properties />
-                <test-case id="1034" name="ValidateConfiguration" fullname="UnityEngine.Rendering.Universal.Test.ConfigurationTest.ValidateConfiguration" methodname="ValidateConfiguration" classname="UnityEngine.Rendering.Universal.Test.ConfigurationTest" runstate="Runnable" seed="1176360965" result="Passed" start-time="2026-03-28 21:44:57Z" end-time="2026-03-28 21:44:57Z" duration="0.000326" asserts="0">
+                <test-case id="1054" name="ValidateConfiguration" fullname="UnityEngine.Rendering.Universal.Test.ConfigurationTest.ValidateConfiguration" methodname="ValidateConfiguration" classname="UnityEngine.Rendering.Universal.Test.ConfigurationTest" runstate="Runnable" seed="617798181" result="Passed" start-time="2026-03-29 15:10:05Z" end-time="2026-03-29 15:10:05Z" duration="0.000152" asserts="0">
                   <properties>
                     <property name="retryIteration" value="0" />
                     <property name="repeatIteration" value="0" />

@@ -17,9 +17,11 @@ MonoBehaviour:
   foliageMesh: {fileID: -6062578164958778753, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
   foliageMaterial: {fileID: 2100000, guid: ecaffefaa3a08ce43b2fb6c79d1b2bb4, type: 2}
   leafColorTint: {r: 0.5867785, g: 0.9547169, b: 0.38008535, a: 1}
-  shellL0Mesh: {fileID: 0}
-  shellL1Mesh: {fileID: 0}
-  shellL2Mesh: {fileID: 0}
+  shellL0Mesh: {fileID: 4300000, guid: 3d2991dfdb116b241a9a55e1ae606a60, type: 2}
+  shellL1Mesh: {fileID: 4300000, guid: a3b58f4cfc2ff5c44a19308192162cc0, type: 2}
+  shellL1WoodMesh: {fileID: 4300000, guid: bcd29de28ae13dd4d937607c5d562395, type: 2}
+  shellL2Mesh: {fileID: 4300000, guid: d312228cbc6ed9c4ab197ed313308b06, type: 2}
+  shellL2WoodMesh: {fileID: 4300000, guid: 3453adea30feea94c8487f0aa0712004, type: 2}
   shellMaterial: {fileID: 2100000, guid: 1e8b3c0229b50f94bab471853295c8d5, type: 2}
   localBounds:
     m_Center: {x: -0.72606623, y: 0.031684875, z: 0.2255171}

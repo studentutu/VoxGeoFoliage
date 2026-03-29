@@ -136,23 +136,31 @@ public static class VegetationAuthoringValidator
     {
         Mesh? shellL0Mesh = prototype.ShellL0Mesh;
         Mesh? shellL1Mesh = prototype.ShellL1Mesh;
+        Mesh? shellL1WoodMesh = prototype.ShellL1WoodMesh;
         Mesh? shellL2Mesh = prototype.ShellL2Mesh;
-        bool hasAnyShell = shellL0Mesh != null || shellL1Mesh != null || shellL2Mesh != null;
+        Mesh? shellL2WoodMesh = prototype.ShellL2WoodMesh;
+        bool hasAnyShell = shellL0Mesh != null ||
+                           shellL1Mesh != null ||
+                           shellL1WoodMesh != null ||
+                           shellL2Mesh != null ||
+                           shellL2WoodMesh != null;
 
         if (!hasAnyShell)
         {
             return;
         }
 
-        if (shellL0Mesh == null || shellL1Mesh == null || shellL2Mesh == null)
+        if (shellL0Mesh == null || shellL1Mesh == null || shellL1WoodMesh == null || shellL2Mesh == null || shellL2WoodMesh == null)
         {
-            result.AddError("shellL0Mesh, shellL1Mesh, and shellL2Mesh must all be assigned together.");
+            result.AddError("shellL0Mesh, shellL1Mesh, shellL1WoodMesh, shellL2Mesh, and shellL2WoodMesh must all be assigned together.");
             return;
         }
 
         ValidateOptionalReadableMesh(shellL0Mesh, "shellL0Mesh", result);
         ValidateOptionalReadableMesh(shellL1Mesh, "shellL1Mesh", result);
+        ValidateOptionalReadableMesh(shellL1WoodMesh, "shellL1WoodMesh", result);
         ValidateOptionalReadableMesh(shellL2Mesh, "shellL2Mesh", result);
+        ValidateOptionalReadableMesh(shellL2WoodMesh, "shellL2WoodMesh", result);
         ValidateTriangleBudget(shellL0Mesh, prototype.TriangleBudgetShellL0, "shellL0Mesh", result);
         ValidateTriangleBudget(shellL1Mesh, prototype.TriangleBudgetShellL1, "shellL1Mesh", result);
         ValidateTriangleBudget(shellL2Mesh, prototype.TriangleBudgetShellL2, "shellL2Mesh", result);
@@ -166,7 +174,14 @@ public static class VegetationAuthoringValidator
             result.AddError($"shellMaterial must be opaque. {reason}");
         }
 
-        if (!shellL0Mesh.isReadable || !shellL1Mesh.isReadable || !shellL2Mesh.isReadable)
+        Mesh? sourceWoodMesh = prototype.WoodMesh;
+        if (sourceWoodMesh == null ||
+            !sourceWoodMesh.isReadable ||
+            !shellL0Mesh.isReadable ||
+            !shellL1Mesh.isReadable ||
+            !shellL1WoodMesh.isReadable ||
+            !shellL2Mesh.isReadable ||
+            !shellL2WoodMesh.isReadable)
         {
             return;
         }
@@ -174,9 +189,17 @@ public static class VegetationAuthoringValidator
         int shellL0Triangles = GetTriangleCount(shellL0Mesh);
         int shellL1Triangles = GetTriangleCount(shellL1Mesh);
         int shellL2Triangles = GetTriangleCount(shellL2Mesh);
+        int sourceWoodTriangles = GetTriangleCount(sourceWoodMesh);
+        int shellL1WoodTriangles = GetTriangleCount(shellL1WoodMesh);
+        int shellL2WoodTriangles = GetTriangleCount(shellL2WoodMesh);
         if (!(shellL0Triangles > shellL1Triangles && shellL1Triangles > shellL2Triangles))
         {
             result.AddError("Shell triangle counts must strictly decrease: L0 > L1 > L2.");
+        }
+
+        if (!(sourceWoodTriangles >= shellL1WoodTriangles && shellL1WoodTriangles >= shellL2WoodTriangles))
+        {
+            result.AddError("Wood triangle counts must not increase: source >= L1Wood >= L2Wood.");
         }
     }
 
