@@ -28,8 +28,8 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 
 1. All vegetation geometry is opaque-only - no transparency, no alpha clip, no masked materials.
 2. Trees are assembled from reusable branch prototypes, not single monolithic meshes.
-3. Canopy shells (L0/L1/L2) are branch-local voxelized meshes, not billboard cards.
-4. Shell preview tiers keep branch structure: L0 reuses source wood, while L1/L2 use baked simplified wood meshes attached beside the canopy shell.
+3. Canopy shells are hierarchical branch-local voxelized meshes: `BranchPrototypeSO.shellNodes` stores an adaptive octree where every occupied node owns its own `L0/L1/L2` shell chain.
+4. Shell preview tiers keep branch structure: L0 reuses source wood, while L1/L2 use baked simplified wood meshes attached beside the leaf-frontier shell nodes.
 5. Impostor (far LOD) is a simplified opaque mesh with billboard Y-rotation, not a textured card.
 6. GPU classification is a single compute dispatch per frame (frustum + LOD + backside minimization + draw emission).
 7. BRG (BatchRendererGroup) is the rendering backend; no MaterialPropertyBlock usage.
@@ -52,8 +52,9 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 - `VegetationBRGManager` - BRG lifecycle: mesh/material registration, draw command emission
 - `VegetationAuthoringValidator` - Task 1 authoring contract authority: explicit validation for readability, opacity, budgets, bounds, scale, and LOD ordering
 - `VegetationPhaseAAuthoringSync` - editor-side Phase A authority: refreshes source bounds/budgets and rebuilds demo tree branch placements from imported sample assets or the repo-local demo mirror
-- `CanopyShellGenerator` - editor-side Phase B branch authority: voxelizes foliage meshes, emits shell surfaces, simplifies source wood for L1/L2, and stores `shellL0Mesh/shellL1Mesh/shellL1WoodMesh/shellL2Mesh/shellL2WoodMesh`
-- `ImpostorMeshGenerator` - editor-side Phase B tree authority: merges trunk + branch shell L2 canopy + branch shell L2 wood meshes in tree space and stores `impostorMesh`
+- `CanopyShellGenerator` - editor-side Phase B branch authority: uses `MeshVoxelizerHierarchyBuilder` to voxelize readable foliage at `16/12/8`, split L0 surface voxels into octant `shellNodes`, persist node-local `L0/L1/L2` meshes, and refresh branch-level wood attachments
+- `MeshVoxelizerHierarchyBuilder` / `MeshVoxelizerHierarchyDemo` - shared Phase B hierarchy authority and manual inspection utility: voxelizes a readable mesh at `16/12/8`, splits L0 surface voxels into octant nodes, and emits one mesh triplet per node
+- `ImpostorMeshGenerator` - editor-side Phase B tree authority: merges trunk + branch leaf-frontier `shellNodes[].shellL2Mesh` + branch `shellL2WoodMesh` in tree space, re-voxelizes that aggregate mesh through `MeshVoxelizerHierarchyBuilder`, and stores `impostorMesh`
 - `GeneratedMeshAssetUtility` - editor-side Phase B asset persistence authority: writes generated shell/impostor meshes as explicit `.mesh` files into writable project asset folders beside the owner asset when possible
 - `VegetationTreeAuthoringEditorUtility` - editor-side Phase C authority: bake entry points, aggregated validation, and per-tier authoring summary for `VegetationTreeAuthoring`
 - `VegetationEditorPreview` - editor-side Phase C preview authority: rebuilds transient branch-root hierarchies for all milestone representation tiers

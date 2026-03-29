@@ -12,7 +12,7 @@ Also includes full agentic workflow outside of Unity Editor.
 
 See Unreal 5.7 foliage assemblies (Nanite vegetation):
 - Witcher 4 presentation [Presentation](https://youtu.be/EdNkm0ezP0o?si=YYlytLYKuexVYUOT) 
-- Nanite vegetation [OfficialDocs](https://dev.epicgames.com/documentation/en-us/unreal-engine/nanite-foliage)
+- Procedural Vegetation Editor/ Nanite vegetation (Nanite Foliage) [OfficialDocs](https://dev.epicgames.com/documentation/en-us/unreal-engine/nanite-foliage)
 
 Short summary:
 - No masked / alpha-tested materials, fully opaque based rendering (fully avoid transparency, as it breaks tile-based rendering on mobiles)

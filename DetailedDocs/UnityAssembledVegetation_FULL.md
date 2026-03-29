@@ -72,7 +72,7 @@ Authoring → Baking → Runtime (Gather/Switch LOD) → GPU Classification → 
 
 ## 2.2 Tree Composition
 
-Tree = Trunk + Σ (Branch → Shell L0/L1/L2)
+Tree = Trunk + Σ (Branch -> BranchShellNodeHierarchy -> Shell L0/L1/L2)
 
 ---
 
@@ -150,73 +150,77 @@ Per branch prototype:
 - Soft diffuse shading
 - Stable normals
 
-## 3.4 Hierarchical Sub-Branch Canopy Shells (Full Version)
+## 3.4 Hierarchical Sub-Branch Canopy Shells
 
 ### Problem with Fixed L0/L1/L2
 
-MVP uses 3 fixed shell meshes per branch prototype (L0, L1, L2). This works for small-to-medium branches but becomes a bottleneck for large, complex branches:
+The original MVP shell path used 3 fixed shell meshes per branch prototype (`shellL0Mesh`, `shellL1Mesh`, `shellL2Mesh`). That breaks down for large branches:
 
 - A large branch may have foliage clusters at very different distances from the camera
-- Fixed shells treat the entire branch as one unit — either all detailed or all simplified
-- Unreal 5.7 solves this by subdividing branches into spatial cells and generating shell variants per cell, allowing the GPU classifier to choose shell detail **per sub-region** of a branch based on each region's own AABB/projected area
+- One shell chain for the whole branch forces the entire branch to stay detailed or simplify together
+- Low-resolution shells become visibly cubic if they are baked from a single coarse branch-wide volume
 
-### Hierarchical Shell Architecture
+### Adaptive Hierarchical Shell Architecture
 
-In the full version, each branch prototype is spatially subdivided:
-
-```
-Branch = Σ (BranchCell[i] → ShellChain[i])
-
-Where:
-  BranchCell = spatial subdivision of the branch volume (uniform grid or octree)
-  ShellChain = { shellL0, shellL1, shellL2 } per cell
-```
-
-**Per-cell shell generation:**
-1. Subdivide branch local AABB into cells (e.g. 2×2×2 or 3×3×3 grid)
-2. For each cell that contains geometry:
-   a. Voxelize only the triangles within that cell
-   b. Generate L0/L1/L2 shells from that cell's volume
-   c. Store as separate meshes with cell-local bounds
-3. Each cell gets its own AABB for GPU classification
-
-**GPU classification change:**
-- Instead of selecting one shell level for the entire branch, the classifier evaluates **each cell's AABB** against projected area thresholds
-- Cells close to camera → L0 (detailed shell)
-- Cells at medium distance → L1
-- Cells far away → L2 or culled entirely
-- This means a single branch instance can render a mix of L0/L1/L2 cells simultaneously
-
-### Data Model Extension
+The implemented authoring path replaces the fixed branch-wide shell chain with an adaptive octree:
 
 ```
-BranchPrototypeGPU (full version):
-  - uint cellCount
-  - uint cellDataStartIndex  // into BranchCellData buffer
+BranchPrototypeSO
+  -> BranchShellNode[]
 
-BranchCellData:
-  - float3 cellLocalCenter
-  - float3 cellLocalExtents   // half-size of cell AABB
+BranchShellNode:
+  - Bounds localBounds
+  - int depth
+  - int firstChildIndex
+  - byte childMask
+  - Mesh shellL0Mesh
+  - Mesh shellL1Mesh
+  - Mesh shellL2Mesh
+```
+
+Each occupied node stores its own `L0/L1/L2` shell chain. Parent and child shell nodes are mutually exclusive at render time; preview, validation, triangle accounting, and impostor baking all consume the leaf frontier only.
+
+### Hierarchical Bake Pipeline
+
+Current production authoring path (`2026-03-30`):
+
+1. Voxelize the readable branch foliage mesh at `16/12/8`
+2. Use `L0` surface occupancy to split the branch bounds into octant shell nodes
+3. Emit one `L0/L1/L2` mesh triplet per occupied node
+4. Persist the node hierarchy on `BranchPrototypeSO.shellNodes`
+5. Reuse the same builder to derive the far impostor source from the merged tree-space assembly
+
+### Runtime / GPU Extension
+
+The runtime-facing full version should flatten the same hierarchy:
+
+```
+BranchPrototypeGPU:
+  - uint shellNodeCount
+  - uint shellNodeDataStartIndex
+
+BranchShellNodeData:
+  - float3 localCenter
+  - float3 localExtents
+  - uint firstChildIndex
+  - uint childMask
   - uint shellL0MeshIndex
   - uint shellL1MeshIndex
   - uint shellL2MeshIndex
 ```
 
+GPU classification then evaluates shell-node AABBs instead of one branch-wide shell AABB, allowing a single branch instance to render a mix of `L0/L1/L2` shell nodes.
+
 ### Benefits
 
-- **Gradual detail reduction**: nearby cells stay detailed while distant cells simplify
-- **Better silhouette preservation**: important crown lobes keep L0 while interior mass drops to L2
-- **Reduced overdraw**: cells fully behind other cells can be culled individually
-- **Matches UE 5.7 behavior**: per-region LOD within a single foliage assembly
+- **Gradual detail reduction**: nearby crown lobes stay detailed while distant lobes simplify
+- **Better continuity**: `L0` comes from a solid canonical field instead of a fragile surface-only shell extraction
+- **Less blockiness**: `L1/L2` use smooth isosurface extraction rather than cube-face emission
+- **Reduced overdraw**: shell nodes can be culled or simplified independently
 
-### MVP Simplification
+### Legacy MVP Simplification
 
-MVP treats each branch as a single cell (cell count = 1). The full hierarchical system is a superset — MVP's 3-mesh-per-branch model is equivalent to the hierarchical model with cell grid size = 1×1×1.
-
-This ensures the MVP data model is **forward-compatible**: upgrading to hierarchical shells requires no architectural changes, only:
-1. Sub-branch cell generation in the baking pipeline
-2. Per-cell AABB evaluation in the GPU classifier
-3. Per-cell indirect draw emission
+The old single-cell MVP shell model is now a legacy authoring path. It has been removed from the current editor bake and validation flow in favor of the adaptive `BranchShellNode[]` hierarchy.
 
 ## 3.5 Wind
 

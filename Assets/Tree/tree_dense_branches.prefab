@@ -1267,36 +1267,8 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 8861511662200717703, guid: 861f38db6742427439c1dc3a999225f8, type: 3}
       insertIndex: -1
       addedObject: {fileID: 3160864036086712565}
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 1892940221990223598, guid: 861f38db6742427439c1dc3a999225f8, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 3856874546863244494}
+    m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 861f38db6742427439c1dc3a999225f8, type: 3}
---- !u!1 &249075501538207131 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 1892940221990223598, guid: 861f38db6742427439c1dc3a999225f8, type: 3}
-  m_PrefabInstance: {fileID: 1815504542228896629}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &3856874546863244494
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 249075501538207131}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5786278275e75694dbc5a903eb6ed88f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Vegetation::VoxGeoFol.Features.Vegetation.Authoring.VegetationTreeAuthoring
-  blueprint: {fileID: 11400000, guid: ab936d69b801e1c428cc45872098199e, type: 2}
-  _rootForBranches: {fileID: 1523916465744216790}
-  runtimeTreeIndex: -1
---- !u!1 &1523916465744216790 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 871444537307093411, guid: 861f38db6742427439c1dc3a999225f8, type: 3}
-  m_PrefabInstance: {fileID: 1815504542228896629}
-  m_PrefabAsset: {fileID: 0}
 --- !u!4 &7191015137847663346 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 8861511662200717703, guid: 861f38db6742427439c1dc3a999225f8, type: 3}

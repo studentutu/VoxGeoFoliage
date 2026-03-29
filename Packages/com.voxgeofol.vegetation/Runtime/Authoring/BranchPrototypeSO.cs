@@ -15,10 +15,9 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         [SerializeField] private Mesh? foliageMesh;
         [SerializeField] private Material? foliageMaterial;
         [SerializeField] private Color leafColorTint = Color.white;
-        [SerializeField] private Mesh? shellL0Mesh;
-        [SerializeField] private Mesh? shellL1Mesh;
+        [SerializeField] private string generatedCanopyShellsRelativeFolder = string.Empty;
+        [SerializeField] private BranchShellNode[] shellNodes = System.Array.Empty<BranchShellNode>();
         [SerializeField] private Mesh? shellL1WoodMesh;
-        [SerializeField] private Mesh? shellL2Mesh;
         [SerializeField] private Mesh? shellL2WoodMesh;
         [SerializeField] private Material? shellMaterial;
         [SerializeField] private Bounds localBounds = new Bounds(Vector3.zero, Vector3.one);
@@ -38,13 +37,11 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
 
         public Color LeafColorTint => leafColorTint;
 
-        public Mesh? ShellL0Mesh => shellL0Mesh;
+        public string GeneratedCanopyShellsRelativeFolder => generatedCanopyShellsRelativeFolder;
 
-        public Mesh? ShellL1Mesh => shellL1Mesh;
+        public BranchShellNode[] ShellNodes => shellNodes;
 
         public Mesh? ShellL1WoodMesh => shellL1WoodMesh;
-
-        public Mesh? ShellL2Mesh => shellL2Mesh;
 
         public Mesh? ShellL2WoodMesh => shellL2WoodMesh;
 

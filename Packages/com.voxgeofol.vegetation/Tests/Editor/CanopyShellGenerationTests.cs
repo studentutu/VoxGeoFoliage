@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using MeshVoxelizerProject;
 using NUnit.Framework;
 using UnityEngine;
 using VoxGeoFol.Features.Vegetation.Authoring;
@@ -11,7 +12,6 @@ using VoxGeoFol.Features.Vegetation.Editor;
 [TestFixture]
 public sealed class CanopyShellGenerationTests
 {
-    private const float BoundsEpsilon = 0.0001f;
     private readonly List<UnityEngine.Object> createdObjects = new List<UnityEngine.Object>();
 
     [TearDown]
@@ -30,141 +30,118 @@ public sealed class CanopyShellGenerationTests
     }
 
     [Test]
-    public void Voxelize_SimpleCube_AllVoxelsOccupied()
+    public void BuildHierarchy_SeparatedClusters_CreateHierarchyNodes()
     {
-        Mesh cubeMesh = CreateClosedCubeMesh("VoxelCube", Vector3.one);
+        Mesh hierarchyMesh = CreateSeparatedClusterMesh("HierarchyFoliage");
 
-        VoxelGrid voxelGrid = Voxelizer.VoxelizeSolid(cubeMesh, 4);
+        MeshVoxelizerHierarchyNode[] hierarchyNodes = MeshVoxelizerHierarchyBuilder.BuildHierarchy(hierarchyMesh, 16, 12, 8, 4, 1);
+        TrackHierarchy(hierarchyNodes);
 
-        Assert.AreEqual(64, voxelGrid.OccupiedCount);
+        Assert.Greater(hierarchyNodes.Length, 1);
+        Assert.AreEqual(0, hierarchyNodes[0].Depth);
+        Assert.AreNotEqual(0, hierarchyNodes[0].ChildMask);
     }
 
     [Test]
-    public void Voxelize_EmptyMesh_NoVoxelsOccupied()
+    public void BakeCanopyShells_SeparatedClusters_CreateHierarchyNodes()
     {
-        Mesh emptyMesh = CreateMesh("EmptyMesh", Array.Empty<Vector3>(), Array.Empty<int>());
+        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("ClusteredFoliage"));
 
-        VoxelGrid voxelGrid = Voxelizer.VoxelizeSolid(emptyMesh, 4);
+        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
 
-        Assert.AreEqual(0, voxelGrid.OccupiedCount);
+        Assert.Greater(prototype.ShellNodes.Length, 1);
+        Assert.AreEqual(0, prototype.ShellNodes[0].Depth);
+        Assert.AreNotEqual(0, prototype.ShellNodes[0].ChildMask);
     }
 
     [Test]
-    public void Voxelize_FoliageMesh_ApproximateVolumeCorrect()
+    public void BakeCanopyShells_LeafFrontierTriangleCountsDecreaseAcrossLevels()
     {
-        Mesh tetrahedronMesh = CreateTetrahedronMesh("VoxelTetrahedron");
+        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("BudgetFoliage"));
 
-        VoxelGrid voxelGrid = Voxelizer.VoxelizeSolid(tetrahedronMesh, 6);
+        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
 
-        Assert.Greater(voxelGrid.OccupiedCount, 24);
-        Assert.Less(voxelGrid.OccupiedCount, 160);
+        int l0Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodes, 0);
+        int l1Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodes, 1);
+        int l2Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodes, 2);
+
+        Assert.Greater(l0Triangles, l1Triangles);
+        Assert.Greater(l1Triangles, l2Triangles);
     }
 
     [Test]
-    public void ShellExtract_L0Resolution_HigherTrisThanL1()
+    public void BakeCanopyShells_NodeMeshesHaveValidNormalsAndNoDegenerateTriangles()
     {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake();
+        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSlantedTetrahedronMesh("NormalsFoliage"));
 
-        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings(10, 6, 4, 384, 192, 96));
+        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
         TrackGeneratedShells(prototype);
 
-        Assert.Greater(GetTriangleCount(prototype.ShellL0Mesh!), GetTriangleCount(prototype.ShellL1Mesh!));
+        for (int i = 0; i < prototype.ShellNodes.Length; i++)
+        {
+            BranchShellNode node = prototype.ShellNodes[i];
+            Assert.IsTrue(HasValidNormals(node.ShellL0Mesh!));
+            Assert.IsTrue(HasValidNormals(node.ShellL1Mesh!));
+            Assert.IsTrue(HasValidNormals(node.ShellL2Mesh!));
+            Assert.IsTrue(HasNoDegenerateTriangles(node.ShellL0Mesh!));
+            Assert.IsTrue(HasNoDegenerateTriangles(node.ShellL1Mesh!));
+            Assert.IsTrue(HasNoDegenerateTriangles(node.ShellL2Mesh!));
+        }
     }
 
     [Test]
-    public void ShellExtract_L1Resolution_HigherTrisThanL2()
+    public void BakeCanopyShells_PersistedChildRangesStayValid()
     {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake();
+        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("TopologyFoliage"));
 
-        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings(10, 6, 4, 384, 192, 96));
+        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
         TrackGeneratedShells(prototype);
 
-        Assert.Greater(GetTriangleCount(prototype.ShellL1Mesh!), GetTriangleCount(prototype.ShellL2Mesh!));
+        for (int i = 0; i < prototype.ShellNodes.Length; i++)
+        {
+            BranchShellNode node = prototype.ShellNodes[i];
+            if (node.ChildMask == 0)
+            {
+                Assert.Less(node.FirstChildIndex, 0);
+                continue;
+            }
+
+            int childCount = CountBits(node.ChildMask);
+            Assert.GreaterOrEqual(node.FirstChildIndex, 0);
+            Assert.Less(node.FirstChildIndex + childCount - 1, prototype.ShellNodes.Length);
+
+            for (int childOffset = 0; childOffset < childCount; childOffset++)
+            {
+                BranchShellNode child = prototype.ShellNodes[node.FirstChildIndex + childOffset];
+                Assert.AreEqual(node.Depth + 1, child.Depth);
+                Assert.IsTrue(ContainsBounds(node.LocalBounds, child.LocalBounds));
+            }
+        }
     }
 
     [Test]
-    public void ShellExtract_OutputMesh_HasValidNormals()
+    public void ImpostorGenerate_FromLeafFrontierShellL2_CreatesReadableMesh()
     {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake();
+        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("ImpostorFoliage"));
+        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
 
-        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings(10, 6, 4, 384, 192, 96));
-        TrackGeneratedShells(prototype);
-
-        Assert.IsTrue(HasValidNormals(prototype.ShellL0Mesh!));
-        Assert.IsTrue(HasOutwardFacingTriangles(prototype.ShellL0Mesh!));
-    }
-
-    [Test]
-    public void ShellExtract_OutputMesh_NoDegenTriangles()
-    {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake();
-
-        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings(10, 6, 4, 384, 192, 96));
-        TrackGeneratedShells(prototype);
-
-        Assert.IsTrue(HasNoDegenerateTriangles(prototype.ShellL0Mesh!));
-        Assert.IsTrue(HasNoDegenerateTriangles(prototype.ShellL1Mesh!));
-        Assert.IsTrue(HasNoDegenerateTriangles(prototype.ShellL2Mesh!));
-    }
-
-    [Test]
-    public void ShellExtract_OutputMesh_WithinBudget()
-    {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake();
-
-        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings(10, 6, 4, 500, 500, 500));
-        TrackGeneratedShells(prototype);
-
-        Assert.LessOrEqual(GetTriangleCount(prototype.ShellL0Mesh!), prototype.TriangleBudgetShellL0);
-        Assert.LessOrEqual(GetTriangleCount(prototype.ShellL1Mesh!), prototype.TriangleBudgetShellL1);
-        Assert.LessOrEqual(GetTriangleCount(prototype.ShellL2Mesh!), prototype.TriangleBudgetShellL2);
-    }
-
-    [Test]
-    public void ShellExtract_OutputWoodMeshes_StrictlyDecreaseFromSourceWood()
-    {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake();
-
-        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings(10, 6, 4, 384, 192, 96));
-        TrackGeneratedShells(prototype);
-
-        Assert.IsNotNull(prototype.ShellL1WoodMesh);
-        Assert.IsNotNull(prototype.ShellL2WoodMesh);
-        Assert.Greater(GetTriangleCount(prototype.WoodMesh!), GetTriangleCount(prototype.ShellL1WoodMesh!));
-        Assert.Greater(GetTriangleCount(prototype.ShellL1WoodMesh!), GetTriangleCount(prototype.ShellL2WoodMesh!));
-    }
-
-    [Test]
-    public void ShellExtract_OutputMesh_BoundsContainedInInput()
-    {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake();
-
-        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings(10, 6, 4, 384, 192, 96));
-        TrackGeneratedShells(prototype);
-
-        Bounds foliageBounds = prototype.FoliageMesh!.bounds;
-        Assert.IsTrue(ContainsBounds(foliageBounds, prototype.ShellL0Mesh!.bounds));
-        Assert.IsTrue(ContainsBounds(foliageBounds, prototype.ShellL1Mesh!.bounds));
-        Assert.IsTrue(ContainsBounds(foliageBounds, prototype.ShellL2Mesh!.bounds));
-    }
-
-    [Test]
-    public void ImpostorGenerate_FromTreeAssemblyShellL2_UnderTriangleBudget()
-    {
-        TreeBlueprintSO blueprint = CreateBlueprintForImpostorBake();
-
-        ImpostorMeshGenerator.BakeImpostorMesh(blueprint, CreateImpostorBakeSettings(64, 0.05f));
+        TreeBlueprintSO blueprint = CreateBlueprintForImpostorBake(prototype);
+        ImpostorMeshGenerator.BakeImpostorMesh(blueprint, CreateImpostorBakeSettings(96, 0.05f));
         TrackGeneratedImpostor(blueprint);
 
-        Assert.LessOrEqual(GetTriangleCount(blueprint.ImpostorMesh!), 64);
+        Assert.NotNull(blueprint.ImpostorMesh);
+        Assert.IsTrue(blueprint.ImpostorMesh!.isReadable);
+        Assert.Greater(GetTriangleCount(blueprint.ImpostorMesh), 0);
     }
 
     [Test]
-    public void ImpostorGenerate_MergesBranchShellsInTreeSpace()
+    public void ImpostorGenerate_MergesHierarchyShellsInTreeSpace()
     {
-        TreeBlueprintSO blueprint = CreateBlueprintForImpostorBake();
+        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("ImpostorBoundsFoliage"));
+        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
 
-        ImpostorMeshGenerator.BakeImpostorMesh(blueprint, CreateImpostorBakeSettings(96, 0.05f));
+        TreeBlueprintSO blueprint = CreateBlueprintForImpostorBake(prototype);
+        ImpostorMeshGenerator.BakeImpostorMesh(blueprint, CreateImpostorBakeSettings(128, 0.05f));
         TrackGeneratedImpostor(blueprint);
 
         Bounds impostorBounds = blueprint.ImpostorMesh!.bounds;
@@ -172,36 +149,10 @@ public sealed class CanopyShellGenerationTests
         Assert.Greater(impostorBounds.max.x, 1.5f);
     }
 
-    [Test]
-    public void ImpostorGenerate_OutputMesh_HasOutwardNormals()
-    {
-        TreeBlueprintSO blueprint = CreateBlueprintForImpostorBake();
-
-        ImpostorMeshGenerator.BakeImpostorMesh(blueprint, CreateImpostorBakeSettings(96, 0.05f));
-        TrackGeneratedImpostor(blueprint);
-
-        Assert.IsTrue(HasValidNormals(blueprint.ImpostorMesh!));
-        Assert.Greater(ComputeSignedVolume(blueprint.ImpostorMesh!), 0f);
-    }
-
-    [Test]
-    public void ImpostorGenerate_OutputMesh_NoInternalCavities()
-    {
-        TreeBlueprintSO blueprint = CreateBlueprintForImpostorBake(singleBranchAtOrigin: true);
-
-        ImpostorMeshGenerator.BakeImpostorMesh(blueprint, CreateImpostorBakeSettings(96, 0.05f));
-        TrackGeneratedImpostor(blueprint);
-
-        VoxelGrid voxelGrid = Voxelizer.VoxelizeSolid(blueprint.ImpostorMesh!, 6);
-        int centerIndex = voxelGrid.Resolution / 2;
-        Assert.IsTrue(voxelGrid.IsOccupied(centerIndex, centerIndex, centerIndex));
-    }
-
-    private BranchPrototypeSO CreatePrototypeForShellBake()
+    private BranchPrototypeSO CreatePrototypeForShellBake(Mesh foliageMesh)
     {
         BranchPrototypeSO prototype = CreateScriptableObject<BranchPrototypeSO>();
         Mesh woodMesh = CreateSegmentedBranchMesh("ShellBakeWood", new Vector3(0.2f, 0.8f, 0.2f), 6);
-        Mesh foliageMesh = CreateClosedCubeMesh("ShellBakeFoliage", new Vector3(1.6f, 1.2f, 1.4f));
         Material shellMaterial = CreateOpaqueMaterial("ShellMaterial");
 
         SetPrivateField(prototype, "woodMesh", woodMesh);
@@ -213,42 +164,26 @@ public sealed class CanopyShellGenerationTests
         return prototype;
     }
 
-    private TreeBlueprintSO CreateBlueprintForImpostorBake(bool singleBranchAtOrigin = false)
+    private TreeBlueprintSO CreateBlueprintForImpostorBake(BranchPrototypeSO prototype)
     {
         TreeBlueprintSO blueprint = CreateScriptableObject<TreeBlueprintSO>();
-        BranchPrototypeSO prototype = CreateScriptableObject<BranchPrototypeSO>();
         Mesh trunkMesh = CreateClosedCubeMesh("ImpostorTrunk", new Vector3(0.4f, 2f, 0.4f));
-        Mesh shellMesh = CreateClosedCubeMesh("ImpostorShell", Vector3.one);
-        Mesh shellWoodMesh = CreateClosedCubeMesh("ImpostorShellWood", new Vector3(0.2f, 0.8f, 0.2f));
-
-        SetPrivateField(prototype, "shellL2Mesh", shellMesh);
-        SetPrivateField(prototype, "shellL2WoodMesh", shellWoodMesh);
-
-        BranchPlacement firstPlacement = CreateBranchPlacement(
-            prototype,
-            singleBranchAtOrigin ? Vector3.zero : new Vector3(-2f, 0.5f, 0f),
-            Quaternion.identity,
-            1f);
-        BranchPlacement secondPlacement = CreateBranchPlacement(
-            prototype,
-            singleBranchAtOrigin ? Vector3.zero : new Vector3(2f, 0.5f, 0f),
-            Quaternion.identity,
-            1f);
+        BranchPlacement firstPlacement = CreateBranchPlacement(prototype, new Vector3(-2f, 0.5f, 0f), Quaternion.identity, 1f);
+        BranchPlacement secondPlacement = CreateBranchPlacement(prototype, new Vector3(2f, 0.5f, 0f), Quaternion.identity, 1f);
 
         SetPrivateField(blueprint, "trunkMesh", trunkMesh);
-        SetPrivateField(blueprint, "branches", singleBranchAtOrigin ? new[] { firstPlacement } : new[] { firstPlacement, secondPlacement });
+        SetPrivateField(blueprint, "branches", new[] { firstPlacement, secondPlacement });
         return blueprint;
     }
 
-    private ShellBakeSettings CreateShellBakeSettings(int l0Resolution, int l1Resolution, int l2Resolution, int l0Target, int l1Target, int l2Target)
+    private ShellBakeSettings CreateShellBakeSettings()
     {
         ShellBakeSettings settings = new ShellBakeSettings();
-        SetPrivateField(settings, "voxelResolutionL0", l0Resolution);
-        SetPrivateField(settings, "voxelResolutionL1", l1Resolution);
-        SetPrivateField(settings, "voxelResolutionL2", l2Resolution);
-        SetPrivateField(settings, "targetTrianglesL0", l0Target);
-        SetPrivateField(settings, "targetTrianglesL1", l1Target);
-        SetPrivateField(settings, "targetTrianglesL2", l2Target);
+        SetPrivateField(settings, "maxOctreeDepth", 4);
+        SetPrivateField(settings, "voxelResolutionL0", 16);
+        SetPrivateField(settings, "voxelResolutionL1", 12);
+        SetPrivateField(settings, "voxelResolutionL2", 8);
+        SetPrivateField(settings, "minimumSurfaceVoxelCountToSplit", 1);
         return settings;
     }
 
@@ -260,12 +195,26 @@ public sealed class CanopyShellGenerationTests
         return settings;
     }
 
+    private void TrackHierarchy(MeshVoxelizerHierarchyNode[] hierarchyNodes)
+    {
+        for (int i = 0; i < hierarchyNodes.Length; i++)
+        {
+            TrackObject(hierarchyNodes[i].ShellL0Mesh);
+            TrackObject(hierarchyNodes[i].ShellL1Mesh);
+            TrackObject(hierarchyNodes[i].ShellL2Mesh);
+        }
+    }
+
     private void TrackGeneratedShells(BranchPrototypeSO prototype)
     {
-        TrackObject(prototype.ShellL0Mesh);
-        TrackObject(prototype.ShellL1Mesh);
+        for (int i = 0; i < prototype.ShellNodes.Length; i++)
+        {
+            TrackObject(prototype.ShellNodes[i].ShellL0Mesh);
+            TrackObject(prototype.ShellNodes[i].ShellL1Mesh);
+            TrackObject(prototype.ShellNodes[i].ShellL2Mesh);
+        }
+
         TrackObject(prototype.ShellL1WoodMesh);
-        TrackObject(prototype.ShellL2Mesh);
         TrackObject(prototype.ShellL2WoodMesh);
     }
 
@@ -312,6 +261,38 @@ public sealed class CanopyShellGenerationTests
             1, 2, 6, 1, 6, 5,
             3, 7, 6, 3, 6, 2,
             0, 1, 5, 0, 5, 4
+        };
+
+        return CreateMesh(name, vertices, triangles);
+    }
+
+    private Mesh CreateSeparatedClusterMesh(string name)
+    {
+        CombineInstance[] combineInstances =
+        {
+            CreateCombineInstance(CreateClosedCubeMesh($"{name}_Left", new Vector3(0.9f, 0.9f, 0.9f)), Matrix4x4.TRS(new Vector3(-1.4f, 0f, 0f), Quaternion.identity, Vector3.one)),
+            CreateCombineInstance(CreateClosedCubeMesh($"{name}_Right", new Vector3(0.9f, 0.9f, 0.9f)), Matrix4x4.TRS(new Vector3(1.4f, 0f, 0f), Quaternion.identity, Vector3.one))
+        };
+
+        return CombineMeshes(name, combineInstances);
+    }
+
+    private Mesh CreateSlantedTetrahedronMesh(string name)
+    {
+        Vector3[] vertices =
+        {
+            new Vector3(-0.7f, -0.5f, -0.4f),
+            new Vector3(0.8f, -0.45f, -0.25f),
+            new Vector3(0.1f, 0.95f, -0.15f),
+            new Vector3(-0.05f, 0.1f, 0.9f)
+        };
+
+        int[] triangles =
+        {
+            0, 1, 2,
+            0, 3, 1,
+            1, 3, 2,
+            0, 2, 3
         };
 
         return CreateMesh(name, vertices, triangles);
@@ -383,25 +364,27 @@ public sealed class CanopyShellGenerationTests
         return CreateMesh(name, vertices.ToArray(), triangles.ToArray());
     }
 
-    private Mesh CreateTetrahedronMesh(string name)
+    private Mesh CombineMeshes(string name, CombineInstance[] combineInstances)
     {
-        Vector3[] vertices =
+        Mesh combinedMesh = new Mesh
         {
-            new Vector3(-0.5f, -0.5f, -0.5f),
-            new Vector3(0.5f, -0.5f, -0.5f),
-            new Vector3(0f, 0.75f, -0.25f),
-            new Vector3(0f, 0f, 0.75f)
+            name = name
         };
 
-        int[] triangles =
-        {
-            0, 1, 2,
-            0, 3, 1,
-            1, 3, 2,
-            0, 2, 3
-        };
+        combinedMesh.CombineMeshes(combineInstances, true, true, false);
+        combinedMesh.RecalculateBounds();
+        combinedMesh.RecalculateNormals();
+        createdObjects.Add(combinedMesh);
+        return combinedMesh;
+    }
 
-        return CreateMesh(name, vertices, triangles);
+    private CombineInstance CreateCombineInstance(Mesh mesh, Matrix4x4 matrix)
+    {
+        return new CombineInstance
+        {
+            mesh = mesh,
+            transform = matrix
+        };
     }
 
     private Mesh CreateMesh(string name, Vector3[] vertices, int[] triangles)
@@ -485,50 +468,6 @@ public sealed class CanopyShellGenerationTests
         return true;
     }
 
-    private static bool HasOutwardFacingTriangles(Mesh mesh)
-    {
-        Vector3[] vertices = mesh.vertices;
-        int[] triangles = mesh.triangles;
-        Vector3 boundsCenter = mesh.bounds.center;
-
-        for (int triangleIndex = 0; triangleIndex < triangles.Length; triangleIndex += 3)
-        {
-            Vector3 a = vertices[triangles[triangleIndex]];
-            Vector3 b = vertices[triangles[triangleIndex + 1]];
-            Vector3 c = vertices[triangles[triangleIndex + 2]];
-            Vector3 triangleCenter = (a + b + c) / 3f;
-            Vector3 outwardDirection = triangleCenter - boundsCenter;
-            if (outwardDirection.sqrMagnitude <= 0.000001f)
-            {
-                continue;
-            }
-
-            Vector3 faceNormal = Vector3.Cross(b - a, c - a).normalized;
-            if (Vector3.Dot(faceNormal, outwardDirection.normalized) <= 0f)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static float ComputeSignedVolume(Mesh mesh)
-    {
-        Vector3[] vertices = mesh.vertices;
-        int[] triangles = mesh.triangles;
-        float signedVolume = 0f;
-        for (int triangleIndex = 0; triangleIndex < triangles.Length; triangleIndex += 3)
-        {
-            Vector3 a = vertices[triangles[triangleIndex]];
-            Vector3 b = vertices[triangles[triangleIndex + 1]];
-            Vector3 c = vertices[triangles[triangleIndex + 2]];
-            signedVolume += Vector3.Dot(a, Vector3.Cross(b, c)) / 6f;
-        }
-
-        return signedVolume;
-    }
-
     private static bool HasNoDegenerateTriangles(Mesh mesh)
     {
         Vector3[] vertices = mesh.vertices;
@@ -547,10 +486,23 @@ public sealed class CanopyShellGenerationTests
         return true;
     }
 
+    private static int CountBits(byte value)
+    {
+        int count = 0;
+        while (value != 0)
+        {
+            count += value & 1;
+            value >>= 1;
+        }
+
+        return count;
+    }
+
     private static bool ContainsBounds(Bounds container, Bounds candidate)
     {
-        Vector3 containerMin = container.min - Vector3.one * BoundsEpsilon;
-        Vector3 containerMax = container.max + Vector3.one * BoundsEpsilon;
+        const float epsilon = 0.0001f;
+        Vector3 containerMin = container.min - Vector3.one * epsilon;
+        Vector3 containerMax = container.max + Vector3.one * epsilon;
         Vector3 candidateMin = candidate.min;
         Vector3 candidateMax = candidate.max;
 

@@ -13,6 +13,8 @@ Embedded UPM package for the repo's branch-assembled vegetation authoring workfl
 
 Generated shell and impostor meshes are written beside the owning asset under a `GeneratedMeshes/` folder when the owner asset lives under `Assets/`. If the owner asset lives under `Packages/`, the tooling falls back to `Assets/VoxGeoFol.Generated/Vegetation/Meshes/` so public package installs never try to write into the package cache.
 
+For canopy shell outputs specifically, `BranchPrototypeSO.generatedCanopyShellsRelativeFolder` can override that location with an explicit folder such as `Assets/Tree/VoxFoliage/GeneratedCanopyShells`.
+
 ## Sample Workflow
 
 1. Import the `Vegetation Demo` sample from Package Manager.

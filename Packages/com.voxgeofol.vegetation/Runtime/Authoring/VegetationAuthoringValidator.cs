@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -134,15 +135,11 @@ public static class VegetationAuthoringValidator
 
     private static void ValidateShellChain(BranchPrototypeSO prototype, VegetationValidationResult result)
     {
-        Mesh? shellL0Mesh = prototype.ShellL0Mesh;
-        Mesh? shellL1Mesh = prototype.ShellL1Mesh;
+        BranchShellNode[] shellNodes = prototype.ShellNodes;
         Mesh? shellL1WoodMesh = prototype.ShellL1WoodMesh;
-        Mesh? shellL2Mesh = prototype.ShellL2Mesh;
         Mesh? shellL2WoodMesh = prototype.ShellL2WoodMesh;
-        bool hasAnyShell = shellL0Mesh != null ||
-                           shellL1Mesh != null ||
+        bool hasAnyShell = (shellNodes != null && shellNodes.Length > 0) ||
                            shellL1WoodMesh != null ||
-                           shellL2Mesh != null ||
                            shellL2WoodMesh != null;
 
         if (!hasAnyShell)
@@ -150,20 +147,14 @@ public static class VegetationAuthoringValidator
             return;
         }
 
-        if (shellL0Mesh == null || shellL1Mesh == null || shellL1WoodMesh == null || shellL2Mesh == null || shellL2WoodMesh == null)
+        if (shellNodes == null || shellNodes.Length == 0 || shellL1WoodMesh == null || shellL2WoodMesh == null)
         {
-            result.AddError("shellL0Mesh, shellL1Mesh, shellL1WoodMesh, shellL2Mesh, and shellL2WoodMesh must all be assigned together.");
+            result.AddError("shellNodes, shellL1WoodMesh, and shellL2WoodMesh must all be assigned together.");
             return;
         }
 
-        ValidateOptionalReadableMesh(shellL0Mesh, "shellL0Mesh", result);
-        ValidateOptionalReadableMesh(shellL1Mesh, "shellL1Mesh", result);
         ValidateOptionalReadableMesh(shellL1WoodMesh, "shellL1WoodMesh", result);
-        ValidateOptionalReadableMesh(shellL2Mesh, "shellL2Mesh", result);
         ValidateOptionalReadableMesh(shellL2WoodMesh, "shellL2WoodMesh", result);
-        ValidateTriangleBudget(shellL0Mesh, prototype.TriangleBudgetShellL0, "shellL0Mesh", result);
-        ValidateTriangleBudget(shellL1Mesh, prototype.TriangleBudgetShellL1, "shellL1Mesh", result);
-        ValidateTriangleBudget(shellL2Mesh, prototype.TriangleBudgetShellL2, "shellL2Mesh", result);
 
         if (prototype.ShellMaterial == null)
         {
@@ -177,29 +168,159 @@ public static class VegetationAuthoringValidator
         Mesh? sourceWoodMesh = prototype.WoodMesh;
         if (sourceWoodMesh == null ||
             !sourceWoodMesh.isReadable ||
-            !shellL0Mesh.isReadable ||
-            !shellL1Mesh.isReadable ||
             !shellL1WoodMesh.isReadable ||
-            !shellL2Mesh.isReadable ||
             !shellL2WoodMesh.isReadable)
         {
+            ValidateShellNodeHierarchy(shellNodes, prototype, result);
             return;
         }
 
-        int shellL0Triangles = GetTriangleCount(shellL0Mesh);
-        int shellL1Triangles = GetTriangleCount(shellL1Mesh);
-        int shellL2Triangles = GetTriangleCount(shellL2Mesh);
         int sourceWoodTriangles = GetTriangleCount(sourceWoodMesh);
         int shellL1WoodTriangles = GetTriangleCount(shellL1WoodMesh);
         int shellL2WoodTriangles = GetTriangleCount(shellL2WoodMesh);
-        if (!(shellL0Triangles > shellL1Triangles && shellL1Triangles > shellL2Triangles))
-        {
-            result.AddError("Shell triangle counts must strictly decrease: L0 > L1 > L2.");
-        }
 
         if (!(sourceWoodTriangles >= shellL1WoodTriangles && shellL1WoodTriangles >= shellL2WoodTriangles))
         {
             result.AddError("Wood triangle counts must not increase: source >= L1Wood >= L2Wood.");
+        }
+
+        ValidateShellNodeHierarchy(shellNodes, prototype, result);
+    }
+
+    private static void ValidateShellNodeHierarchy(BranchShellNode[] shellNodes, BranchPrototypeSO prototype, VegetationValidationResult result)
+    {
+        if (shellNodes.Length == 0)
+        {
+            result.AddError("shellNodes must contain at least one occupied hierarchy node.");
+            return;
+        }
+
+        if (shellNodes[0] == null)
+        {
+            result.AddError("shellNodes[0] is missing.");
+            return;
+        }
+
+        if (shellNodes[0].Depth != 0)
+        {
+            result.AddError("shellNodes[0] must be the root node at depth 0.");
+        }
+
+        for (int i = 0; i < shellNodes.Length; i++)
+        {
+            BranchShellNode? node = shellNodes[i];
+            if (node == null)
+            {
+                result.AddError($"shellNodes[{i}] is missing.");
+                continue;
+            }
+
+            if (node.ShellL0Mesh == null || node.ShellL1Mesh == null || node.ShellL2Mesh == null)
+            {
+                result.AddError($"shellNodes[{i}] must assign shellL0Mesh, shellL1Mesh, and shellL2Mesh together.");
+                continue;
+            }
+
+            ValidateOptionalReadableMesh(node.ShellL0Mesh, $"shellNodes[{i}].shellL0Mesh", result);
+            ValidateOptionalReadableMesh(node.ShellL1Mesh, $"shellNodes[{i}].shellL1Mesh", result);
+            ValidateOptionalReadableMesh(node.ShellL2Mesh, $"shellNodes[{i}].shellL2Mesh", result);
+
+            if (node.FirstChildIndex >= 0 && node.FirstChildIndex <= i)
+            {
+                result.AddError($"shellNodes[{i}] firstChildIndex must point to a later preorder node.");
+            }
+
+            if (node.ChildMask == 0)
+            {
+                if (node.FirstChildIndex >= 0)
+                {
+                    result.AddError($"shellNodes[{i}] cannot declare firstChildIndex without childMask.");
+                }
+            }
+            else
+            {
+                int childCount = CountBits(node.ChildMask);
+                if (node.FirstChildIndex < 0)
+                {
+                    result.AddError($"shellNodes[{i}] childMask requires firstChildIndex.");
+                }
+                else if (node.FirstChildIndex + childCount > shellNodes.Length)
+                {
+                    result.AddError($"shellNodes[{i}] child range exceeds shellNodes length.");
+                }
+                else
+                {
+                    for (int childOffset = 0; childOffset < childCount; childOffset++)
+                    {
+                        BranchShellNode? childNode = shellNodes[node.FirstChildIndex + childOffset];
+                        if (childNode == null)
+                        {
+                            result.AddError($"shellNodes[{i}] child {childOffset} is missing.");
+                            continue;
+                        }
+
+                        if (childNode.Depth != node.Depth + 1)
+                        {
+                            result.AddError($"shellNodes[{i}] children must be exactly one depth level deeper.");
+                        }
+
+                        if (!ContainsBounds(node.LocalBounds, childNode.LocalBounds))
+                        {
+                            result.AddError($"shellNodes[{i}] child bounds must stay inside parent bounds.");
+                        }
+                    }
+                }
+            }
+
+            if (!node.ShellL0Mesh.isReadable || !node.ShellL1Mesh.isReadable || !node.ShellL2Mesh.isReadable)
+            {
+                continue;
+            }
+
+            if (!ContainsBounds(node.LocalBounds, node.ShellL0Mesh.bounds) ||
+                !ContainsBounds(node.LocalBounds, node.ShellL1Mesh.bounds) ||
+                !ContainsBounds(node.LocalBounds, node.ShellL2Mesh.bounds))
+            {
+                result.AddError($"shellNodes[{i}] mesh bounds must stay inside node localBounds.");
+            }
+
+            int nodeL0Triangles = GetTriangleCount(node.ShellL0Mesh);
+            int nodeL1Triangles = GetTriangleCount(node.ShellL1Mesh);
+            int nodeL2Triangles = GetTriangleCount(node.ShellL2Mesh);
+            if (!(nodeL0Triangles >= nodeL1Triangles && nodeL1Triangles >= nodeL2Triangles))
+            {
+                result.AddError($"shellNodes[{i}] triangle counts must not increase toward lower detail.");
+            }
+        }
+
+        List<BranchShellNode> leafNodes = BranchShellNodeUtility.CollectLeafNodes(shellNodes);
+        if (leafNodes.Count == 0)
+        {
+            result.AddError("shellNodes must contain at least one renderable leaf node.");
+            return;
+        }
+
+        int shellL0Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(shellNodes, 0);
+        int shellL1Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(shellNodes, 1);
+        int shellL2Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(shellNodes, 2);
+        if (!(shellL0Triangles > shellL1Triangles && shellL1Triangles > shellL2Triangles))
+        {
+            result.AddError("Leaf-frontier shell triangle counts must strictly decrease: L0 > L1 > L2.");
+        }
+
+        if (shellL0Triangles > prototype.TriangleBudgetShellL0)
+        {
+            result.AddError($"Leaf-frontier shellL0 triangle count {shellL0Triangles} exceeds budget {prototype.TriangleBudgetShellL0}.");
+        }
+
+        if (shellL1Triangles > prototype.TriangleBudgetShellL1)
+        {
+            result.AddError($"Leaf-frontier shellL1 triangle count {shellL1Triangles} exceeds budget {prototype.TriangleBudgetShellL1}.");
+        }
+
+        if (shellL2Triangles > prototype.TriangleBudgetShellL2)
+        {
+            result.AddError($"Leaf-frontier shellL2 triangle count {shellL2Triangles} exceeds budget {prototype.TriangleBudgetShellL2}.");
         }
     }
 
@@ -418,6 +539,18 @@ public static class VegetationAuthoringValidator
     private static int GetTriangleCount(Mesh mesh)
     {
         return mesh.triangles.Length / 3;
+    }
+
+    private static int CountBits(byte value)
+    {
+        int count = 0;
+        while (value != 0)
+        {
+            count += value & 1;
+            value >>= 1;
+        }
+
+        return count;
     }
 
     private static bool IsScaleOnQuarterStep(float scale)

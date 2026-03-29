@@ -17,11 +17,838 @@ MonoBehaviour:
   foliageMesh: {fileID: -6062578164958778753, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
   foliageMaterial: {fileID: 2100000, guid: ecaffefaa3a08ce43b2fb6c79d1b2bb4, type: 2}
   leafColorTint: {r: 0.5867785, g: 0.9547169, b: 0.38008535, a: 1}
-  shellL0Mesh: {fileID: 4300000, guid: 3d2991dfdb116b241a9a55e1ae606a60, type: 2}
-  shellL1Mesh: {fileID: 4300000, guid: a3b58f4cfc2ff5c44a19308192162cc0, type: 2}
-  shellL1WoodMesh: {fileID: 4300000, guid: bcd29de28ae13dd4d937607c5d562395, type: 2}
-  shellL2Mesh: {fileID: 4300000, guid: d312228cbc6ed9c4ab197ed313308b06, type: 2}
-  shellL2WoodMesh: {fileID: 4300000, guid: 3453adea30feea94c8487f0aa0712004, type: 2}
+  generatedCanopyShellsRelativeFolder: Tree/VoxFoliage/GeneratedMeshes
+  shellNodes:
+  - localBounds:
+      m_Center: {x: -0.88199586, y: 0.03168489, z: 0.29744375}
+      m_Extent: {x: 0.5182331, y: 0.46414518, z: 0.20302974}
+    depth: 0
+    firstChildIndex: 1
+    childMask: 255
+    shellL0Mesh: {fileID: 4300000, guid: 4502dd7e357bf5146a52d46111dc0c6c, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 52b08ca99a510434a9e81bc53216ec49, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 53676602c80332649927c17b0a3ee246, type: 2}
+  - localBounds:
+      m_Center: {x: -1.1411124, y: -0.20038772, z: 0.19592887}
+      m_Extent: {x: 0.25911656, y: 0.23207259, z: 0.10151487}
+    depth: 1
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 744c3b11944aebf419e9d6d76859d372, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 469ccf85d2c3dd0499a9648d1d9a428a, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 98fb03ab3500e1f4fb342471603a9b3f, type: 2}
+  - localBounds:
+      m_Center: {x: -0.62287927, y: -0.20038772, z: 0.19592887}
+      m_Extent: {x: 0.25911656, y: 0.23207259, z: 0.10151487}
+    depth: 1
+    firstChildIndex: 9
+    childMask: 92
+    shellL0Mesh: {fileID: 4300000, guid: adde03abc65085943b95d6e2afa12520, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 9014397e4f095e3449560990c4dfac48, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: d837488077e242d4fa21ffb3167816c5, type: 2}
+  - localBounds:
+      m_Center: {x: -1.1411124, y: 0.26375747, z: 0.19592887}
+      m_Extent: {x: 0.25911656, y: 0.23207259, z: 0.10151487}
+    depth: 1
+    firstChildIndex: 13
+    childMask: 176
+    shellL0Mesh: {fileID: 4300000, guid: 26cda83c13cd2274089b71db1fe16f42, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 67b20f8c5d9ab5844b42973203d8589f, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 21a0fb653495f5645b2b4d0cb25de44b, type: 2}
+  - localBounds:
+      m_Center: {x: -0.62287927, y: 0.26375747, z: 0.19592887}
+      m_Extent: {x: 0.25911656, y: 0.23207259, z: 0.10151487}
+    depth: 1
+    firstChildIndex: 16
+    childMask: 114
+    shellL0Mesh: {fileID: 4300000, guid: 3e63ddc95315f77418d318194f55b46e, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: b078efd951bc0a646aaa5ee1c0aef648, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 86895fbedbd2f5b4086b76307873d971, type: 2}
+  - localBounds:
+      m_Center: {x: -1.1411124, y: -0.20038772, z: 0.39895862}
+      m_Extent: {x: 0.25911656, y: 0.23207259, z: 0.101514876}
+    depth: 1
+    firstChildIndex: 20
+    childMask: 206
+    shellL0Mesh: {fileID: 4300000, guid: 84a2d6bc75fe58342ac821b8c9488060, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: bf5120db3d43c1748a8e396c3521cdaf, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: fd6ca589769de27449e07617439516ba, type: 2}
+  - localBounds:
+      m_Center: {x: -0.62287927, y: -0.20038772, z: 0.39895862}
+      m_Extent: {x: 0.25911656, y: 0.23207259, z: 0.101514876}
+    depth: 1
+    firstChildIndex: 25
+    childMask: 21
+    shellL0Mesh: {fileID: 4300000, guid: 5e3ec4f836f228f49990e81eb4f26bbb, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 7bff4abb7e28b874591f5562e5fe47e9, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: b520b73cd9e4cb54aa5bf762d9b0a007, type: 2}
+  - localBounds:
+      m_Center: {x: -1.1411124, y: 0.26375747, z: 0.39895862}
+      m_Extent: {x: 0.25911656, y: 0.23207259, z: 0.101514876}
+    depth: 1
+    firstChildIndex: 28
+    childMask: 14
+    shellL0Mesh: {fileID: 4300000, guid: a7847a289c00a7545be031ed7969aa83, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: c25751e815f9f324d85f2dcad7f42216, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 3ba4d74c138d11a4f8e8e8844b6c8b2b, type: 2}
+  - localBounds:
+      m_Center: {x: -0.62287927, y: 0.26375747, z: 0.39895862}
+      m_Extent: {x: 0.25911656, y: 0.23207259, z: 0.101514876}
+    depth: 1
+    firstChildIndex: 31
+    childMask: 13
+    shellL0Mesh: {fileID: 4300000, guid: a9b59c4b692829449a7fe4aaeb720b05, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: e38a25fe2ef49fd498836bbc3253d9a8, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 016310f95704491498a12c5b550a302f, type: 2}
+  - localBounds:
+      m_Center: {x: -0.75243753, y: -0.08435142, z: 0.14517143}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757434}
+    depth: 2
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 7f9a2de0724843443b85a3fd7e542a7a, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: e90d60f458490f843acd38c03dce8bff, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 1ef8f6119d50dee4b82617c4eec45578, type: 2}
+  - localBounds:
+      m_Center: {x: -0.493321, y: -0.08435142, z: 0.14517143}
+      m_Extent: {x: 0.12955828, y: 0.116036296, z: 0.050757434}
+    depth: 2
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 7c749009cb73afd4c98f89a741613dc1, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 420a7da260b1b884e81dc0acaa40e940, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: b22ad591385224d40b3bad53d696929d, type: 2}
+  - localBounds:
+      m_Center: {x: -0.75243753, y: -0.316424, z: 0.24668631}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 34
+    childMask: 200
+    shellL0Mesh: {fileID: 4300000, guid: 43ec55518a1c5ad4ca608dcd21b87192, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: cd2cef123c73c0940a77f0c3a82d588a, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: a22bdc9ac83b0f54cb70ed4b336885b9, type: 2}
+  - localBounds:
+      m_Center: {x: -0.75243753, y: -0.08435142, z: 0.24668631}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 37
+    childMask: 31
+    shellL0Mesh: {fileID: 4300000, guid: 0e5109e567a367d40a77b6f55424b55f, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: cd7b3877f0053994da6f89cf38f086a2, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: af1602122dbfe414db3593a314d3ff69, type: 2}
+  - localBounds:
+      m_Center: {x: -1.2706707, y: 0.14772117, z: 0.24668631}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 8489d482775081146a5b9cdf3573dfba, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 639e4942b4c6b3048b8981a85e0fc1a4, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 1a24195e2a17891429bf7e915bae94eb, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0115542, y: 0.14772117, z: 0.24668631}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 42
+    childMask: 221
+    shellL0Mesh: {fileID: 4300000, guid: 1b00b9d35b805b64e9033f2c6569c0db, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: c4f315fd4cb18f34295a5277931e6497, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: d6971c8e178eedd498ff1f30e7b4066b, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0115542, y: 0.37979376, z: 0.24668631}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: a706a0445c82adf468f6135ac9cca5a4, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: d7108781236b64444b3336f2489d3cbf, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 42b18034bb9ee7b41b35b4e0718e11aa, type: 2}
+  - localBounds:
+      m_Center: {x: -0.493321, y: 0.14772117, z: 0.14517143}
+      m_Extent: {x: 0.12955828, y: 0.116036296, z: 0.050757434}
+    depth: 2
+    firstChildIndex: 48
+    childMask: 211
+    shellL0Mesh: {fileID: 4300000, guid: 36d8889c61811594db1df5e238c81d6a, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: e448736aa6cd7aa4286499b971006510, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 3261cf83fd3f8d04b855bc04afe45c21, type: 2}
+  - localBounds:
+      m_Center: {x: -0.75243753, y: 0.14772117, z: 0.24668631}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 53
+    childMask: 217
+    shellL0Mesh: {fileID: 4300000, guid: c178fed3545252a488311bc7d41cd2b0, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: cfddd1d8c2944384781ef58669e4de79, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 0322956c070c0ef46bb41c7073dcead9, type: 2}
+  - localBounds:
+      m_Center: {x: -0.493321, y: 0.14772117, z: 0.24668631}
+      m_Extent: {x: 0.12955828, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 58
+    childMask: 93
+    shellL0Mesh: {fileID: 4300000, guid: bca51144114ee3f469fe6739b0ac5ce6, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: f22667251070e8547bbdf04d128f9ff0, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: f5cf4274a70cb77469e7e61b3045592b, type: 2}
+  - localBounds:
+      m_Center: {x: -0.75243753, y: 0.37979376, z: 0.24668631}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 21529451628ab17439a1687ffb88ef94, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 667c05fc67fefc64e961ef1d15db19df, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 20a24ce7489c89e42892b47970193842, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0115542, y: -0.316424, z: 0.3482012}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 63
+    childMask: 140
+    shellL0Mesh: {fileID: 4300000, guid: 7419c5e446d8edd42af38dc84bcbe6a6, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: b9ba2bd8df15ade44866e6b42a553d9a, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 910423df262d8034bb09584d5404fb71, type: 2}
+  - localBounds:
+      m_Center: {x: -1.2706707, y: -0.08435142, z: 0.3482012}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 66
+    childMask: 172
+    shellL0Mesh: {fileID: 4300000, guid: 1e7ed84fc86d54e4c98691c8985cb3b9, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 31017fec197a44244aa1690b637afb67, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: cd0fd111bdf945e4eb9d0098cf853f33, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0115542, y: -0.08435142, z: 0.3482012}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 70
+    childMask: 68
+    shellL0Mesh: {fileID: 4300000, guid: e7762f88a32648a409cc0450efd8f79d, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 2092c6b47b08b0e48bf2cff2f173f0c7, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: bd03d1e708c9cb749b9a74b40493d132, type: 2}
+  - localBounds:
+      m_Center: {x: -1.2706707, y: -0.08435142, z: 0.44971606}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 72
+    childMask: 14
+    shellL0Mesh: {fileID: 4300000, guid: 31c06c9332fa38f49890e6d0838d130b, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: f3da3709fd6bb0743a01c056da4289b3, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: facbefbb8a9ecbc4a8d7b2fa61e34075, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0115542, y: -0.08435142, z: 0.44971606}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 9e8bd3a94fec20c4eb689179a4c5e6ff, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 5053aaf45286e844f821312d89f748d7, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 516009c8047db3b4dafa541bf4e3e049, type: 2}
+  - localBounds:
+      m_Center: {x: -0.75243753, y: -0.316424, z: 0.3482012}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 75
+    childMask: 156
+    shellL0Mesh: {fileID: 4300000, guid: 0be06aa62f7ff7b4db5a92ccfdb77b10, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 05b213b7571bf5f4f85578e90172b5b6, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 6a4826088e760e74c8b08979c10ed5ef, type: 2}
+  - localBounds:
+      m_Center: {x: -0.75243753, y: -0.08435142, z: 0.3482012}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 1d77187d06c4ca74e957205344ce552f, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 500648f950fbe60488734b6243783f97, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 0812c540330b9d742bb536f21f2b58ec, type: 2}
+  - localBounds:
+      m_Center: {x: -0.75243753, y: -0.316424, z: 0.44971606}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 8559ab1d5b73a11409fe266914a31904, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: fa69d3fefcb9cd040a25ad75019f5863, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 59e8c284862b4a34db4edac8d206e8c8, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0115542, y: 0.14772117, z: 0.3482012}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 79
+    childMask: 69
+    shellL0Mesh: {fileID: 4300000, guid: 737fec278bfb0f1489e1dc68869c38d6, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: b0f4406211f518d4d814477314d84116, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 02037aaa17b7ef845afd9625bf2b0620, type: 2}
+  - localBounds:
+      m_Center: {x: -1.2706707, y: 0.37979376, z: 0.3482012}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 82
+    childMask: 34
+    shellL0Mesh: {fileID: 4300000, guid: db3695c46969ffb4e9e445e47b80fc84, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 0dac7d6fdc910534aa2e5cd5673f87cd, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 8cdeb4c298e4cd64ebb1fd939f45fd22, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0115542, y: 0.37979376, z: 0.3482012}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: 84
+    childMask: 51
+    shellL0Mesh: {fileID: 4300000, guid: 770ca34f04bc9dc479e3fcede1bdd854, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 3b5650d7d70fdcf4c91a4b9f368a255e, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: feaca76d279b44045887f2496c8f45fd, type: 2}
+  - localBounds:
+      m_Center: {x: -0.75243753, y: 0.14772117, z: 0.3482012}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: e6624011b4736ca49ad72621f4587c2c, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 5b4847be784d31d4eb56521437105d03, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 5465c6da3308be64298ddbebcf1628b1, type: 2}
+  - localBounds:
+      m_Center: {x: -0.75243753, y: 0.37979376, z: 0.3482012}
+      m_Extent: {x: 0.12955827, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: d4fda94a5a2bb064b8eb3e3586a66225, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 880114c40b9239044ab498850842756c, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: ecb98992ffe7e694ab9a08f1723a473c, type: 2}
+  - localBounds:
+      m_Center: {x: -0.493321, y: 0.37979376, z: 0.3482012}
+      m_Extent: {x: 0.12955828, y: 0.116036296, z: 0.050757438}
+    depth: 2
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: a9212e21b538c3440bcfe1c3a142fee3, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 97021d8c94b7d1647839e693c7c9958b, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 027f22dde87b5f94aa9afa71252d2549, type: 2}
+  - localBounds:
+      m_Center: {x: -0.6876584, y: -0.25840586, z: 0.22130759}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: b2d25395480350044b8b2b4fdbafc31f, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: e244309ebb636a745aea48adeded616e, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 207e02f6753c4c24996c8df7e6fb03ac, type: 2}
+  - localBounds:
+      m_Center: {x: -0.81721663, y: -0.25840586, z: 0.27206504}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 4f40e9d50bb46f240b15d978a99d5c67, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 413c6bf32f57f964ca674d2d7c43e0f0, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: c4ccb361a04bcec44bcedbbe13868c53, type: 2}
+  - localBounds:
+      m_Center: {x: -0.6876584, y: -0.25840586, z: 0.27206504}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: b8a3f5224fa27cb43a940a4e5d540096, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: b593054381934a142b759e797fa05ec1, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 5a99f2c7b9438ce4ebc9fcaf2d68b267, type: 2}
+  - localBounds:
+      m_Center: {x: -0.81721663, y: -0.14236957, z: 0.22130759}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: aefc8786f4587a54198627795d1a1da7, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 48814719639cde24ebcdc5c3b13a6fd2, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: f332857b036d4df4bbaf7f85f579f36e, type: 2}
+  - localBounds:
+      m_Center: {x: -0.6876584, y: -0.14236957, z: 0.22130759}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: c30ebef607993d04bb9f25e7df588205, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 65517912a17d6f845a87d277220f0a4b, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 19a9a2eb29563754fb618670ead4b206, type: 2}
+  - localBounds:
+      m_Center: {x: -0.81721663, y: -0.026333272, z: 0.22130759}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 1d5b87168df84ca46a50d5e3926c0b78, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 9712de70efdc61e41a1437b01fa479e2, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: de85616f3371a6d4bb5bfaddd7f7af87, type: 2}
+  - localBounds:
+      m_Center: {x: -0.6876584, y: -0.026333272, z: 0.22130759}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 683bc69981fdebf40803adaa08f587b0, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 2e613acec0dc9184c96c31182baabf7d, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: c50c76c6a6cbec044be5eb4395f4351a, type: 2}
+  - localBounds:
+      m_Center: {x: -0.81721663, y: -0.14236957, z: 0.27206504}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 3e6d9b1f5a4df224ab95a1e53d55d0fc, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: b86d5227dc089ff469ae5f60d8e5cb1d, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 2596d34073198bb4a8a23a9739cbfa6c, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0763334, y: 0.08970302, z: 0.22130759}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 5e90ea9c7aa53394cad18e793ffbad0e, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: e3a427b5891c7574ebde2ec435d09881, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 31306d82f696f1b4caa2f0ddc885cdbb, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0763334, y: 0.20573932, z: 0.22130759}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 9d676a3874c21ce44865ca3352ecbd6f, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 6f3e83bed1e08d34cb7c4a8b185cf731, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: d6d3110b8609c8947b9073df3a24dd85, type: 2}
+  - localBounds:
+      m_Center: {x: -0.9467751, y: 0.20573932, z: 0.22130759}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 7d929ebf3f6a2d64797b2f6d27ecd873, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 80525b8a02bf3d147854a856c758a939, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 8d38ba002bc1ab54e9f388225bee16fd, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0763334, y: 0.08970302, z: 0.27206504}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 336164bfe4b30cb42aacd55717096a00, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 1c20e1aaa5915cb4d8289966ad40e178, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 333fb0315e5da3b47a69e102fd823c23, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0763334, y: 0.20573932, z: 0.27206504}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: b1fd1109ccabebb4caf645159790e788, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: cb02afbffb2540049aa524b31a435a50, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: bd9781190f077f24db2359f40aa9c7a5, type: 2}
+  - localBounds:
+      m_Center: {x: -0.9467751, y: 0.20573932, z: 0.27206504}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 1ba0d96447884fd4b834ab83d82e2b52, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 4b7c8a9608b7be041bd98b8a3024d96a, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: ab30784a0f1e5fd4ba98fba0dd7619ce, type: 2}
+  - localBounds:
+      m_Center: {x: -0.5581001, y: 0.08970302, z: 0.119792715}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 8a0cbdaddff594b4c963216ea172057b, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: cf84c414fad4fa446838f4d70dd5bbbf, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 53d4f8d4b85f11a4b867b267e9ca3c1c, type: 2}
+  - localBounds:
+      m_Center: {x: -0.42854187, y: 0.08970302, z: 0.119792715}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: f75d845045bfcc14b8517c0fde6331fe, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 37927167e58bab24690ec45d94b979a4, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: d51295b2a90312b4db5832a48b7ff664, type: 2}
+  - localBounds:
+      m_Center: {x: -0.5581001, y: 0.08970302, z: 0.17055015}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: db2575c7774785c4b8b7f8df001761be, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 59d23ca28ea68484f9d30d4df61c2d73, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 448e93b664b9fed4090d8a83fc7a7569, type: 2}
+  - localBounds:
+      m_Center: {x: -0.5581001, y: 0.20573932, z: 0.17055015}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: b4610adf86d41664b95d57760e2bdd89, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 5ef3cba205071854484943e88978bf7c, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 117cb846ca6f6ad41a29e788fa5d18a2, type: 2}
+  - localBounds:
+      m_Center: {x: -0.42854187, y: 0.20573932, z: 0.17055015}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 0c766c1445b5e334f865f7fdc44a9026, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 537ebedd448e8eb40a469c8288bb67f7, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: aaf0232723de9694cb3abba78220c712, type: 2}
+  - localBounds:
+      m_Center: {x: -0.81721663, y: 0.08970302, z: 0.22130759}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 51da65018b2b8d1429b4aa7b1a42e35c, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: bc3ac8d03c3d78a4b804df1d4ffa58d1, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: c0dcffb1051feb7459727b55c00d646d, type: 2}
+  - localBounds:
+      m_Center: {x: -0.6876584, y: 0.20573932, z: 0.22130759}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 68fb46150019c37448a21e2f66b90c5c, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 4f4d8eb97e5b94847a6f20c11fc51e6e, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 8e635158f23305a428559e3f4234a18c, type: 2}
+  - localBounds:
+      m_Center: {x: -0.81721663, y: 0.08970302, z: 0.27206504}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: e91f7fa4953fbdf49aaf23a70e7f6853, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: d5cdd34e5022d624cb0892d0c8b438da, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: d1dff9e08f3f9484b8f1ab8c8ac7e9bb, type: 2}
+  - localBounds:
+      m_Center: {x: -0.81721663, y: 0.20573932, z: 0.27206504}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 46f1705bd20e5ef4a9bcb3dee355a05d, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: dbb0bd4421e999c4996eb15e605d7f0e, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 2fdc157ea9905a5448480d651712d832, type: 2}
+  - localBounds:
+      m_Center: {x: -0.6876584, y: 0.20573932, z: 0.27206504}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 82d28427882f2ab4cb738e294afb8969, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 7c9684d26e879e94da31f0fdca29a615, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 03103af65dbc92444b3b530a05fac307, type: 2}
+  - localBounds:
+      m_Center: {x: -0.5581001, y: 0.08970302, z: 0.22130759}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: baec679e5da5f3c4da24617b660fecf2, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 5f2764e072d0c2c43b8406b7c64a40c3, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 5078f7cecc511aa4b99bc08cad8b7b7c, type: 2}
+  - localBounds:
+      m_Center: {x: -0.5581001, y: 0.20573932, z: 0.22130759}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: a21be1f4addefac45afec857133f727a, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: b27576d0efaf3694bbdc4a9c028376ce, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 5bdf2d00168c6ae4698aca101a3dcafa, type: 2}
+  - localBounds:
+      m_Center: {x: -0.42854187, y: 0.20573932, z: 0.22130759}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 492562499767b614a900234990e0006e, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: c68e64897ad9f134f9a0e54f0c5997cc, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 3dede3f8ebdb5e4478cec012b6b6929b, type: 2}
+  - localBounds:
+      m_Center: {x: -0.5581001, y: 0.08970302, z: 0.27206504}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: aa0ceeee2834d614ba525082a18614b6, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 3e7aad5ddaea0564a909eddaabfebe3e, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 74ff4ff3e799a664d829038ed18c24a8, type: 2}
+  - localBounds:
+      m_Center: {x: -0.5581001, y: 0.20573932, z: 0.27206504}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: c9dfa2c5133f41a4d848410e97782fa9, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 15e72c0927a99d44a94ef8b6450ce39b, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 4e0867f124779b74f8b6ebbd2e2fc7f8, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0763334, y: -0.25840586, z: 0.32282245}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 401007c8f278db44b8c4c3dd6ca93930, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 5c8602684a3173d41add6fb10e122cc7, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: e6570a762d674354e9b46e9e50c860bc, type: 2}
+  - localBounds:
+      m_Center: {x: -0.9467751, y: -0.25840586, z: 0.32282245}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: 88
+    childMask: 23
+    shellL0Mesh: {fileID: 4300000, guid: f797f8a7caac8fe44900e8c80880b449, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 84e1bd5879b173248987b42e2cf44458, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: b30c127e5252f7a40af30c70801391c3, type: 2}
+  - localBounds:
+      m_Center: {x: -0.9467751, y: -0.25840586, z: 0.37357992}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: af2517309f16df8478d4f67384af2e6c, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: f7b5b7fd8bcf89643af627a0b06998c1, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 5cd07752e3035b44e9740e9fc9c614a8, type: 2}
+  - localBounds:
+      m_Center: {x: -1.3354498, y: -0.026333272, z: 0.32282245}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: c4f03fad7b341414d91984fe20383499, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: b28e9fa0e7266ce45a8865b4280c9af2, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: d440b5181d62a044f95abee15148af89, type: 2}
+  - localBounds:
+      m_Center: {x: -1.2058915, y: -0.026333272, z: 0.32282245}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: fbb9c44ba4437cd4997ee71cabe56160, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: facca170fb3f4a24cbee0ff2355d76a5, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: c22a47fbf6eb8a0409ace29f130fdd20, type: 2}
+  - localBounds:
+      m_Center: {x: -1.2058915, y: -0.14236957, z: 0.37357992}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: aa7dbde772d411f4da312f4d0acc42be, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 495b3a1931e7dab4d9c9fef3ebd0a76d, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: fbe73ebb4c9243f41bc2cf61ef104ac5, type: 2}
+  - localBounds:
+      m_Center: {x: -1.2058915, y: -0.026333272, z: 0.37357992}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: e0f33c2d175c3364b93710acbc2781ed, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: d4f4285372e153c4f9daf7c285c6c865, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: e8bb5e2dd6418cb479cabd1480bee25d, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0763334, y: -0.026333272, z: 0.32282245}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: cc82baf37028df84b84446d4b869d027, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 4b866e33833830c46909bbbc059ade3c, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: ab5fa87b0bbe21941906230fda2e3316, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0763334, y: -0.026333272, z: 0.37357992}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: daaf41518bf2bf9438ce7a399e6be895, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 10c5649ddb14ae746879f3538de23e03, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 674a7211f94504a4187a6a636a90fab6, type: 2}
+  - localBounds:
+      m_Center: {x: -1.2058915, y: -0.14236957, z: 0.42433733}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 7161287fb94a1d54e8b226f99c7be726, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 00505c73e24a0a34f89535b2afca15fa, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 9068ed21057cfbe4daf5e5330fb9c006, type: 2}
+  - localBounds:
+      m_Center: {x: -1.3354498, y: -0.026333272, z: 0.42433733}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 18c50100029f2024b83f75c8277b356a, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 420f1dc38a32cb442854e5670fe18c79, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 9e96df27c4bea7b4eb6e3dc859da206b, type: 2}
+  - localBounds:
+      m_Center: {x: -1.2058915, y: -0.026333272, z: 0.42433733}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: d098023c35cc34e4fa5cb8fd954941fd, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: b1872476d7cc4ad4ab6c6420c51ea5f6, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 524064b4a397d0d43a151562f11fbe7a, type: 2}
+  - localBounds:
+      m_Center: {x: -0.81721663, y: -0.25840586, z: 0.32282245}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 51186703c90064b41a50cb5b55014378, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: b3d15dd5701b8864ba3ab83bc482e9ea, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: d578f8323be6b524f8ffe2e0561904d1, type: 2}
+  - localBounds:
+      m_Center: {x: -0.6876584, y: -0.25840586, z: 0.32282245}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: f2896d94cbf612147ab26ddbd6ffd9f1, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 2dfad252771b50a468b2792cf41c6578, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: b2c2e94aee0f4864489ee3793d94b175, type: 2}
+  - localBounds:
+      m_Center: {x: -0.81721663, y: -0.37444216, z: 0.37357992}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 85e60526d31973b47bccab4d1d859b9d, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 5df4dd27686ad2b45bd952d06da89edc, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: a770b2ebdc6db564e998b8f52f4ef0f9, type: 2}
+  - localBounds:
+      m_Center: {x: -0.6876584, y: -0.25840586, z: 0.37357992}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: ba8428e669ca30048ba5c6e7ec163be1, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: cb8a37e505c291548933297e3bc26a83, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: c59889525f939294e9a13a7e9e582249, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0763334, y: 0.08970302, z: 0.32282245}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 5c2b81ebee9295946839c905cce16b01, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 063f46ae0945b034a9a5908dd8491d82, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 8e3390ac387d3fa4eaccde563c9f3189, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0763334, y: 0.20573932, z: 0.32282245}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 666624c768ff0ea48822e0e1cafa0914, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 618dac82c17c77647910e9fa6977f8d7, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 4f0b1d426e99960488bf319f412ad0fc, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0763334, y: 0.20573932, z: 0.37357992}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 2e00ff23a0c182742a9ac88756f3dbe6, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: c02f102a93ff564489cda8dc0f7a86b5, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: aa762273f4c39cb4a8f3033a144fd7a1, type: 2}
+  - localBounds:
+      m_Center: {x: -1.2058915, y: 0.32177562, z: 0.32282245}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: ede39df1008c72a4da44d8b772328444, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 0bec2a0bdd5854347bb19ba08ef30240, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 3d0c475e63fc82f45bda77ccc54dc1ea, type: 2}
+  - localBounds:
+      m_Center: {x: -1.2058915, y: 0.32177562, z: 0.37357992}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 83149e938bbd97144878d01d6b84f1f7, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: f470ee330dc40554b8c06e67a2c7ee94, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: b4218a624b41e9f418c2deaf547faabc, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0763334, y: 0.32177562, z: 0.32282245}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 80d8c65b616e72c4e904fc3900568791, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 0a94fee0045407741afc498131c6f68e, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 1caeaacc786dd31469a135d7b9f3ec52, type: 2}
+  - localBounds:
+      m_Center: {x: -0.9467751, y: 0.32177562, z: 0.32282245}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: f0bc8a9a6430eda42bec5e4112e4c61a, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 17cc579eeb7e96a45a7205c92e65bcbc, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: fc512a36df14a6e468a12285a3275393, type: 2}
+  - localBounds:
+      m_Center: {x: -1.0763334, y: 0.32177562, z: 0.37357992}
+      m_Extent: {x: 0.06477916, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 2d730db6d96ee0b48a4e077247e7bcb3, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 2575e583d4ba7764ba56c728ba6f7c80, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: a8096cb6c95525449869d9d23d1ad320, type: 2}
+  - localBounds:
+      m_Center: {x: -0.9467751, y: 0.32177562, z: 0.37357992}
+      m_Extent: {x: 0.06477913, y: 0.058018148, z: 0.025378719}
+    depth: 3
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: e6e6bd6501285b94095ca3728b394766, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: e7df9288aa4886d47b5c43a93f38beb9, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: a84efea6cc82feb4c92b0e8783c01174, type: 2}
+  - localBounds:
+      m_Center: {x: -0.97916466, y: -0.28741494, z: 0.3101331}
+      m_Extent: {x: 0.03238958, y: 0.029009074, z: 0.012689352}
+    depth: 4
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 31b9d76d0d137d94f97747cfb5a18415, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: def4f28ba359440488fd3cf0ac2da842, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 3cc20031f08d725459deb0d98e9c0a56, type: 2}
+  - localBounds:
+      m_Center: {x: -0.9143855, y: -0.28741494, z: 0.3101331}
+      m_Extent: {x: 0.03238958, y: 0.029009074, z: 0.012689352}
+    depth: 4
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 5b92f0b38d6660144b8cd99b9246e063, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 6f9dfa977bea0c44289254cf48370942, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: ed9fcf3d13ca1364fbd6d1d45ac46d95, type: 2}
+  - localBounds:
+      m_Center: {x: -0.97916466, y: -0.22939679, z: 0.3101331}
+      m_Extent: {x: 0.03238958, y: 0.029009074, z: 0.012689352}
+    depth: 4
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 67bf4a7cf7d8efa46bf705442448ec2f, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: e261e1665688fc848b1ce4d70084b9ba, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 0d922d52ccc82774e890c01fb313d53b, type: 2}
+  - localBounds:
+      m_Center: {x: -0.97916466, y: -0.28741494, z: 0.3355118}
+      m_Extent: {x: 0.03238958, y: 0.029009074, z: 0.012689352}
+    depth: 4
+    firstChildIndex: -1
+    childMask: 0
+    shellL0Mesh: {fileID: 4300000, guid: 1c0f4131a7cc45440884a9de548f40a2, type: 2}
+    shellL1Mesh: {fileID: 4300000, guid: 6b46d015ddeeb6945919e66f18bed23b, type: 2}
+    shellL2Mesh: {fileID: 4300000, guid: 29166bd162aa7c5469343ee7d3b0dd08, type: 2}
+  shellL1WoodMesh: {fileID: 4300000, guid: 50c319c8661178848b19279c8eafc26f, type: 2}
+  shellL2WoodMesh: {fileID: 4300000, guid: 82336a02a2f2c05468e2fe1a1ce2f4b3, type: 2}
   shellMaterial: {fileID: 2100000, guid: 1e8b3c0229b50f94bab471853295c8d5, type: 2}
   localBounds:
     m_Center: {x: -0.72606623, y: 0.031684875, z: 0.2255171}

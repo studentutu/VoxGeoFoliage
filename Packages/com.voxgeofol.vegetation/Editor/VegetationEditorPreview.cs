@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using VoxGeoFol.Features.Vegetation.Authoring;
@@ -171,10 +172,15 @@ namespace VoxGeoFol.Features.Vegetation.Editor
 
                 if (includeShellL0)
                 {
-                    Mesh shellL0Mesh = prototype.ShellL0Mesh ?? throw new InvalidOperationException($"{prototype.name} is missing shellL0Mesh.");
                     Material shellMaterial = prototype.ShellMaterial ??
                                              throw new InvalidOperationException($"{prototype.name} is missing shellMaterial.");
-                    CreateMeshChild(branchObject.transform, "ShellL0", shellL0Mesh, shellMaterial);
+                    List<BranchShellNode> leafNodes = GetRequiredLeafNodes(prototype);
+                    for (int leafIndex = 0; leafIndex < leafNodes.Count; leafIndex++)
+                    {
+                        Mesh shellL0Mesh = BranchShellNodeUtility.GetShellMesh(leafNodes[leafIndex], 0) ??
+                                           throw new InvalidOperationException($"{prototype.name} leaf node {leafIndex} is missing shellL0Mesh.");
+                        CreateMeshChild(branchObject.transform, $"ShellL0_{leafIndex:D2}", shellL0Mesh, shellMaterial);
+                    }
                 }
             }
         }
@@ -198,11 +204,18 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     $"WoodL{shellLevel}",
                     GetRequiredWoodMesh(prototype, shellLevel),
                     woodMaterial);
-                CreateMeshChild(
-                    branchObject.transform,
-                    $"ShellL{shellLevel}",
-                    GetRequiredShellMesh(prototype, shellLevel),
-                    shellMaterial);
+
+                List<BranchShellNode> leafNodes = GetRequiredLeafNodes(prototype);
+                for (int leafIndex = 0; leafIndex < leafNodes.Count; leafIndex++)
+                {
+                    Mesh shellMesh = BranchShellNodeUtility.GetShellMesh(leafNodes[leafIndex], shellLevel) ??
+                                     throw new InvalidOperationException($"{prototype.name} leaf node {leafIndex} is missing shellL{shellLevel}Mesh.");
+                    CreateMeshChild(
+                        branchObject.transform,
+                        $"ShellL{shellLevel}_{leafIndex:D2}",
+                        shellMesh,
+                        shellMaterial);
+                }
             }
         }
 
@@ -222,15 +235,15 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             CreateMeshChild(parent, "Impostor", impostorMesh, impostorMaterial);
         }
 
-        private static Mesh GetRequiredShellMesh(BranchPrototypeSO prototype, int shellLevel)
+        private static List<BranchShellNode> GetRequiredLeafNodes(BranchPrototypeSO prototype)
         {
-            return shellLevel switch
+            List<BranchShellNode> leafNodes = BranchShellNodeUtility.CollectLeafNodes(prototype.ShellNodes);
+            if (leafNodes.Count == 0)
             {
-                0 => prototype.ShellL0Mesh ?? throw new InvalidOperationException($"{prototype.name} is missing shellL0Mesh."),
-                1 => prototype.ShellL1Mesh ?? throw new InvalidOperationException($"{prototype.name} is missing shellL1Mesh."),
-                2 => prototype.ShellL2Mesh ?? throw new InvalidOperationException($"{prototype.name} is missing shellL2Mesh."),
-                _ => throw new ArgumentOutOfRangeException(nameof(shellLevel), shellLevel, "Shell level must be 0, 1, or 2.")
-            };
+                throw new InvalidOperationException($"{prototype.name} is missing shellNodes.");
+            }
+
+            return leafNodes;
         }
 
         private static Mesh GetRequiredWoodMesh(BranchPrototypeSO prototype, int shellLevel)

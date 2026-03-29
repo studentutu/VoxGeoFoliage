@@ -223,7 +223,7 @@ MonoBehaviour:
     localPosition: {x: 0.086, y: -0.05000011, z: 3.1220007}
     localRotation: {x: -0.2481608, y: 0.44452524, z: 0.6540133, w: 0.5595356}
     scale: 0.5
-  impostorMesh: {fileID: 4300000, guid: 0d29e7b7b8c53aa4497840d8ee1335dc, type: 2}
+  impostorMesh: {fileID: 4300000, guid: d6cd3e8e969ceea49bcc1e103354c279, type: 2}
   impostorMaterial: {fileID: 2100000, guid: 13afca846240643419bc7f56951c14ca, type: 2}
   lodProfile: {fileID: 11400000, guid: 4107cf5d573903340aab43e949eebccd, type: 2}
   treeBounds:

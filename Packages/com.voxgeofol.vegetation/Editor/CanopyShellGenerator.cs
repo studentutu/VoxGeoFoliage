@@ -1,6 +1,8 @@
 #nullable enable
 
 using System;
+using System.Reflection;
+using MeshVoxelizerProject;
 using UnityEditor;
 using UnityEngine;
 using VoxGeoFol.Features.Vegetation.Authoring;
@@ -8,18 +10,16 @@ using VoxGeoFol.Features.Vegetation.Authoring;
 namespace VoxGeoFol.Features.Vegetation.Editor
 {
     /// <summary>
-    /// Editor-only canopy shell baker for reusable branch prototypes.
+    /// Editor-only hierarchical canopy shell baker for reusable branch prototypes.
     /// </summary>
     public static class CanopyShellGenerator
     {
-        private const float WoodReductionRatio = 0.5f;
-
         /// <summary>
-        /// [INTEGRATION] Called from editor tooling to populate shell meshes on one branch prototype.
+        /// [INTEGRATION] Called from editor tooling to populate hierarchical shell data on one branch prototype.
         /// </summary>
         public static void BakeCanopyShells(BranchPrototypeSO prototype, ShellBakeSettings? settings = null)
         {
-            // Range: requires readable foliage and wood meshes plus valid target budgets. Condition: L0/L1/L2 canopy shells are baked from foliage while L1/L2 wood attachments are simplified from the source wood mesh. Output: the prototype receives shellL0Mesh/shellL1Mesh/shellL1WoodMesh/shellL2Mesh/shellL2WoodMesh.
+            // Range: requires readable foliage and wood meshes plus valid shell budgets. Condition: MeshVoxelizer generates 16/12/8 shell meshes and L0 surface voxels drive the hierarchy split. Output: the prototype receives shellNodes plus refreshed simplified wood attachments.
             if (prototype == null)
             {
                 throw new ArgumentNullException(nameof(prototype));
@@ -38,86 +38,96 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             ShellBakeSettings activeSettings = settings ?? new ShellBakeSettings();
-            int l0Target = Mathf.Max(1, Mathf.Min(activeSettings.TargetTrianglesL0, prototype.TriangleBudgetShellL0));
-            Mesh shellL0Mesh = BuildShellMesh(foliageMesh, activeSettings.VoxelResolutionL0, l0Target, 0);
+            MeshVoxelizerHierarchyNode[] hierarchyNodes = MeshVoxelizerHierarchyBuilder.BuildHierarchy(
+                foliageMesh,
+                activeSettings.VoxelResolutionL0,
+                activeSettings.VoxelResolutionL1,
+                activeSettings.VoxelResolutionL2,
+                activeSettings.MaxOctreeDepth,
+                activeSettings.MinimumSurfaceVoxelCountToSplit);
+            if (hierarchyNodes.Length == 0)
+            {
+                throw new InvalidOperationException($"{foliageMesh.name} produced no occupied shell nodes.");
+            }
 
-            int l1Target = Mathf.Max(
-                1,
-                Math.Min(
-                    activeSettings.TargetTrianglesL1,
-                    Math.Min(prototype.TriangleBudgetShellL1, GetTriangleCount(shellL0Mesh) - 1)));
-            Mesh shellL1Mesh = BuildShellMesh(foliageMesh, activeSettings.VoxelResolutionL1, l1Target, 1);
+            string nodeMeshPrefix = $"{prototype.name}_ShellNode";
+            BranchShellNode[] persistedNodes = PersistShellNodes(prototype, hierarchyNodes, nodeMeshPrefix);
+            Mesh shellL1WoodMesh = BuildWoodAttachmentMesh(woodMesh, 1);
+            Mesh shellL2WoodMesh = BuildWoodAttachmentMesh(woodMesh, 2);
 
-            int l2Target = Mathf.Max(
-                1,
-                Math.Min(
-                    activeSettings.TargetTrianglesL2,
-                    Math.Min(prototype.TriangleBudgetShellL2, GetTriangleCount(shellL1Mesh) - 1)));
-            Mesh shellL2Mesh = BuildShellMesh(foliageMesh, activeSettings.VoxelResolutionL2, l2Target, 2);
+            SetPrivateField(
+                prototype,
+                "shellL1WoodMesh",
+                GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                    prototype,
+                    $"{prototype.name}_ShellL1Wood",
+                    shellL1WoodMesh,
+                    prototype.GeneratedCanopyShellsRelativeFolder));
+            SetPrivateField(
+                prototype,
+                "shellL2WoodMesh",
+                GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                    prototype,
+                    $"{prototype.name}_ShellL2Wood",
+                    shellL2WoodMesh,
+                    prototype.GeneratedCanopyShellsRelativeFolder));
+            SetPrivateField(prototype, "shellNodes", persistedNodes);
 
-            Mesh shellL1WoodMesh = BuildWoodAttachmentMesh(woodMesh, GetReducedTriangleTarget(woodMesh), 1);
-            Mesh shellL2WoodMesh = BuildWoodAttachmentMesh(shellL1WoodMesh, GetReducedTriangleTarget(shellL1WoodMesh), 2);
-
-            SerializedObject serializedPrototype = new SerializedObject(prototype);
-            serializedPrototype.FindProperty("shellL0Mesh").objectReferenceValue =
-                GeneratedMeshAssetUtility.PersistGeneratedMesh(prototype, $"{prototype.name}_ShellL0", shellL0Mesh);
-            serializedPrototype.FindProperty("shellL1Mesh").objectReferenceValue =
-                GeneratedMeshAssetUtility.PersistGeneratedMesh(prototype, $"{prototype.name}_ShellL1", shellL1Mesh);
-            serializedPrototype.FindProperty("shellL1WoodMesh").objectReferenceValue =
-                GeneratedMeshAssetUtility.PersistGeneratedMesh(prototype, $"{prototype.name}_ShellL1Wood", shellL1WoodMesh);
-            serializedPrototype.FindProperty("shellL2Mesh").objectReferenceValue =
-                GeneratedMeshAssetUtility.PersistGeneratedMesh(prototype, $"{prototype.name}_ShellL2", shellL2Mesh);
-            serializedPrototype.FindProperty("shellL2WoodMesh").objectReferenceValue =
-                GeneratedMeshAssetUtility.PersistGeneratedMesh(prototype, $"{prototype.name}_ShellL2Wood", shellL2WoodMesh);
-            serializedPrototype.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(prototype);
         }
 
-        private static Mesh BuildShellMesh(Mesh foliageMesh, int resolution, int targetTriangleCount, int dilationIterations)
+        private static BranchShellNode[] PersistShellNodes(BranchPrototypeSO prototype, MeshVoxelizerHierarchyNode[] hierarchyNodes, string nodeMeshPrefix)
         {
-            VoxelGrid voxelGrid = Voxelizer.VoxelizeSolid(foliageMesh, resolution);
-            if (voxelGrid.OccupiedCount == 0)
+            BranchShellNode[] persistedNodes = new BranchShellNode[hierarchyNodes.Length];
+            for (int i = 0; i < hierarchyNodes.Length; i++)
             {
-                throw new InvalidOperationException($"{foliageMesh.name} produced no occupied voxels at resolution {resolution}.");
+                MeshVoxelizerHierarchyNode node = hierarchyNodes[i];
+                string nodePath = $"D{node.Depth}_{i:D3}";
+                Mesh persistedL0 = GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                    prototype,
+                    $"{nodeMeshPrefix}_{nodePath}_L0",
+                    node.ShellL0Mesh ?? throw new InvalidOperationException($"Node {i} is missing L0 shell mesh."),
+                    prototype.GeneratedCanopyShellsRelativeFolder);
+                Mesh persistedL1 = GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                    prototype,
+                    $"{nodeMeshPrefix}_{nodePath}_L1",
+                    node.ShellL1Mesh ?? throw new InvalidOperationException($"Node {i} is missing L1 shell mesh."),
+                    prototype.GeneratedCanopyShellsRelativeFolder);
+                Mesh persistedL2 = GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                    prototype,
+                    $"{nodeMeshPrefix}_{nodePath}_L2",
+                    node.ShellL2Mesh ?? throw new InvalidOperationException($"Node {i} is missing L2 shell mesh."),
+                    prototype.GeneratedCanopyShellsRelativeFolder);
+
+                persistedNodes[i] = new BranchShellNode(
+                    node.LocalBounds,
+                    node.Depth,
+                    node.FirstChildIndex,
+                    node.ChildMask,
+                    persistedL0,
+                    persistedL1,
+                    persistedL2);
             }
 
-            VoxelGrid buildGrid = dilationIterations > 0
-                ? voxelGrid.CreateDilated(dilationIterations)
-                : voxelGrid;
+            return persistedNodes;
+        }
 
-            Mesh surfaceMesh = Voxelizer.CreateSurfaceMesh(buildGrid);
-            if (GetTriangleCount(surfaceMesh) == 0)
+        private static Mesh BuildWoodAttachmentMesh(Mesh sourceWoodMesh, int shellLevel)
+        {
+            Mesh clonedMesh = UnityEngine.Object.Instantiate(sourceWoodMesh);
+            clonedMesh.name = $"{sourceWoodMesh.name}_ShellL{shellLevel}Wood";
+            return clonedMesh;
+        }
+
+        private static void SetPrivateField(object target, string fieldName, object? value)
+        {
+            FieldInfo? fieldInfo = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (fieldInfo == null)
             {
-                throw new InvalidOperationException($"{foliageMesh.name} produced an empty shell surface at resolution {resolution}.");
+                throw new InvalidOperationException($"Field '{fieldName}' was not found on '{target.GetType().Name}'.");
             }
 
-            Mesh simplifiedMesh = MeshSimplifier.Simplify(surfaceMesh, targetTriangleCount);
-            UnityEngine.Object.DestroyImmediate(surfaceMesh);
-            simplifiedMesh.name = $"{foliageMesh.name}_Shell";
-            return simplifiedMesh;
-        }
-
-        private static Mesh BuildWoodAttachmentMesh(Mesh sourceWoodMesh, int targetTriangleCount, int shellLevel)
-        {
-            Mesh simplifiedMesh = MeshSimplifier.Simplify(sourceWoodMesh, targetTriangleCount);
-            simplifiedMesh.name = $"{sourceWoodMesh.name}_ShellL{shellLevel}Wood";
-            return simplifiedMesh;
-        }
-
-        private static int GetReducedTriangleTarget(Mesh sourceMesh)
-        {
-            int sourceTriangleCount = GetTriangleCount(sourceMesh);
-            if (sourceTriangleCount <= 1)
-            {
-                return 1;
-            }
-
-            return Mathf.Clamp(Mathf.CeilToInt(sourceTriangleCount * WoodReductionRatio), 1, sourceTriangleCount - 1);
-        }
-
-        private static int GetTriangleCount(Mesh mesh)
-        {
-            return mesh.triangles.Length / 3;
+            fieldInfo.SetValue(target, value);
         }
     }
 }

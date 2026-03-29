@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using MeshVoxelizerProject;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -29,18 +30,22 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             ImpostorBakeSettings activeSettings = settings ?? new ImpostorBakeSettings();
             int targetTriangles = Mathf.Max(1, activeSettings.TargetTriangles);
             int voxelResolution = Mathf.Clamp(Mathf.CeilToInt(Mathf.Pow(targetTriangles * 1.5f, 1f / 3f)) * 2, 8, 20);
-
-            VoxelGrid voxelGrid = Voxelizer.VoxelizeSolid(combinedTreeMesh, voxelResolution).CreateDilated(3);
-            Mesh surfaceMesh = Voxelizer.CreateSurfaceMesh(voxelGrid);
-            if (surfaceMesh.triangles.Length == 0)
+            MeshVoxelizerHierarchyNode[] hierarchyNodes = MeshVoxelizerHierarchyBuilder.BuildHierarchy(
+                combinedTreeMesh,
+                voxelResolution,
+                voxelResolution,
+                voxelResolution,
+                0,
+                1);
+            Mesh? surfaceMesh = hierarchyNodes.Length == 0 ? null : hierarchyNodes[0].ShellL0Mesh;
+            if (surfaceMesh == null || surfaceMesh.triangles.Length == 0)
             {
                 UnityEngine.Object.DestroyImmediate(combinedTreeMesh);
-                UnityEngine.Object.DestroyImmediate(surfaceMesh);
                 throw new InvalidOperationException($"{blueprint.name} did not produce a valid impostor surface mesh.");
             }
 
-            Mesh simplifiedMesh = MeshSimplifier.Simplify(surfaceMesh, targetTriangles, activeSettings.WeldThreshold);
-            UnityEngine.Object.DestroyImmediate(surfaceMesh);
+            Mesh simplifiedMesh = surfaceMesh; // no simplification for now.
+            DestroyUnusedHierarchyMeshes(hierarchyNodes, simplifiedMesh);
             UnityEngine.Object.DestroyImmediate(combinedTreeMesh);
 
             SerializedObject serializedBlueprint = new SerializedObject(blueprint);
@@ -48,6 +53,24 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 GeneratedMeshAssetUtility.PersistGeneratedMesh(blueprint, $"{blueprint.name}_Impostor", simplifiedMesh);
             serializedBlueprint.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(blueprint);
+        }
+
+        private static void DestroyUnusedHierarchyMeshes(MeshVoxelizerHierarchyNode[] hierarchyNodes, Mesh retainedMesh)
+        {
+            for (int i = 0; i < hierarchyNodes.Length; i++)
+            {
+                DestroyIfDifferent(hierarchyNodes[i].ShellL0Mesh, retainedMesh);
+                DestroyIfDifferent(hierarchyNodes[i].ShellL1Mesh, retainedMesh);
+                DestroyIfDifferent(hierarchyNodes[i].ShellL2Mesh, retainedMesh);
+            }
+        }
+
+        private static void DestroyIfDifferent(Mesh? mesh, Mesh retainedMesh)
+        {
+            if (mesh != null && !ReferenceEquals(mesh, retainedMesh))
+            {
+                UnityEngine.Object.DestroyImmediate(mesh);
+            }
         }
 
         private static Mesh CreateCombinedTreeSpaceMesh(TreeBlueprintSO blueprint)
@@ -72,16 +95,16 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             {
                 BranchPlacement placement = placements[i] ?? throw new InvalidOperationException($"{blueprint.name} branch placement {i} is missing.");
                 BranchPrototypeSO prototype = placement.Prototype ?? throw new InvalidOperationException($"{blueprint.name} branch placement {i} is missing prototype.");
-                Mesh shellL2Mesh = prototype.ShellL2Mesh ?? throw new InvalidOperationException($"{prototype.name} is missing shellL2Mesh.");
                 Mesh shellL2WoodMesh = prototype.ShellL2WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing shellL2WoodMesh.");
-                if (!shellL2Mesh.isReadable)
-                {
-                    throw new InvalidOperationException($"{prototype.name} shellL2Mesh must be readable before impostor baking.");
-                }
-
                 if (!shellL2WoodMesh.isReadable)
                 {
                     throw new InvalidOperationException($"{prototype.name} shellL2WoodMesh must be readable before impostor baking.");
+                }
+
+                List<BranchShellNode> leafNodes = BranchShellNodeUtility.CollectLeafNodes(prototype.ShellNodes);
+                if (leafNodes.Count == 0)
+                {
+                    throw new InvalidOperationException($"{prototype.name} is missing shellNodes for impostor baking.");
                 }
 
                 Matrix4x4 branchMatrix = Matrix4x4.TRS(
@@ -90,7 +113,17 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     Vector3.one * placement.Scale);
 
                 AppendMesh(vertices, triangles, shellL2WoodMesh, branchMatrix);
-                AppendMesh(vertices, triangles, shellL2Mesh, branchMatrix);
+                for (int leafIndex = 0; leafIndex < leafNodes.Count; leafIndex++)
+                {
+                    Mesh shellL2Mesh = leafNodes[leafIndex].ShellL2Mesh ??
+                                       throw new InvalidOperationException($"{prototype.name} leaf node {leafIndex} is missing shellL2Mesh.");
+                    if (!shellL2Mesh.isReadable)
+                    {
+                        throw new InvalidOperationException($"{prototype.name} leaf node {leafIndex} shellL2Mesh must be readable before impostor baking.");
+                    }
+
+                    AppendMesh(vertices, triangles, shellL2Mesh, branchMatrix);
+                }
             }
 
             Mesh combinedMesh = new Mesh

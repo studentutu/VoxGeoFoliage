@@ -82,17 +82,6 @@ public sealed class AuthoringValidationTests
     }
 
     [Test]
-    public void BranchPrototype_TriangleBudget_FailsValidation()
-    {
-        BranchPrototypeSO prototype = CreateValidBranchPrototype();
-        SetPrivateField(prototype, "triangleBudgetWood", 1);
-
-        VegetationValidationResult result = prototype.Validate();
-
-        AssertHasError(result, "woodMesh triangle count");
-    }
-
-    [Test]
     public void BranchPrototype_LocalBoundsContainWoodAndFoliage()
     {
         BranchPrototypeSO prototype = CreateValidBranchPrototype();
@@ -104,16 +93,38 @@ public sealed class AuthoringValidationTests
     }
 
     [Test]
-    public void BranchPrototype_ShellTriangleOrder_L0GreaterThanL1GreaterThanL2()
+    public void BranchPrototype_ShellHierarchyTriangleOrder_FailsValidation()
     {
         BranchPrototypeSO prototype = CreateValidBranchPrototype(includeShells: true);
-        SetPrivateField(prototype, "shellL0Mesh", CreateMesh("ShellL0", 3, new Bounds(Vector3.zero, Vector3.one)));
-        SetPrivateField(prototype, "shellL1Mesh", CreateMesh("ShellL1", 5, new Bounds(Vector3.zero, Vector3.one)));
-        SetPrivateField(prototype, "shellL2Mesh", CreateMesh("ShellL2", 2, new Bounds(Vector3.zero, Vector3.one)));
+        SetPrivateField(
+            prototype,
+            "shellNodes",
+            new[]
+            {
+                CreateShellNode(0, -1, 0, 3, 5, 2, new Bounds(Vector3.zero, Vector3.one))
+            });
 
         VegetationValidationResult result = prototype.Validate();
 
-        AssertHasError(result, "Shell triangle counts must strictly decrease");
+        AssertHasError(result, "Leaf-frontier shell triangle counts must strictly decrease");
+    }
+
+    [Test]
+    public void BranchPrototype_ShellHierarchyTopology_FailsValidation()
+    {
+        BranchPrototypeSO prototype = CreateValidBranchPrototype(includeShells: true);
+        SetPrivateField(
+            prototype,
+            "shellNodes",
+            new[]
+            {
+                CreateShellNode(0, 0, 1, 7, 5, 3, new Bounds(Vector3.zero, Vector3.one)),
+                CreateShellNode(2, -1, 0, 4, 3, 2, new Bounds(Vector3.zero, Vector3.one * 0.5f))
+            });
+
+        VegetationValidationResult result = prototype.Validate();
+
+        AssertHasError(result, "firstChildIndex must point to a later preorder node");
     }
 
     [Test]
@@ -126,6 +137,16 @@ public sealed class AuthoringValidationTests
         VegetationValidationResult result = prototype.Validate();
 
         AssertHasError(result, "Wood triangle counts must not increase");
+    }
+
+    [Test]
+    public void BranchPrototype_ValidHierarchy_PassesValidation()
+    {
+        BranchPrototypeSO prototype = CreateValidBranchPrototype(includeShells: true);
+
+        VegetationValidationResult result = prototype.Validate();
+
+        Assert.IsFalse(result.HasErrors, string.Join(Environment.NewLine, result.Issues.Select(issue => issue.Message)));
     }
 
     [Test]
@@ -228,10 +249,14 @@ public sealed class AuthoringValidationTests
 
         if (includeShells)
         {
-            SetPrivateField(prototype, "shellL0Mesh", CreateMesh("ShellL0", 7, new Bounds(Vector3.zero, Vector3.one)));
-            SetPrivateField(prototype, "shellL1Mesh", CreateMesh("ShellL1", 5, new Bounds(Vector3.zero, Vector3.one * 0.8f)));
+            SetPrivateField(
+                prototype,
+                "shellNodes",
+                new[]
+                {
+                    CreateShellNode(0, -1, 0, 7, 5, 3, new Bounds(Vector3.zero, Vector3.one))
+                });
             SetPrivateField(prototype, "shellL1WoodMesh", CreateMesh("ShellL1Wood", 2, new Bounds(Vector3.zero, Vector3.one * 0.5f)));
-            SetPrivateField(prototype, "shellL2Mesh", CreateMesh("ShellL2", 3, new Bounds(Vector3.zero, Vector3.one * 0.6f)));
             SetPrivateField(prototype, "shellL2WoodMesh", CreateMesh("ShellL2Wood", 1, new Bounds(Vector3.zero, Vector3.one * 0.3f)));
             SetPrivateField(prototype, "shellMaterial", CreateOpaqueMaterial("ShellMaterial"));
         }
@@ -280,6 +305,18 @@ public sealed class AuthoringValidationTests
         SetPrivateField(lodProfile, "backsideBiasScale", 0.2f);
         SetPrivateField(lodProfile, "silhouetteKeepThreshold", 0.8f);
         return lodProfile;
+    }
+
+    private BranchShellNode CreateShellNode(int depth, int firstChildIndex, byte childMask, int l0Triangles, int l1Triangles, int l2Triangles, Bounds bounds)
+    {
+        return new BranchShellNode(
+            bounds,
+            depth,
+            firstChildIndex,
+            childMask,
+            CreateMesh($"ShellL0_{depth}", l0Triangles, bounds),
+            CreateMesh($"ShellL1_{depth}", l1Triangles, bounds),
+            CreateMesh($"ShellL2_{depth}", l2Triangles, bounds));
     }
 
     private T CreateScriptableObject<T>() where T : ScriptableObject

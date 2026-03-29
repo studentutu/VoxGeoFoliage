@@ -19,9 +19,9 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         /// <summary>
         /// [INTEGRATION] Reuses or creates a generated mesh asset under a writable project folder.
         /// </summary>
-        public static Mesh PersistGeneratedMesh(UnityEngine.Object ownerAsset, string meshName, Mesh generatedMesh)
+        public static Mesh PersistGeneratedMesh(UnityEngine.Object ownerAsset, string meshName, Mesh generatedMesh, string? relativeFolderToSave = null)
         {
-            // Range: owner asset can be transient or saved. Condition: generated mesh already contains final topology. Output: explicit .mesh asset beside the owner asset when it lives under Assets/, otherwise under a writable fallback folder in Assets/.
+            // Range: owner asset can be transient or saved. Condition: generated mesh already contains final topology. Output: explicit .mesh asset in the requested Assets folder when provided, otherwise beside the owner asset or under a writable fallback folder.
             if (ownerAsset == null)
             {
                 throw new ArgumentNullException(nameof(ownerAsset));
@@ -39,7 +39,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 return generatedMesh;
             }
 
-            string meshFolderPath = ResolveWritableMeshFolderPath(assetPath);
+            string meshFolderPath = ResolveWritableMeshFolderPath(assetPath, relativeFolderToSave);
             EnsureFolderPath(meshFolderPath);
             string meshAssetPath = BuildGeneratedMeshAssetPath(assetPath, meshFolderPath, meshName);
             Mesh? existingMesh = AssetDatabase.LoadAssetAtPath<Mesh>(meshAssetPath);
@@ -51,15 +51,32 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 return generatedMesh;
             }
 
+            if (ReferenceEquals(existingMesh, generatedMesh))
+            {
+                EditorUtility.SetDirty(existingMesh);
+                EditorUtility.SetDirty(ownerAsset);
+                return existingMesh;
+            }
+
             CopyMeshData(generatedMesh, existingMesh);
-            UnityEngine.Object.DestroyImmediate(generatedMesh);
+            if (!EditorUtility.IsPersistent(generatedMesh))
+            {
+                UnityEngine.Object.DestroyImmediate(generatedMesh);
+            }
+
             EditorUtility.SetDirty(existingMesh);
             EditorUtility.SetDirty(ownerAsset);
             return existingMesh;
         }
 
-        private static string ResolveWritableMeshFolderPath(string ownerAssetPath)
+        private static string ResolveWritableMeshFolderPath(string ownerAssetPath, string? relativeFolderToSave)
         {
+            string explicitFolderPath = ResolveExplicitFolderPath(relativeFolderToSave);
+            if (!string.IsNullOrEmpty(explicitFolderPath))
+            {
+                return explicitFolderPath;
+            }
+
             string normalizedOwnerAssetPath = NormalizeAssetPath(ownerAssetPath);
             if (normalizedOwnerAssetPath.StartsWith("Assets/", StringComparison.Ordinal))
             {
@@ -71,6 +88,29 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             return FallbackGeneratedMeshFolderPath;
+        }
+
+        private static string ResolveExplicitFolderPath(string? relativeFolderToSave)
+        {
+            if (string.IsNullOrWhiteSpace(relativeFolderToSave))
+            {
+                return string.Empty;
+            }
+
+            string explicitFolder = relativeFolderToSave!;
+            string cleaned = NormalizeAssetPath(explicitFolder.Trim());
+            if (string.IsNullOrEmpty(cleaned))
+            {
+                return string.Empty;
+            }
+
+            if (string.Equals(cleaned, "Assets", StringComparison.OrdinalIgnoreCase) ||
+                cleaned.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+            {
+                return cleaned;
+            }
+
+            return $"Assets/{cleaned.TrimStart('/')}";
         }
 
         private static string BuildGeneratedMeshAssetPath(string ownerAssetPath, string meshFolderPath, string meshName)

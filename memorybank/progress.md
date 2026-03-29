@@ -29,25 +29,38 @@ Status note:
 - `Assets/Tree/VoxFoliage/BranchPrototype_branch_leaves_fullgeo.asset` now uses mesh-derived `localBounds` and a foliage budget aligned with the real imported source mesh.
 
 ### Phase B: Shell Generation (Canopy Shell + Impostor Baking + Tests)
-- [x] Implement `Voxelizer` on foliage geometry
-- [x] Implement shell extraction (surface voxels to mesh)
-- [x] Implement `MeshSimplifier` (vertex clustering + weld budget reduction for generated meshes)
-- [x] Implement `CanopyShellGenerator`
-- [x] Implement `ImpostorMeshGenerator` from merged tree-space shell L2 assembly plus simplified branch wood attachments
+- [x] Implement MeshVoxelizer-based `16/12/8` hierarchy generation on foliage geometry
+- [x] Implement shell extraction by splitting L0 surface voxels into octant nodes
+- [x] Rebuild `CanopyShellGenerator` on `MeshVoxelizerHierarchyBuilder`
+- [x] Replace the MVP single-chain branch shell model with hierarchical `shellNodes`
+- [x] Rebuild `ImpostorMeshGenerator` on merged tree-space MeshVoxelizer extraction
 - [x] Wire shell / impostor baking into SOs
 - [x] Shape bake outputs so editor preview can reconstruct shell tiers by level from blueprint data
-- [x] Write shell generation EditMode tests
-- [x] Compile check + run tests
+- [x] Rewrite shell generation EditMode tests around the hierarchy builder and new bake path
+- [x] Remove obsolete editor voxel generation code and legacy tests
+- [x] Compile check
+- [ ] Run tests
 
 Status note:
-- Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-28` after adding the Phase B files and regenerating the Unity solution.
-- Rider MSBuild compile (`Compile by Rider MSBuild`) passed on `2026-03-28` after the final Phase B fixes.
-- Unity EditMode tests passed on `2026-03-28` (`runParsetests.sh`).
+- Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-30` after removing the legacy editor voxel pipeline and rebuilding the Phase B bake path around `MeshVoxelizerHierarchyBuilder`.
+- The authoritative branch canopy data is now `BranchPrototypeSO.shellNodes`; branch-wide `shellL0Mesh/shellL1Mesh/shellL2Mesh` were removed.
+- `CanopyShellGenerator` now voxelizes readable foliage at `16/12/8`, splits L0 surface voxels into octant nodes, and persists one `L0/L1/L2` mesh triplet per node.
+- `ShellBakeSettings` now expose `maxOctreeDepth`, `voxelResolutionL0`, `voxelResolutionL1`, `voxelResolutionL2`, and `minimumSurfaceVoxelCountToSplit`.
+- `ImpostorMeshGenerator` now merges tree-space source geometry and extracts the impostor surface from the root MeshVoxelizer node instead of the removed legacy voxel field path.
+- Editor preview, authoring validation, summary accounting, and impostor generation consume the leaf frontier of the hierarchy.
+- Unity EditMode tests were rewritten for the MeshVoxelizer hierarchy path on `2026-03-30`, but they were not rerun through the full Unity test runner in this pass.
 - Added `ShellBakeSettings` and `ImpostorBakeSettings` under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
-- Added `VoxelGrid`, `Voxelizer`, `MeshSimplifier`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, and `ImpostorMeshGenerator` under `Packages/com.voxgeofol.vegetation/Editor/`.
+- Added `BranchShellNode`, `BranchShellNodeUtility`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, `ImpostorMeshGenerator`, and `Runtime/MeshVoxelizerV1/*` under the vegetation package.
 - Generated shell and impostor meshes now persist as standalone `.mesh` assets under owner-local `GeneratedMeshes/` folders in `Assets/`.
-- `CanopyShellGenerator` now also bakes `shellL1WoodMesh` and `shellL2WoodMesh` so branch wood remains attached in shell preview tiers.
+- `CanopyShellGenerator` now bakes node-local `L0/L1/L2` shells plus branch-level `shellL1WoodMesh` and `shellL2WoodMesh` so branch wood remains attached in shell preview tiers.
+- Removed obsolete `Voxelizer`, `VoxelGrid`, and `MarchingTetrahedraMesher` from `Packages/com.voxgeofol.vegetation/Editor/`.
 - Added `Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs` plus shell-preview coverage in `AuthoringAssetSyncTests.cs`.
+- `2026-03-30`: real branch validation exposed incorrect shell output from the first hierarchical baker; the production bake path now uses `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder.cs` and `MeshVoxelizerHierarchyNode.cs`, with `MeshVoxelizerHierarchyDemo.cs` retained as the manual validation tool.
+
+### Phase B Follow-up: MeshVoxelizer Rewrite Investigation
+- [x] Add an experimental MeshVoxelizer-based hierarchy sample using `16/12/8` voxel levels
+- [x] Replace the production `CanopyShellGenerator` bake path with the MeshVoxelizer-based hierarchy once the split strategy is validated on real branches
+- [ ] Run the full Unity EditMode test suite on the rebuilt Phase B bake path
 
 ### Phase C: Editor Preview
 - [x] Extract preview and bake entry points out of `VegetationTreeAuthoring` into editor-only utilities
@@ -102,7 +115,6 @@ Status note:
 - HiZ depth pyramid occlusion
 - LOD transition dithering / cross-fade
 - Runtime streaming / dynamic loading
-- Hierarchical sub-branch canopy shells
 - Hierarchical wind system
 - Scale quantization optimization
 - Feature-grade placement tools (terrain scatter, paint). Basic editor-only `MassPlacement` physical-ground scatter already exists under `Assets/Scripts/MassPlacement`.
