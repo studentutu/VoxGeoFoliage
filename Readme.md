@@ -21,14 +21,14 @@ Short summary:
 - use canopy shells (voxelized mesh) for each of the level of detail.
 - each branch consists of multi-level hierarchy of the canopy shells (includes leaves into a voxelized form), thus evenly preserved hight quality in the near and heavy minimize the level of details of obscured (behind the trunk) branches.
 - last level of detail (imposter) is fully opaque based on the minimum requirements
-- nanite opaque rendering if very fast if no shader movement exists, thus wind is animated per branch bone (wind is animation, compute shader based)
+- Nanite opaque rendering if very fast if no shader movement exists, thus wind is animated per branch bone (wind is animation, compute shader based)
 
 ## Limitation of Unity
 
 We can't make it one-to-one right now, but we still have options:
 - Unity doesn't have Nanite alternative, closest to it is an experimental virtual mesh package [VirtualMeshPackage](https://github.com/Unity-Technologies/com.unity.virtualmesh)
 - Unity SRP (URP) does support similar mechanism to the assemblies, which is custom render batch by Indirect draw within a custom feature/render pass.
-- Reduced geometry at all levels in SRP lods needs to be explicit for the manual render batch approach
+- Reduced geometry at all levels in SRP (custom lods) needs to be explicit for the manual render batch approach
 - to keep SRP-friendly batching and allow variation we can use Unity API Renderer Shader User Value (RSUV) which is a tightly pack `uint` that is manually unpacked in shader for any form of variation for the instances.
 
 ## Details
@@ -81,7 +81,6 @@ Uses recommended Unity package workflow with explicit separation of editor/runti
   - ask parse unity tests
   - ask fast-recompile project
 
-
 ## Verification
 
 - Tests, Compilation, Editor Runtime
@@ -96,4 +95,3 @@ This repository is licensed under the MIT License.
 - Root repository license: [LICENSE](LICENSE)
 - Package license: [Packages/com.voxgeofol.vegetation/LICENSE.md](Packages/com.voxgeofol.vegetation/LICENSE.md)
 
-Copyright (c) 2025 The Last Outpost Workshop
