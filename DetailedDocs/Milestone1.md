@@ -55,7 +55,6 @@ This system does not use Unity's built-in `LODGroup`. LOD selection is fully own
 - Implemented the Task 1 runtime authoring types under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
 - Implemented explicit authoring validation via `VegetationAuthoringValidator`.
 - Added demo authoring sync in `Packages/com.voxgeofol.vegetation/Editor/VegetationPhaseAAuthoringSync.cs` to rebuild branch placements/bounds from the assembled tree prefab.
-- Added `VegetationTreeAuthoring` context actions to reconstruct or clear the original branch hierarchy from saved branch placement data.
 - Added EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringValidationTests.cs` and `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringAssetSyncTests.cs`.
 - Verified with `Fully Compile by Unity` and the Unity EditMode test runner; the demo `branch_leaves_fullgeo` assets now validate and the demo tree blueprint is populated.
 
@@ -141,13 +140,23 @@ No runtime data is stored on the MonoBehaviour. `leafColorTint` lives on `Branch
 
 ## Task 2: Editor Preview
 
-### 2.1 `VegetationEditorPreview` MonoBehaviour (Editor-only, `[ExecuteInEditMode]`)
+### Implementation Status (`2026-03-29`)
 
-Attached to the same GameObject as `VegetationTreeAuthoring`. Use Unity OnValidate and Toggle on/off via Inspector bool to preview with full geometry and off to remove it.
+- Added `VegetationEditorPreview`, `VegetationTreeAuthoringEditorUtility`, `VegetationTreeAuthoringEditorPanel`, `VegetationTreeAuthoringEditor`, and `VegetationTreeAuthoringWindow` under `Packages/com.voxgeofol.vegetation/Editor/`.
+- `VegetationTreeAuthoring` is back to being a clean scene binding plus validation surface; preview reconstruction and bake entry points now live in editor-only code.
+- The custom inspector now shows blueprint summary (branch count, per-tier triangle totals, bounds), aggregated validation issues, preview toggle/tier controls, and shell/impostor bake buttons.
+- The dedicated editor window can target the selected `VegetationTreeAuthoring` and reuses the same preview/bake controls outside the Inspector.
+- Preview tiers rebuild a transient hierarchy under the configured branch root using `HideFlags.DontSave | HideFlags.NotEditable`, including the milestone-required `R0`, `R1`, `R2`, `R3`, and shell-only views.
+- Updated `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringAssetSyncTests.cs` to cover the extracted preview utility and editor utility bake entry point.
+- Verified with `Fully Compile by Unity` on `2026-03-29`.
 
-**Behavior when enabled PrewviewbyGeometry**
-- Spawns child GameObjects under the tree root for the selected representation tier.
-- Inspector enum: `PreviewTier { R0_Full, R1_ShellL1, R2_ShellL2, R3_Impostor, ShellL0_Only, ShellL1_Only, ShellL2_Only }`
+### 2.1 `VegetationEditorPreview` Editor Utility
+
+Driven from the custom inspector and the dedicated editor window. The utility stores the last selected preview tier in editor session state and rebuilds the preview directly from `TreeBlueprintSO` plus the referenced branch prototypes.
+
+**Behavior**
+- Spawns transient child GameObjects under the configured tree branch root for the selected representation tier.
+- Editor enum: `VegetationPreviewTier { R0Full, R1ShellL1, R2ShellL2, R3Impostor, ShellL0Only, ShellL1Only, ShellL2Only }`
 - On tier change: destroy previous preview children, then spawn the new preview set.
 
 **Preview child structure**
@@ -167,7 +176,7 @@ Attached to the same GameObject as `VegetationTreeAuthoring`. Use Unity OnValida
 - On disable or blueprint change: clean up all preview children.
 - Use the source materials from the SOs. No special runtime path is required for preview.
 
-### 2.2 Custom Inspector
+### 2.2 Custom Inspector + Editor Window
 
 `VegetationTreeAuthoringEditor`
 - Shows blueprint summary: branch count, total tris per tier, bounds.
@@ -175,10 +184,12 @@ Attached to the same GameObject as `VegetationTreeAuthoring`. Use Unity OnValida
 - Exposes preview toggle + tier selector.
 - Button: `Regenerate Shells`
 - Button: `Regenerate Impostor`
+- Button: `Regenerate Shells And Impostor`
+- Button: `Open Editor Window`
 
-Interim status (`2026-03-29`)
-- Before the custom inspector exists, `VegetationTreeAuthoring` now exposes context-menu entry points for `BakeCanopyShells`, `BakeImpostor`, and `BakeCanopyShellsAndImpostor`.
-- Those context actions bridge to the editor-only bake pipeline, so the scene authoring component is already the main manual entry point for Phase B baking and shell preview reconstruction.
+`VegetationTreeAuthoringWindow`
+- Targets a selected `VegetationTreeAuthoring` component.
+- Reuses the same preview, validation, summary, and bake controls when the Inspector is not convenient.
 
 ---
 
@@ -192,8 +203,7 @@ Interim status (`2026-03-29`)
 - `CanopyShellGenerator` also bakes `shellL1WoodMesh` and `shellL2WoodMesh` so shell preview tiers keep branch structure attached to the canopy shell.
 - `ImpostorMeshGenerator` now merges `trunkMesh` plus transformed `shellL2Mesh` and `shellL2WoodMesh` instances in tree local space and writes `impostorMesh` onto `TreeBlueprintSO`.
 - Generated shell and impostor meshes are persisted as explicit `.mesh` assets under owner-local `GeneratedMeshes/` folders in `Assets/` so they survive editor restarts and stay compatible with public package installs.
-- `VegetationTreeAuthoring` now exposes shell reconstruction context actions for `ShellL0`, `ShellL1`, and `ShellL2`.
-- Added EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs` and extended `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringAssetSyncTests.cs` with shell preview reconstruction coverage.
+- Added EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs` and extended `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringAssetSyncTests.cs` with shell preview reconstruction coverage through the extracted editor preview utility.
 - Verified with `Fully Compile by Unity`, `Compile by Rider MSBuild`, and the Unity EditMode test runner (`runParsetests.sh`).
 
 ### 3.1 Pipeline Overview
@@ -693,8 +703,13 @@ Packages/com.voxgeofol.vegetation/
 |   `-- Vegetation.asmdef
 |-- Editor/
 |   |-- VegetationPhaseAAuthoringSync.cs
+|   |-- VegetationPreviewTier.cs
+|   |-- VegetationAuthoringSummary.cs
 |   |-- VegetationEditorPreview.cs
 |   |-- VegetationTreeAuthoringEditor.cs
+|   |-- VegetationTreeAuthoringEditorPanel.cs
+|   |-- VegetationTreeAuthoringEditorUtility.cs
+|   |-- VegetationTreeAuthoringWindow.cs
 |   |-- CanopyShellGenerator.cs
 |   |-- GeneratedMeshAssetUtility.cs
 |   |-- ImpostorMeshGenerator.cs

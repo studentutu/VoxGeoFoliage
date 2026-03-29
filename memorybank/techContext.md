@@ -33,7 +33,7 @@ Repo-used libraries and plugins:
 - `Packages/com.voxgeofol.vegetation/Runtime`
   - runtime-side authoring data and shared vegetation code
 - `Packages/com.voxgeofol.vegetation/Editor`
-  - Phase A authoring sync and Phase B shell/impostor bake tooling
+  - Phase A authoring sync, Phase B shell/impostor bake tooling, and Phase C preview/inspector/window tooling
 - `Packages/com.voxgeofol.vegetation/Tests/Editor`
   - vegetation EditMode coverage that now ships with the package
 - `Packages/com.voxgeofol.vegetation/Samples~/Vegetation Demo`

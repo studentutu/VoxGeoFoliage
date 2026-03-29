@@ -170,10 +170,18 @@ public sealed class AuthoringAssetSyncTests
     }
 
     [Test]
-    public void ReconstructFromDataAndOriginalBranch_RebuildsBranchHierarchyFromBlueprint()
+    public void ShowPreview_R0Full_RebuildsTransientHierarchyFromBlueprint()
     {
         EnsureTestFolders();
 
+        Mesh trunkMesh = CreateMeshAsset(
+            "reconstruct_trunk.asset",
+            new[]
+            {
+                new Vector3(-0.2f, -1f, -0.2f),
+                new Vector3(0.2f, 1.5f, -0.2f),
+                new Vector3(-0.2f, -1f, 0.2f)
+            });
         Mesh woodMesh = CreateMeshAsset(
             "reconstruct_wood.asset",
             new[]
@@ -190,14 +198,26 @@ public sealed class AuthoringAssetSyncTests
                 new Vector3(0.5f, 1f, -0.5f),
                 new Vector3(-0.5f, 0f, 0.5f)
             });
+        Mesh shellL0Mesh = CreateMeshAsset(
+            "reconstruct_shell_l0.asset",
+            new[]
+            {
+                new Vector3(-0.6f, -0.1f, -0.6f),
+                new Vector3(0.6f, 1.1f, -0.6f),
+                new Vector3(-0.6f, -0.1f, 0.6f)
+            });
+        Material trunkMaterial = CreateMaterialAsset("reconstruct_trunk.mat");
         Material woodMaterial = CreateMaterialAsset("reconstruct_wood.mat");
         Material foliageMaterial = CreateMaterialAsset("reconstruct_foliage.mat");
+        Material shellMaterial = CreateMaterialAsset("reconstruct_shell_l0.mat");
 
         BranchPrototypeSO prototype = CreateTransientScriptableObject<BranchPrototypeSO>();
         SetPrivateField(prototype, "woodMesh", woodMesh);
         SetPrivateField(prototype, "woodMaterial", woodMaterial);
         SetPrivateField(prototype, "foliageMesh", foliageMesh);
         SetPrivateField(prototype, "foliageMaterial", foliageMaterial);
+        SetPrivateField(prototype, "shellL0Mesh", shellL0Mesh);
+        SetPrivateField(prototype, "shellMaterial", shellMaterial);
 
         BranchPlacement firstPlacement = CreateBranchPlacement(
             prototype,
@@ -211,6 +231,8 @@ public sealed class AuthoringAssetSyncTests
             0.75f);
 
         TreeBlueprintSO blueprint = CreateTransientScriptableObject<TreeBlueprintSO>();
+        SetPrivateField(blueprint, "trunkMesh", trunkMesh);
+        SetPrivateField(blueprint, "trunkMaterial", trunkMaterial);
         SetPrivateField(blueprint, "branches", new[] { firstPlacement, secondPlacement });
 
         GameObject authoringObject = CreateTransientGameObject("Authoring");
@@ -221,23 +243,31 @@ public sealed class AuthoringAssetSyncTests
         SetPrivateField(authoring, "blueprint", blueprint);
         SetPrivateField(authoring, "_rootForBranches", branchRoot);
 
-        authoring.ReconstructFromDataAndOriginalBranch();
+        VegetationEditorPreview.ShowPreview(authoring, VegetationPreviewTier.R0Full);
 
-        Assert.AreEqual(2, branchRoot.transform.childCount);
+        Assert.AreEqual(1, branchRoot.transform.childCount);
 
-        Transform firstBranch = branchRoot.transform.GetChild(0);
+        Transform previewRoot = branchRoot.transform.GetChild(0);
+        Assert.AreEqual(HideFlags.DontSave | HideFlags.NotEditable, previewRoot.gameObject.hideFlags);
+        Assert.AreEqual(3, previewRoot.childCount);
+        Assert.AreEqual(trunkMesh, previewRoot.GetChild(0).GetComponent<MeshFilter>().sharedMesh);
+        Assert.AreEqual(trunkMaterial, previewRoot.GetChild(0).GetComponent<MeshRenderer>().sharedMaterial);
+
+        Transform firstBranch = previewRoot.GetChild(1);
         Assert.AreEqual(firstPlacement.LocalPosition, firstBranch.localPosition);
         AssertQuaternionApproximatelyEqual(firstPlacement.LocalRotation, firstBranch.localRotation);
         Assert.AreEqual(Vector3.one * firstPlacement.Scale, firstBranch.localScale);
-        Assert.AreEqual(2, firstBranch.childCount);
+        Assert.AreEqual(3, firstBranch.childCount);
         Assert.AreEqual(woodMesh, firstBranch.GetChild(0).GetComponent<MeshFilter>().sharedMesh);
         Assert.AreEqual(woodMaterial, firstBranch.GetChild(0).GetComponent<MeshRenderer>().sharedMaterial);
         Assert.AreEqual(foliageMesh, firstBranch.GetChild(1).GetComponent<MeshFilter>().sharedMesh);
         Assert.AreEqual(foliageMaterial, firstBranch.GetChild(1).GetComponent<MeshRenderer>().sharedMaterial);
+        Assert.AreEqual(shellL0Mesh, firstBranch.GetChild(2).GetComponent<MeshFilter>().sharedMesh);
+        Assert.AreEqual(shellMaterial, firstBranch.GetChild(2).GetComponent<MeshRenderer>().sharedMaterial);
     }
 
     [Test]
-    public void DeleteOriginals_RemovesAllChildrenFromBranchRoot()
+    public void ClearPreview_RemovesAllChildrenFromBranchRoot()
     {
         GameObject authoringObject = CreateTransientGameObject("Authoring");
         GameObject branchRoot = CreateTransientGameObject("BranchRoot");
@@ -248,13 +278,13 @@ public sealed class AuthoringAssetSyncTests
         VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
         SetPrivateField(authoring, "_rootForBranches", branchRoot);
 
-        authoring.DeleteOriginals();
+        VegetationEditorPreview.ClearPreview(authoring);
 
         Assert.AreEqual(0, branchRoot.transform.childCount);
     }
 
     [Test]
-    public void ReconstructShellL0FromData_RebuildsBranchHierarchyWithWoodAndShell()
+    public void ShowPreview_ShellL0Only_RebuildsBranchHierarchyWithWoodAndShell()
     {
         Mesh woodMesh = CreateMeshAsset(
             "reconstruct_shell_l0_wood.asset",
@@ -298,10 +328,11 @@ public sealed class AuthoringAssetSyncTests
         SetPrivateField(authoring, "blueprint", blueprint);
         SetPrivateField(authoring, "_rootForBranches", branchRoot);
 
-        authoring.ReconstructShellL0FromData();
+        VegetationEditorPreview.ShowPreview(authoring, VegetationPreviewTier.ShellL0Only);
 
         Assert.AreEqual(1, branchRoot.transform.childCount);
-        Transform branch = branchRoot.transform.GetChild(0);
+        Transform previewRoot = branchRoot.transform.GetChild(0);
+        Transform branch = previewRoot.GetChild(0);
         Assert.AreEqual(placement.LocalPosition, branch.localPosition);
         AssertQuaternionApproximatelyEqual(placement.LocalRotation, branch.localRotation);
         Assert.AreEqual(Vector3.one * placement.Scale, branch.localScale);
@@ -313,7 +344,7 @@ public sealed class AuthoringAssetSyncTests
     }
 
     [Test]
-    public void ReconstructShellL1FromData_RebuildsBranchHierarchyFromBlueprintShells()
+    public void ShowPreview_ShellL1Only_RebuildsBranchHierarchyFromBlueprintShells()
     {
         Mesh woodMesh = CreateMeshAsset(
             "reconstruct_shell_l1_wood.asset",
@@ -357,10 +388,11 @@ public sealed class AuthoringAssetSyncTests
         SetPrivateField(authoring, "blueprint", blueprint);
         SetPrivateField(authoring, "_rootForBranches", branchRoot);
 
-        authoring.ReconstructShellL1FromData();
+        VegetationEditorPreview.ShowPreview(authoring, VegetationPreviewTier.ShellL1Only);
 
         Assert.AreEqual(1, branchRoot.transform.childCount);
-        Transform branch = branchRoot.transform.GetChild(0);
+        Transform previewRoot = branchRoot.transform.GetChild(0);
+        Transform branch = previewRoot.GetChild(0);
         Assert.AreEqual(placement.LocalPosition, branch.localPosition);
         AssertQuaternionApproximatelyEqual(placement.LocalRotation, branch.localRotation);
         Assert.AreEqual(Vector3.one * placement.Scale, branch.localScale);
@@ -372,7 +404,7 @@ public sealed class AuthoringAssetSyncTests
     }
 
     [Test]
-    public void ReconstructShellL2FromData_RebuildsBranchHierarchyWithSimplifiedWoodAndShell()
+    public void ShowPreview_ShellL2Only_RebuildsBranchHierarchyWithSimplifiedWoodAndShell()
     {
         Mesh woodMesh = CreateMeshAsset(
             "reconstruct_shell_l2_wood.asset",
@@ -416,10 +448,11 @@ public sealed class AuthoringAssetSyncTests
         SetPrivateField(authoring, "blueprint", blueprint);
         SetPrivateField(authoring, "_rootForBranches", branchRoot);
 
-        authoring.ReconstructShellL2FromData();
+        VegetationEditorPreview.ShowPreview(authoring, VegetationPreviewTier.ShellL2Only);
 
         Assert.AreEqual(1, branchRoot.transform.childCount);
-        Transform branch = branchRoot.transform.GetChild(0);
+        Transform previewRoot = branchRoot.transform.GetChild(0);
+        Transform branch = previewRoot.GetChild(0);
         Assert.AreEqual(placement.LocalPosition, branch.localPosition);
         AssertQuaternionApproximatelyEqual(placement.LocalRotation, branch.localRotation);
         Assert.AreEqual(Vector3.one * placement.Scale, branch.localScale);
@@ -431,7 +464,42 @@ public sealed class AuthoringAssetSyncTests
     }
 
     [Test]
-    public void BakeCanopyShellsAndImpostor_FromVegetationTreeAuthoring_PopulatesGeneratedMeshes()
+    public void ShowPreview_R3Impostor_CreatesSingleImpostorObject()
+    {
+        Mesh impostorMesh = CreateMeshAsset(
+            "preview_impostor.asset",
+            new[]
+            {
+                new Vector3(-1f, 0f, 0f),
+                new Vector3(1f, 2f, 0f),
+                new Vector3(-1f, 2f, 0f)
+            });
+        Material impostorMaterial = CreateMaterialAsset("preview_impostor.mat");
+
+        TreeBlueprintSO blueprint = CreateTransientScriptableObject<TreeBlueprintSO>();
+        SetPrivateField(blueprint, "impostorMesh", impostorMesh);
+        SetPrivateField(blueprint, "impostorMaterial", impostorMaterial);
+        SetPrivateField(blueprint, "branches", new[] { CreateBranchPlacement(CreateTransientScriptableObject<BranchPrototypeSO>(), Vector3.zero, Quaternion.identity, 1f) });
+
+        GameObject authoringObject = CreateTransientGameObject("Authoring");
+        GameObject branchRoot = CreateTransientGameObject("BranchRoot");
+        branchRoot.transform.SetParent(authoringObject.transform, false);
+
+        VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
+        SetPrivateField(authoring, "blueprint", blueprint);
+        SetPrivateField(authoring, "_rootForBranches", branchRoot);
+
+        VegetationEditorPreview.ShowPreview(authoring, VegetationPreviewTier.R3Impostor);
+
+        Assert.AreEqual(1, branchRoot.transform.childCount);
+        Transform previewRoot = branchRoot.transform.GetChild(0);
+        Assert.AreEqual(1, previewRoot.childCount);
+        Assert.AreEqual(impostorMesh, previewRoot.GetChild(0).GetComponent<MeshFilter>().sharedMesh);
+        Assert.AreEqual(impostorMaterial, previewRoot.GetChild(0).GetComponent<MeshRenderer>().sharedMaterial);
+    }
+
+    [Test]
+    public void BakeCanopyShellsAndImpostor_FromEditorUtility_PopulatesGeneratedMeshes()
     {
         EnsureTestFolders();
 
@@ -469,7 +537,7 @@ public sealed class AuthoringAssetSyncTests
         VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
         SetPrivateField(authoring, "blueprint", blueprint);
 
-        authoring.BakeCanopyShellsAndImpostor();
+        VegetationTreeAuthoringEditorUtility.BakeCanopyShellsAndImpostor(authoring);
 
         AssertGeneratedMeshStored(prototype.ShellL0Mesh);
         AssertGeneratedMeshStored(prototype.ShellL1Mesh);

@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fecc6e4fecaceaf4488f81b7bc8cbf85, type: 3}
   m_Name: TreeBlueprint_branch_leaves_fullgeo
   m_EditorClassIdentifier: Vegetation::VoxGeoFol.Features.Vegetation.Authoring.TreeBlueprintSO
-  trunkMesh: {fileID: 4781277628412113339, guid: 71db083465d3dd44abb6a72004561287, type: 3}
+  trunkMesh: {fileID: -2432090755550338912, guid: def0f6c754abc974786d4b5963fbacdc, type: 3}
   trunkMaterial: {fileID: 2100000, guid: 72a7df46ac0cce54a91695e1898ab6bb, type: 2}
   branches:
   - prototype: {fileID: 11400000, guid: a36e7a0131fe24144b1e8d32e4a1f219, type: 2}

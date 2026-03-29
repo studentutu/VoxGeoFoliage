@@ -37,7 +37,7 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 9. Branch scale is in steps of 0.25 (e.g. 0.25, 0.5, 0.75, 1.0, 1.25...); no scale quantization optimization yet.
 10. Spatial partitioning via uniform grid; cell visibility is CPU frustum test + CullingGroup API (optional occlusion layer, 1024 sphere limit per instance).
 11. Authoring data lives in ScriptableObjects; runtime data in GPU buffers; no runtime data on MonoBehaviours.
-12. Editor preview is transient child GameObjects with `HideFlags.DontSave` - never serialized.
+12. Editor preview is transient child GameObjects with `HideFlags.DontSave | HideFlags.NotEditable` - never serialized.
 13. Shell generation and impostor baking are editor-only operations (not runtime).
 14. Generated shell and impostor geometry must be persisted as standalone `.mesh` assets under a writable project folder: prefer an owner-local `GeneratedMeshes/` folder under `Assets/`, otherwise fall back to `Assets/VoxGeoFol.Generated/Vegetation/Meshes/`. Do not rely on transient meshes or sub-assets that can be lost.
 15. All vegetation code lives under `Packages/com.voxgeofol.vegetation/` with `Runtime/Authoring`, `Editor`, `Runtime/Shaders`, `Runtime/Rendering`, `Tests/Editor`, and `Samples~/` subfolders as needed.
@@ -55,7 +55,10 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 - `CanopyShellGenerator` - editor-side Phase B branch authority: voxelizes foliage meshes, emits shell surfaces, simplifies source wood for L1/L2, and stores `shellL0Mesh/shellL1Mesh/shellL1WoodMesh/shellL2Mesh/shellL2WoodMesh`
 - `ImpostorMeshGenerator` - editor-side Phase B tree authority: merges trunk + branch shell L2 canopy + branch shell L2 wood meshes in tree space and stores `impostorMesh`
 - `GeneratedMeshAssetUtility` - editor-side Phase B asset persistence authority: writes generated shell/impostor meshes as explicit `.mesh` files into writable project asset folders beside the owner asset when possible
-- `VegetationTreeAuthoringEditor` - editor integration: preview controls, bake buttons, validation display
+- `VegetationTreeAuthoringEditorUtility` - editor-side Phase C authority: bake entry points, aggregated validation, and per-tier authoring summary for `VegetationTreeAuthoring`
+- `VegetationEditorPreview` - editor-side Phase C preview authority: rebuilds transient branch-root hierarchies for all milestone representation tiers
+- `VegetationTreeAuthoringEditor` - editor integration: inspector-side preview controls, bake buttons, validation display, and window launcher
+- `VegetationTreeAuthoringWindow` - editor integration: dedicated window for driving the same preview and bake utilities outside the Inspector
 
 --
 

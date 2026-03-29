@@ -17,14 +17,14 @@ Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
 - [x] Implement authoring validation logic (readability, opacity, budgets, bounds, scale)
 - [x] Write authoring validation EditMode tests
 - [x] Implement Phase A authoring sync from assembled prefab into `TreeBlueprintSO` branches/bounds
-- [x] Implement `VegetationTreeAuthoring` context actions to reconstruct or clear original branch hierarchy from blueprint data
+- [x] Keep an explicit branch-root reference on `VegetationTreeAuthoring` for editor preview reconstruction
 - [x] Compile check + run tests
 
 Status note:
 - Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-28`.
 - Unity EditMode tests passed on `2026-03-28` (`runParsetests.sh`).
 - Added `VegetationPhaseAAuthoringSync` to rebuild the demo authoring data from `Assets/Tree/tree_dense_branches.prefab`.
-- `VegetationTreeAuthoring` now rebuilds branch children from `TreeBlueprintSO.branches` and can delete the original branch hierarchy from the assigned branch root.
+- `VegetationTreeAuthoring` now remains a clean scene binding and retains the assigned branch root used by the extracted Phase C editor preview tooling.
 - `Assets/Tree/VoxFoliage/TreeBlueprint_branch_leaves_fullgeo.asset` now contains 52 generated branch placements plus a linked `LODProfileSO`.
 - `Assets/Tree/VoxFoliage/BranchPrototype_branch_leaves_fullgeo.asset` now uses mesh-derived `localBounds` and a foliage budget aligned with the real imported source mesh.
 
@@ -35,7 +35,7 @@ Status note:
 - [x] Implement `CanopyShellGenerator`
 - [x] Implement `ImpostorMeshGenerator` from merged tree-space shell L2 assembly plus simplified branch wood attachments
 - [x] Wire shell / impostor baking into SOs
-- [x] Implement `VegetationTreeAuthoring` context action to reconstruct from shells (by level) from blueprint data (necessary preview for the Phase B by developer).
+- [x] Shape bake outputs so editor preview can reconstruct shell tiers by level from blueprint data
 - [x] Write shell generation EditMode tests
 - [x] Compile check + run tests
 
@@ -47,21 +47,22 @@ Status note:
 - Added `VoxelGrid`, `Voxelizer`, `MeshSimplifier`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, and `ImpostorMeshGenerator` under `Packages/com.voxgeofol.vegetation/Editor/`.
 - Generated shell and impostor meshes now persist as standalone `.mesh` assets under owner-local `GeneratedMeshes/` folders in `Assets/`.
 - `CanopyShellGenerator` now also bakes `shellL1WoodMesh` and `shellL2WoodMesh` so branch wood remains attached in shell preview tiers.
-- `VegetationTreeAuthoring` now reconstructs `ShellL0`, `ShellL1`, and `ShellL2` preview hierarchies with wood included from saved blueprint data.
 - Added `Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs` plus shell-preview coverage in `AuthoringAssetSyncTests.cs`.
 
 ### Phase C: Editor Preview
-- [x] Add interim `VegetationTreeAuthoring` context actions for `BakeCanopyShells`, `BakeImpostor`, and `BakeCanopyShellsAndImpostor`
-- [ ] Implement `VegetationEditorPreview` (R0 = trunk + branch wood + branch foliage + shellL0)
-- [ ] Implement `VegetationTreeAuthoringEditor` (custom inspector)
-- [ ] Wire bake buttons
-- [ ] Manual visual verification
-- [ ] Compile check
+- [x] Extract preview and bake entry points out of `VegetationTreeAuthoring` into editor-only utilities
+- [x] Implement `VegetationEditorPreview` (R0 = trunk + branch wood + branch foliage + shellL0)
+- [x] Implement `VegetationTreeAuthoringEditor` + `VegetationTreeAuthoringWindow`
+- [x] Wire bake buttons
+- [x] Manual visual verification
+- [x] Compile check
 
 Status note:
-- `VegetationTreeAuthoring` is now the developer-facing interim entry point for shell and impostor baking while the dedicated Phase C inspector/buttons are still pending.
-- Rider MSBuild compile passed on `2026-03-29`.
-- Unity EditMode tests passed on `2026-03-29` (`runParsetests.sh`).
+- Added `VegetationEditorPreview`, `VegetationTreeAuthoringEditorUtility`, `VegetationTreeAuthoringEditorPanel`, `VegetationTreeAuthoringEditor`, and `VegetationTreeAuthoringWindow` under `Packages/com.voxgeofol.vegetation/Editor/`.
+- `VegetationTreeAuthoring` is back to being a clean scene binding plus validation surface; preview reconstruction and bake buttons now live entirely in the editor assembly.
+- Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-29` after adding the Phase C editor files and regenerating the solution.
+- `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringAssetSyncTests.cs` now exercises the extracted preview utility and editor utility bake entry point.
+- Manual in-Editor visual verification is still pending.
 
 ## Public Package Preparation
 - [x] Pack the vegetation feature into `Packages/com.voxgeofol.vegetation`
@@ -72,7 +73,7 @@ Status note:
 - [x] Run required full Unity compile after the package migration
 
 Status note:
-- On `2026-03-29`, the vegetation feature became an embedded public package rooted at `Packages/com.voxgeofol.vegetation`.
+- the vegetation feature became an embedded public package rooted at `Packages/com.voxgeofol.vegetation`.
 - Vegetation EditMode coverage moved from `Assets/EditorTests/Vegetation` to `Packages/com.voxgeofol.vegetation/Tests/Editor`.
 - `VegetationPhaseAAuthoringSync` now resolves demo assets by name so it works with imported samples under `Assets/Samples/...` and the repo-local `Assets/Tree` mirror.
 - Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-29` after the package migration.
