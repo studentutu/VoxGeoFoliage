@@ -1,6 +1,6 @@
 # Technical Context
 
-Purpose: compact toolchain, package, and verification reference for the current repo.
+Purpose: compact toolchain, package, and verification reference for the current repo. Uses recommended Unity package workflow with explicit separation of editor/runtime and non-essential samples.
 
 ## Engine and Language
 
