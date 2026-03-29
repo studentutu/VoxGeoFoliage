@@ -387,7 +387,7 @@ void ClassifyVegetation(uint id : SV_DispatchThreadID)
 }
 ```
 
-## 6.2Representation selector example
+## 6.2 Representation selector example
 
 ```hlsl
 void SelectRepresentation(

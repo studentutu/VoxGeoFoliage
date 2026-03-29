@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a22bca3370014448b003aa4cd47dea9, type: 3}
+  m_Name: BranchPrototype_branch_leaves_fullgeo
+  m_EditorClassIdentifier: Vegetation::VoxGeoFol.Features.Vegetation.Authoring.BranchPrototypeSO
+  woodMesh: {fileID: 8242496408859003367, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
+  woodMaterial: {fileID: 2100000, guid: 72a7df46ac0cce54a91695e1898ab6bb, type: 2}
+  foliageMesh: {fileID: -6062578164958778753, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
+  foliageMaterial: {fileID: 2100000, guid: ecaffefaa3a08ce43b2fb6c79d1b2bb4, type: 2}
+  leafColorTint: {r: 0.5867785, g: 0.9547169, b: 0.38008535, a: 1}
+  shellL0Mesh: {fileID: 4300000, guid: 3d2991dfdb116b241a9a55e1ae606a60, type: 2}
+  shellL1Mesh: {fileID: 4300000, guid: a3b58f4cfc2ff5c44a19308192162cc0, type: 2}
+  shellL1WoodMesh: {fileID: 4300000, guid: bcd29de28ae13dd4d937607c5d562395, type: 2}
+  shellL2Mesh: {fileID: 4300000, guid: d312228cbc6ed9c4ab197ed313308b06, type: 2}
+  shellL2WoodMesh: {fileID: 4300000, guid: 3453adea30feea94c8487f0aa0712004, type: 2}
+  shellMaterial: {fileID: 2100000, guid: 1e8b3c0229b50f94bab471853295c8d5, type: 2}
+  localBounds:
+    m_Center: {x: -0.72606623, y: 0.031684875, z: 0.2255171}
+    m_Extent: {x: 0.7372974, y: 0.46414518, z: 0.2749564}
+  triangleBudgetWood: 2048
+  triangleBudgetFoliage: 17596
+  triangleBudgetShellL0: 2000
+  triangleBudgetShellL1: 500
+  triangleBudgetShellL2: 150

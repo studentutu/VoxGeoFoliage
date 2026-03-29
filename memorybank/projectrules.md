@@ -20,7 +20,7 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 14. Prefer `Refresh` and `Simulate` naming over `Update` for explicit runtime APIs.
 15. Keep authoring, runtime ECS data, and Unity binding logic separate.
 16. Hot paths should be allocation-aware and follow DRY/SingleResponsibility best practices.
-17. Each feature is enclosed in a folder under `Assets/Scripts/Features` with authoring, components, systems, contract, and extension folders as needed.
+17. Reusable public-facing features should live in embedded packages under `Packages/`; repo-local-only features can remain under `Assets/Scripts/Features`.
 
 --
 
@@ -39,8 +39,8 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 11. Authoring data lives in ScriptableObjects; runtime data in GPU buffers; no runtime data on MonoBehaviours.
 12. Editor preview is transient child GameObjects with `HideFlags.DontSave` - never serialized.
 13. Shell generation and impostor baking are editor-only operations (not runtime).
-14. Generated shell and impostor geometry must be persisted as standalone `.mesh` assets under `Assets/Scripts/Features/Vegetation/Runtime/Meshes/`; do not rely on transient meshes or sub-assets that can be lost.
-15. All vegetation code lives under `Assets/Scripts/Features/Vegetation/` with `Authoring/Runtime/Editor/Shaders/Rendering` subfolders.
+14. Generated shell and impostor geometry must be persisted as standalone `.mesh` assets under a writable project folder: prefer an owner-local `GeneratedMeshes/` folder under `Assets/`, otherwise fall back to `Assets/VoxGeoFol.Generated/Vegetation/Meshes/`. Do not rely on transient meshes or sub-assets that can be lost.
+15. All vegetation code lives under `Packages/com.voxgeofol.vegetation/` with `Runtime/Authoring`, `Editor`, `Runtime/Shaders`, `Runtime/Rendering`, `Tests/Editor`, and `Samples~/` subfolders as needed.
 16. No Unity `LODGroup` - LOD selection is fully GPU-driven via compute classification; `LODGroup` is incompatible with BRG indirect rendering.
 17. Canopy/impostor shaders are minimal vertex-lit: no albedo texture, no normal map, no emission, no specular. Trunk shader uses albedo texture but no normal map.
 18. Trunk is rendered in all tiers `R0-R2`; only `R3` (impostor) omits the trunk mesh.
@@ -51,10 +51,10 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 - `VegetationRendererFeature` - URP integration: schedules compute dispatch + depth prepass + color pass
 - `VegetationBRGManager` - BRG lifecycle: mesh/material registration, draw command emission
 - `VegetationAuthoringValidator` - Task 1 authoring contract authority: explicit validation for readability, opacity, budgets, bounds, scale, and LOD ordering
-- `VegetationPhaseAAuthoringSync` - editor-side Phase A authority: refreshes source bounds/budgets and rebuilds demo tree branch placements from the assembled prefab
+- `VegetationPhaseAAuthoringSync` - editor-side Phase A authority: refreshes source bounds/budgets and rebuilds demo tree branch placements from imported sample assets or the repo-local demo mirror
 - `CanopyShellGenerator` - editor-side Phase B branch authority: voxelizes foliage meshes, emits shell surfaces, simplifies source wood for L1/L2, and stores `shellL0Mesh/shellL1Mesh/shellL1WoodMesh/shellL2Mesh/shellL2WoodMesh`
 - `ImpostorMeshGenerator` - editor-side Phase B tree authority: merges trunk + branch shell L2 canopy + branch shell L2 wood meshes in tree space and stores `impostorMesh`
-- `GeneratedMeshAssetUtility` - editor-side Phase B asset persistence authority: writes generated shell/impostor meshes as explicit `.mesh` files under `Assets/Scripts/Features/Vegetation/Runtime/Meshes/`
+- `GeneratedMeshAssetUtility` - editor-side Phase B asset persistence authority: writes generated shell/impostor meshes as explicit `.mesh` files into writable project asset folders beside the owner asset when possible
 - `VegetationTreeAuthoringEditor` - editor integration: preview controls, bake buttons, validation display
 
 --
@@ -62,8 +62,8 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 ## Verification
 
 - EditMode suite in [`Assets/EditorTests`](../Assets/EditorTests) is the primary behavioral safety net.
-- Vegetation authoring coverage currently starts in [`Assets/EditorTests/Vegetation`](../Assets/EditorTests/Vegetation).
-- Phase B shell/impostor coverage now lives in [`Assets/EditorTests/Vegetation/CanopyShellGenerationTests.cs`](../Assets/EditorTests/Vegetation/CanopyShellGenerationTests.cs).
+- Vegetation authoring coverage currently starts in [`Packages/com.voxgeofol.vegetation/Tests/Editor`](../Packages/com.voxgeofol.vegetation/Tests/Editor).
+- Phase B shell/impostor coverage now lives in [`Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs`](../Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs).
 - `CI/CITestOutput.xml` is authoritative for test results.
 - `CI/CompileErrorsAfterUnityRun.txt` is authoritative for Unity compile errors.
 - Use `Fully Compile by Unity` when files were added, removed, or renamed.

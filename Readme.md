@@ -1,6 +1,6 @@
 # Unity Foliage Assembly and voxel-based rendering with agentic workflow
 
-Primary purpose is re-integrate into Unity new Unreal 5.7 Foliage assembly workflow (based on nanites and heavy reuse of meshes). 
+Primary purpose is re-integrate into Unity new Unreal 5.7 Foliage assembly workflow (based on nanites and heavy reuse of meshes).
 
 Inspired by Unreal Engine 5.7 foliage innovations (Assemblies, voxelized LOD, and hierarchical wind animation).
 
@@ -10,9 +10,9 @@ Also includes full agentic workflow outside of Unity Editor.
 
 ## What is Foliage Assembly and voxel-based rendering?
 
-See Unreal 5.7 foliage assemblies:
-- Witcher 4 presentation (https://youtu.be/EdNkm0ezP0o?si=YYlytLYKuexVYUOT) 
-- nanite vegetation https://dev.epicgames.com/documentation/en-us/unreal-engine/nanite-foliage 
+See Unreal 5.7 foliage assemblies (Nanite vegetation):
+- Witcher 4 presentation [Presentation](https://youtu.be/EdNkm0ezP0o?si=YYlytLYKuexVYUOT) 
+- Nanite vegetation [OfficialDocs](https://dev.epicgames.com/documentation/en-us/unreal-engine/nanite-foliage)
 
 Short summary:
 - No masked / alpha-tested materials, fully opaque based rendering (fully avoid transparency, as it breaks tile-based rendering on mobiles)
@@ -25,19 +25,21 @@ Short summary:
 
 ## Limitation of Unity
 
-We can't make it one-to-one right now:
-- Unity doesn't have Nanite alternative (closest to it is an obsolete virtual mesh package https://github.com/Unity-Technologies/com.unity.virtualmesh )
-- Unity SRP (URP) does support similar mechanism to the assemblies, which is custom render batch
-- Reduced geometry at all levels SRP lods needs to be explicit for the manual render batch approach
-- to keep SRP-friendly batching we can use Unity API Renderer Shader User Value (RSUV) which is a tightly pack `uint` that is manually unpacked in shader for any form of variation for the instances.
+We can't make it one-to-one right now, but we still have options:
+- Unity doesn't have Nanite alternative, closest to it is an experimental virtual mesh package [VirtualMeshPackage](https://github.com/Unity-Technologies/com.unity.virtualmesh)
+- Unity SRP (URP) does support similar mechanism to the assemblies, which is custom render batch by Indirect draw within a custom feature/render pass.
+- Reduced geometry at all levels in SRP lods needs to be explicit for the manual render batch approach
+- to keep SRP-friendly batching and allow variation we can use Unity API Renderer Shader User Value (RSUV) which is a tightly pack `uint` that is manually unpacked in shader for any form of variation for the instances.
 
 ## Details
 
 1. See proposed plan [UnityVegetationAssemblyPlan](DetailedDocs/UnityAssembledVegetation_FULL.md)
-2. See scripts [Scripts](Assets/Scripts/Features/Vegetation)
+2. See embedded package [com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation)
 3. See playground scene [Playground.unity](Assets/Scenes/Playground.unity)
 
 Includes:
+- distributable sample assets, prefabs, and baked meshes under [Samples~/Vegetation Demo](Packages/com.voxgeofol.vegetation/Samples~/Vegetation%20Demo)
+- local workspace mirror of those demo assets under [Assets/Tree](Assets/Tree) so repo scenes continue to function
 - sample mesh very hight poly pine tree, see [ChristmasTree](Assets/Tree/Raw/ChristmasTree.fbx) with separate trunk and branches mesh from the leaves mesh (pines)
 - sample high poly single Fern leaf, see [fern_foliage_dense](Assets/Tree/Raw/fern_foliage_dense_fullgeo.obj)
 - sample branch for standard tree, see [branch_leaves](Assets/Tree/Raw/branch_leaves_fullgeo.obj)
@@ -47,27 +49,9 @@ Includes:
 
 ### Required
 
-- Unity Hub with unity Editor
+- Unity Hub with unity Editor 6.3+
 - git + git bash
 - Rider ( or MSBuild required, version 14+ )
-
-### Optional
-
-- Agentic CLI/VSCode Extension
-- VSCode  (make sure to set terminal to bash per extension settings)
-
-## Agentic workflow
-
-- Milestones
-  - ask to generate but first provide specific a full Game Design document
-- Memory bank
-  - ask to read memory bank
-  - ask to update memory bank
-  - no default progress, ask to create and maintain (preferable per milestone/feature).
-- Tests + compilation without Unity (using MSBuild with provided unity generated solution)
-  - ask run unity tests
-  - ask parse unity tests
-  - ask fast-recompile project
 
 ## What to change
 
@@ -79,9 +63,40 @@ Includes:
   - SimulationSystemGroup for simulation
   - ViewSystemGroup for view-presentation
 
+### Optional
+
+- Agentic CLI/VSCode Extension
+- VSCode  (make sure to set terminal to bash per extension settings)
+
+## Agentic workflow
+
+Uses recommended Unity package workflow with explicit separation of editor/runtime and non-essential samples.
+
+- Milestones
+  - ask to generate but first provide specific a full Design document
+  - ask to breakdown chosen Milestone into implementation tasks in a separate progress.md
+- Memory bank
+  - ask to read memory bank
+  - ask to update memory bank
+  - no default progress, ask to create and maintain (preferable per milestone/feature).
+- Tests + compilation without Unity (using MSBuild with provided unity generated solution)
+  - ask run unity tests
+  - ask parse unity tests
+  - ask fast-recompile project
+
+
 ## Verification
 
 - Tests, Compilation, Editor Runtime
   - verified
 - Build (Mono, IL2Cpp)
   - verified
+
+## License
+
+This repository is licensed under the MIT License.
+
+- Root repository license: [LICENSE](LICENSE)
+- Package license: [Packages/com.voxgeofol.vegetation/LICENSE.md](Packages/com.voxgeofol.vegetation/LICENSE.md)
+
+Copyright (c) 2025 The Last Outpost Workshop

@@ -6,6 +6,11 @@ Deliver a working end-to-end vegetation pipeline (similar to Unreal 5.7 new foli
 
 **Authority**: [UnityAssembledVegetation_FULL.md](UnityAssembledVegetation_FULL.md)
 
+Package note (`2026-03-29`):
+- Public package root: `Packages/com.voxgeofol.vegetation`
+- Distributable demo content: `Packages/com.voxgeofol.vegetation/Samples~/Vegetation Demo`
+- Repo-local demo mirror for current scenes: `Assets/Tree`
+
 ---
 
 ## MVP Scope Summary
@@ -47,11 +52,11 @@ This system does not use Unity's built-in `LODGroup`. LOD selection is fully own
 
 ### Implementation Status (`2026-03-28`)
 
-- Implemented the Task 1 runtime authoring types under `Assets/Scripts/Features/Vegetation/Authoring/`.
+- Implemented the Task 1 runtime authoring types under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
 - Implemented explicit authoring validation via `VegetationAuthoringValidator`.
-- Added demo authoring sync in `Assets/Scripts/Features/Vegetation/Editor/VegetationPhaseAAuthoringSync.cs` to rebuild branch placements/bounds from the assembled tree prefab.
+- Added demo authoring sync in `Packages/com.voxgeofol.vegetation/Editor/VegetationPhaseAAuthoringSync.cs` to rebuild branch placements/bounds from the assembled tree prefab.
 - Added `VegetationTreeAuthoring` context actions to reconstruct or clear the original branch hierarchy from saved branch placement data.
-- Added EditMode coverage in `Assets/EditorTests/Vegetation/AuthoringValidationTests.cs` and `Assets/EditorTests/Vegetation/AuthoringAssetSyncTests.cs`.
+- Added EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringValidationTests.cs` and `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringAssetSyncTests.cs`.
 - Verified with `Fully Compile by Unity` and the Unity EditMode test runner; the demo `branch_leaves_fullgeo` assets now validate and the demo tree blueprint is populated.
 
 ### 1.1 ScriptableObjects (authoring, immutable asset data)
@@ -181,14 +186,14 @@ Interim status (`2026-03-29`)
 
 ### Implementation Status (`2026-03-28`)
 
-- Implemented `ShellBakeSettings` and `ImpostorBakeSettings` under `Assets/Scripts/Features/Vegetation/Authoring/`.
-- Implemented `VoxelGrid`, `Voxelizer`, `MeshSimplifier`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, and `ImpostorMeshGenerator` under `Assets/Scripts/Features/Vegetation/Editor/`.
+- Implemented `ShellBakeSettings` and `ImpostorBakeSettings` under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
+- Implemented `VoxelGrid`, `Voxelizer`, `MeshSimplifier`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, and `ImpostorMeshGenerator` under `Packages/com.voxgeofol.vegetation/Editor/`.
 - `CanopyShellGenerator` now bakes `shellL0Mesh`, `shellL1Mesh`, and `shellL2Mesh` directly onto `BranchPrototypeSO`.
 - `CanopyShellGenerator` also bakes `shellL1WoodMesh` and `shellL2WoodMesh` so shell preview tiers keep branch structure attached to the canopy shell.
 - `ImpostorMeshGenerator` now merges `trunkMesh` plus transformed `shellL2Mesh` and `shellL2WoodMesh` instances in tree local space and writes `impostorMesh` onto `TreeBlueprintSO`.
-- Generated shell and impostor meshes are persisted as explicit `.mesh` assets under `Assets/Scripts/Features/Vegetation/Runtime/Meshes/` so they survive editor restarts.
+- Generated shell and impostor meshes are persisted as explicit `.mesh` assets under owner-local `GeneratedMeshes/` folders in `Assets/` so they survive editor restarts and stay compatible with public package installs.
 - `VegetationTreeAuthoring` now exposes shell reconstruction context actions for `ShellL0`, `ShellL1`, and `ShellL2`.
-- Added EditMode coverage in `Assets/EditorTests/Vegetation/CanopyShellGenerationTests.cs` and extended `Assets/EditorTests/Vegetation/AuthoringAssetSyncTests.cs` with shell preview reconstruction coverage.
+- Added EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs` and extended `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringAssetSyncTests.cs` with shell preview reconstruction coverage.
 - Verified with `Fully Compile by Unity`, `Compile by Rider MSBuild`, and the Unity EditMode test runner (`runParsetests.sh`).
 
 ### 3.1 Pipeline Overview
@@ -197,7 +202,7 @@ Input: `BranchPrototypeSO.foliageMesh`
 Output: `shellL0Mesh`, `shellL1Mesh`, `shellL1WoodMesh`, `shellL2Mesh`, `shellL2WoodMesh`
 
 `woodMesh` is explicitly excluded from canopy voxelization. L0 reconstruction reuses the source `woodMesh`, while L1/L2 bake simplified branch wood attachments alongside the canopy shells.
-Generated outputs are saved as standalone `.mesh` assets under `Assets/Scripts/Features/Vegetation/Runtime/Meshes/`, then referenced by the authoring assets.
+Generated outputs are saved as standalone `.mesh` assets beside the owning authoring asset under `GeneratedMeshes/` when that asset lives in `Assets/`. Package-root assets fall back to `Assets/VoxGeoFol.Generated/Vegetation/Meshes/`.
 
 ### 3.2 Algorithm: Voxel-Based Shell Extraction
 
@@ -595,7 +600,7 @@ Per project rules, all static runtime services must expose `Reset()` and be wire
 
 ## Task 10: Testing Strategy
 
-### 10.1 Authoring Validation Tests (`Assets/EditorTests/Vegetation/`)
+### 10.1 Authoring Validation Tests (`Packages/com.voxgeofol.vegetation/Tests/Editor/`)
 
 ```
 AuthoringValidationTests:
@@ -621,7 +626,7 @@ AuthoringAssetSyncTests:
   - DeleteOriginals_RemovesAllChildrenFromBranchRoot
 ```
 
-### 10.2 Canopy Shell Generation Tests (`Assets/EditorTests/Vegetation/`)
+### 10.2 Canopy Shell Generation Tests (`Packages/com.voxgeofol.vegetation/Tests/Editor/`)
 
 ```
 CanopyShellGenerationTests:
@@ -670,27 +675,22 @@ ClassificationTests:
 ## Folder Structure
 
 ```
-Assets/Scripts/Features/Vegetation/
-|-- Authoring/
-|   |-- BranchPrototypeSO.cs
-|   |-- TreeBlueprintSO.cs
-|   |-- LODProfileSO.cs
-|   |-- VegetationTreeAuthoring.cs
-|   |-- BranchPlacement.cs
-|   |-- ImpostorBakeSettings.cs
-|   |-- ShellBakeSettings.cs
-|   `-- VegetationAuthoringValidator.cs
+Packages/com.voxgeofol.vegetation/
 |-- Runtime/
-|   |-- VegetationRuntimeManager.cs
-|   |-- VegetationBRGManager.cs
-|   |-- VegetationSpatialGrid.cs
-|   |-- TreeInstanceGPU.cs
-|   |-- TreeBlueprintGPU.cs
-|   |-- BranchPlacementGPU.cs
-|   |-- BranchPrototypeGPU.cs
-|   |-- LODProfileGPU.cs
-|   |-- VisibleVegetationRecord.cs
-|   `-- VegetationClassifier.cs
+|   |-- Authoring/
+|   |   |-- BranchPrototypeSO.cs
+|   |   |-- TreeBlueprintSO.cs
+|   |   |-- LODProfileSO.cs
+|   |   |-- VegetationTreeAuthoring.cs
+|   |   |-- BranchPlacement.cs
+|   |   |-- ImpostorBakeSettings.cs
+|   |   |-- ShellBakeSettings.cs
+|   |   `-- VegetationAuthoringValidator.cs
+|   |-- Shaders/
+|   |   `-- planned GPU pipeline assets
+|   |-- Rendering/
+|   |   `-- planned URP integration runtime code
+|   `-- Vegetation.asmdef
 |-- Editor/
 |   |-- VegetationPhaseAAuthoringSync.cs
 |   |-- VegetationEditorPreview.cs
@@ -701,23 +701,15 @@ Assets/Scripts/Features/Vegetation/
 |   |-- VoxelGrid.cs
 |   |-- Voxelizer.cs
 |   `-- MeshSimplifier.cs
-|-- Shaders/
-|   |-- VegetationCanopyLit.shader
-|   |-- VegetationTrunkLit.shader
-|   |-- VegetationImpostorLit.shader
-|   |-- VegetationDepthOnly.shader
-|   `-- VegetationClassify.compute
-|-- Rendering/
-|   |-- VegetationRendererFeature.cs
-|   `-- VegetationRenderPass.cs
-`-- Vegetation.asmdef
-
-Assets/EditorTests/Vegetation/
-|-- AuthoringAssetSyncTests.cs
-|-- AuthoringValidationTests.cs
-|-- CanopyShellGenerationTests.cs
-|-- SpatialGridTests.cs
-`-- ClassificationTests.cs
+|-- Tests/
+|   `-- Editor/
+|       |-- AuthoringAssetSyncTests.cs
+|       |-- AuthoringValidationTests.cs
+|       |-- CanopyShellGenerationTests.cs
+|       |-- SpatialGridTests.cs
+|       `-- ClassificationTests.cs
+`-- Samples~/
+    `-- Vegetation Demo/
 ```
 
 ---

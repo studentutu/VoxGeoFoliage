@@ -353,6 +353,15 @@
         "com.unity.render-pipelines.core": "17.3.0"
       }
     },
+    "com.voxgeofol.vegetation": {
+      "version": "file:com.voxgeofol.vegetation",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.render-pipelines.universal": "17.3.0",
+        "com.unity.test-framework": "1.6.0"
+      }
+    },
     "com.unity.modules.accessibility": {
       "version": "1.0.0",
       "depth": 0,

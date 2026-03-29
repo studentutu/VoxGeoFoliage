@@ -1,0 +1,31 @@
+{
+  "name": "com.voxgeofol.vegetation",
+  "displayName": "VoxGeoFol Vegetation",
+  "version": "0.1.0",
+  "unity": "6000.3",
+  "license": "MIT",
+  "description": "Unreal insparied branch-assembled vegetation rendering for Unity 6.",
+  "keywords": [
+    "vegetation",
+    "foliage",
+    "authoring",
+    "baking",
+    "urp"
+  ],
+  "dependencies": {
+    "com.unity.render-pipelines.universal": "17.3.0",
+    "com.unity.test-framework": "1.6.0"
+  },
+  "samples": [
+    {
+      "displayName": "Vegetation Demo",
+      "description": "Sample authoring assets, prefabs, raw meshes, and baked shell/impostor meshes.",
+      "path": "Samples~/Vegetation Demo"
+    }
+  ],
+  "author": {
+    "name": "Roman Fedorov",
+    "url": "https://github.com/studentutu",
+    "email": "studentutu@gmail.com"
+  }
+}

@@ -43,12 +43,12 @@ Status note:
 - Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-28` after adding the Phase B files and regenerating the Unity solution.
 - Rider MSBuild compile (`Compile by Rider MSBuild`) passed on `2026-03-28` after the final Phase B fixes.
 - Unity EditMode tests passed on `2026-03-28` (`runParsetests.sh`).
-- Added `ShellBakeSettings` and `ImpostorBakeSettings` under `Assets/Scripts/Features/Vegetation/Authoring/`.
-- Added `VoxelGrid`, `Voxelizer`, `MeshSimplifier`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, and `ImpostorMeshGenerator` under `Assets/Scripts/Features/Vegetation/Editor/`.
-- Generated shell and impostor meshes now persist as standalone `.mesh` assets under `Assets/Scripts/Features/Vegetation/Runtime/Meshes/`.
+- Added `ShellBakeSettings` and `ImpostorBakeSettings` under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
+- Added `VoxelGrid`, `Voxelizer`, `MeshSimplifier`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, and `ImpostorMeshGenerator` under `Packages/com.voxgeofol.vegetation/Editor/`.
+- Generated shell and impostor meshes now persist as standalone `.mesh` assets under owner-local `GeneratedMeshes/` folders in `Assets/`.
 - `CanopyShellGenerator` now also bakes `shellL1WoodMesh` and `shellL2WoodMesh` so branch wood remains attached in shell preview tiers.
 - `VegetationTreeAuthoring` now reconstructs `ShellL0`, `ShellL1`, and `ShellL2` preview hierarchies with wood included from saved blueprint data.
-- Added `Assets/EditorTests/Vegetation/CanopyShellGenerationTests.cs` plus shell-preview coverage in `AuthoringAssetSyncTests.cs`.
+- Added `Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs` plus shell-preview coverage in `AuthoringAssetSyncTests.cs`.
 
 ### Phase C: Editor Preview
 - [x] Add interim `VegetationTreeAuthoring` context actions for `BakeCanopyShells`, `BakeImpostor`, and `BakeCanopyShellsAndImpostor`
@@ -62,6 +62,20 @@ Status note:
 - `VegetationTreeAuthoring` is now the developer-facing interim entry point for shell and impostor baking while the dedicated Phase C inspector/buttons are still pending.
 - Rider MSBuild compile passed on `2026-03-29`.
 - Unity EditMode tests passed on `2026-03-29` (`runParsetests.sh`).
+
+## Public Package Preparation
+- [x] Pack the vegetation feature into `Packages/com.voxgeofol.vegetation`
+- [x] Split package content into `Runtime`, `Editor`, `Tests`, `Documentation~`, and `Samples~`
+- [x] Move non-essential vegetation demo assets into package sample source at `Packages/com.voxgeofol.vegetation/Samples~/Vegetation Demo`
+- [x] Keep a repo-local mirror of the demo assets under `Assets/Tree` for current scenes
+- [x] Change generated mesh persistence to owner-local `GeneratedMeshes/` folders in `Assets/`
+- [x] Run required full Unity compile after the package migration
+
+Status note:
+- On `2026-03-29`, the vegetation feature became an embedded public package rooted at `Packages/com.voxgeofol.vegetation`.
+- Vegetation EditMode coverage moved from `Assets/EditorTests/Vegetation` to `Packages/com.voxgeofol.vegetation/Tests/Editor`.
+- `VegetationPhaseAAuthoringSync` now resolves demo assets by name so it works with imported samples under `Assets/Samples/...` and the repo-local `Assets/Tree` mirror.
+- Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-29` after the package migration.
 
 ### Phase D: Spatial Grid + CPU Classification
 - [ ] Implement `VegetationSpatialGrid`
