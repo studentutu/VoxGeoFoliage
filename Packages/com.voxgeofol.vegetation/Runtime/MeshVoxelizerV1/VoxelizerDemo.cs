@@ -7,6 +7,9 @@ using UnityEditor;
 
 namespace MeshVoxelizerProject
 {
+    /// <summary>
+    ///  converts a mesh into voxels in Unity, the voxels are converted back into a mesh by adding quads at the edge of each voxel.
+    /// </summary>
     public class VoxelizerDemo : MonoBehaviour
     {
         [Tooltip("Subdivision, bigger value mean more subdivisions and a smaller voxel.")]

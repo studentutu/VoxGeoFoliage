@@ -33,7 +33,7 @@ Status note:
 - [x] Implement shell extraction by splitting L0 surface voxels into octant nodes
 - [x] Rebuild `CanopyShellGenerator` on `MeshVoxelizerHierarchyBuilder`
 - [x] Replace the MVP single-chain branch shell model with hierarchical `shellNodes`
-- [x] Rebuild `ImpostorMeshGenerator` on merged tree-space MeshVoxelizer extraction
+- [x] Rebuild `ImpostorMeshGenerator` on direct original-tree MeshVoxelizer extraction
 - [x] Wire shell / impostor baking into SOs
 - [x] Shape bake outputs so editor preview can reconstruct shell tiers by level from blueprint data
 - [x] Rewrite shell generation EditMode tests around the hierarchy builder and new bake path
@@ -43,12 +43,16 @@ Status note:
 
 Status note:
 - Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-30` after removing the legacy editor voxel pipeline and rebuilding the Phase B bake path around `MeshVoxelizerHierarchyBuilder`.
+- Rider MSBuild compile (`Compile by Rider MSBuild`) passed on `2026-03-31` after switching impostor baking to direct original-tree MeshVoxelizer extraction and trimming the affected EditMode tests.
 - The authoritative branch canopy data is now `BranchPrototypeSO.shellNodes`; branch-wide `shellL0Mesh/shellL1Mesh/shellL2Mesh` were removed.
 - `CanopyShellGenerator` now voxelizes readable foliage at `16/12/8`, splits L0 surface voxels into octant nodes, and persists one `L0/L1/L2` mesh triplet per node.
 - `ShellBakeSettings` now expose `maxOctreeDepth`, `voxelResolutionL0`, `voxelResolutionL1`, `voxelResolutionL2`, and `minimumSurfaceVoxelCountToSplit`.
-- `ImpostorMeshGenerator` now merges tree-space source geometry and extracts the impostor surface from the root MeshVoxelizer node instead of the removed legacy voxel field path.
-- Editor preview, authoring validation, summary accounting, and impostor generation consume the leaf frontier of the hierarchy.
+- `ImpostorMeshGenerator` now merges the original tree meshes (`trunkMesh` + placed branch `woodMesh`/`foliageMesh`) and extracts a coarse size-4 impostor surface from the root MeshVoxelizer node; baked canopy shells are no longer required for impostor generation.
+- `ImpostorBakeSettings` now expose `voxelResolution` with default `4`.
+- `TreeBlueprintSO` now exposes `generatedImpostorMeshesRelativeFolder`, matching the branch prototype shell-folder override pattern so impostor meshes can be written into a caller-selected project folder.
+- Editor preview, authoring validation, and summary accounting consume the leaf frontier of the hierarchy; impostor generation now voxelizes the original assembled tree meshes directly.
 - Unity EditMode tests were rewritten for the MeshVoxelizer hierarchy path on `2026-03-30`, but they were not rerun through the full Unity test runner in this pass.
+- The directly affected bake tests were minimized on `2026-03-31` by replacing the shell-dependent impostor cases with one coarse original-tree impostor test and one editor-utility impostor persistence test.
 - Added `ShellBakeSettings` and `ImpostorBakeSettings` under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
 - Added `BranchShellNode`, `BranchShellNodeUtility`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, `ImpostorMeshGenerator`, and `Runtime/MeshVoxelizerV1/*` under the vegetation package.
 - Generated shell and impostor meshes now persist as standalone `.mesh` assets under owner-local `GeneratedMeshes/` folders in `Assets/`.

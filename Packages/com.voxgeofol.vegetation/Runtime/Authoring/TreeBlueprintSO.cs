@@ -14,6 +14,7 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         [SerializeField] private Mesh? trunkMesh;
         [SerializeField] private Material? trunkMaterial;
         [SerializeField] private BranchPlacement[] branches = Array.Empty<BranchPlacement>();
+        [SerializeField] private string generatedImpostorMeshesRelativeFolder = string.Empty;
         [SerializeField] private Mesh? impostorMesh;
         [SerializeField] private Material? impostorMaterial;
         [SerializeField] private LODProfileSO? lodProfile;
@@ -24,6 +25,8 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         public Material? TrunkMaterial => trunkMaterial;
 
         public BranchPlacement[] Branches => branches;
+
+        public string GeneratedImpostorMeshesRelativeFolder => generatedImpostorMeshesRelativeFolder;
 
         public Mesh? ImpostorMesh => impostorMesh;
 

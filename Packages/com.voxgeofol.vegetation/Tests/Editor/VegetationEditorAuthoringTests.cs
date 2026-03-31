@@ -13,6 +13,7 @@ public sealed class VegetationEditorAuthoringTests
 {
     private const string TestAssetRoot = "Assets/__GeneratedTests__/VegetationEditorAuthoring";
     private const string GeneratedMeshAssetRoot = TestAssetRoot + "/GeneratedMeshes";
+    private const string ExplicitImpostorMeshAssetRoot = TestAssetRoot + "/ExplicitImpostors";
     private readonly List<UnityEngine.Object> createdObjects = new List<UnityEngine.Object>();
     private readonly List<string> createdGeneratedMeshAssetPaths = new List<string>();
 
@@ -162,7 +163,7 @@ public sealed class VegetationEditorAuthoringTests
     }
 
     [Test]
-    public void ShowPreview_ShellL1Only_RebuildsBranchHierarchyFromLeafFrontier()
+    public void ShowPreview_ShellL1Only_RebuildsBranchHierarchyFromShellNodes()
     {
         Mesh woodMesh = CreateMeshAsset(
             "reconstruct_shell_l1_wood.asset",
@@ -257,7 +258,7 @@ public sealed class VegetationEditorAuthoringTests
     }
 
     [Test]
-    public void BakeCanopyShellsAndImpostor_FromEditorUtility_PopulatesGeneratedMeshes()
+    public void BakeImpostor_FromEditorUtility_UsesOriginalTreeMeshesWithoutBakingShells()
     {
         EnsureTestFolders();
 
@@ -271,15 +272,9 @@ public sealed class VegetationEditorAuthoringTests
             });
         Mesh foliageMesh = CreateClosedCubeMeshAsset("bake_entry_foliage.asset", new Vector3(1.2f, 1f, 1.2f));
         Mesh trunkMesh = CreateClosedCubeMeshAsset("bake_entry_trunk.asset", new Vector3(0.5f, 2f, 0.5f));
-        Material shellMaterial = CreateMaterialAsset("bake_entry_shell.mat");
-
         BranchPrototypeSO prototype = CreateAsset<BranchPrototypeSO>("BakeEntryPrototype.asset");
         SetPrivateField(prototype, "woodMesh", woodMesh);
         SetPrivateField(prototype, "foliageMesh", foliageMesh);
-        SetPrivateField(prototype, "shellMaterial", shellMaterial);
-        SetPrivateField(prototype, "triangleBudgetShellL0", 384);
-        SetPrivateField(prototype, "triangleBudgetShellL1", 192);
-        SetPrivateField(prototype, "triangleBudgetShellL2", 96);
 
         BranchPlacement placement = CreateBranchPlacement(
             prototype,
@@ -295,22 +290,55 @@ public sealed class VegetationEditorAuthoringTests
         VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
         SetPrivateField(authoring, "blueprint", blueprint);
 
-        VegetationTreeAuthoringEditorUtility.BakeCanopyShellsAndImpostor(authoring);
+        VegetationTreeAuthoringEditorUtility.BakeImpostor(authoring);
 
-        Assert.Greater(prototype.ShellNodes.Length, 0);
-        for (int i = 0; i < prototype.ShellNodes.Length; i++)
-        {
-            AssertGeneratedMeshStored(prototype.ShellNodes[i].ShellL0Mesh);
-            AssertGeneratedMeshStored(prototype.ShellNodes[i].ShellL1Mesh);
-            AssertGeneratedMeshStored(prototype.ShellNodes[i].ShellL2Mesh);
-        }
-
-        AssertGeneratedMeshStored(prototype.ShellL1WoodMesh);
-        AssertGeneratedMeshStored(prototype.ShellL2WoodMesh);
+        Assert.AreEqual(0, prototype.ShellNodes.Length);
+        Assert.IsNull(prototype.ShellL1WoodMesh);
+        Assert.IsNull(prototype.ShellL2WoodMesh);
         AssertGeneratedMeshStored(blueprint.ImpostorMesh);
     }
 
-    private void AssertGeneratedMeshStored(Mesh? mesh)
+    [Test]
+    public void BakeImpostor_FromEditorUtility_StoresMeshInBlueprintSpecifiedFolder()
+    {
+        EnsureTestFolders();
+
+        Mesh woodMesh = CreateMeshAsset(
+            "explicit_folder_wood.asset",
+            new[]
+            {
+                new Vector3(-0.1f, -0.4f, -0.1f),
+                new Vector3(0.1f, 0.4f, -0.1f),
+                new Vector3(-0.1f, -0.4f, 0.1f)
+            });
+        Mesh foliageMesh = CreateClosedCubeMeshAsset("explicit_folder_foliage.asset", new Vector3(1.2f, 1f, 1.2f));
+        Mesh trunkMesh = CreateClosedCubeMeshAsset("explicit_folder_trunk.asset", new Vector3(0.5f, 2f, 0.5f));
+
+        BranchPrototypeSO prototype = CreateAsset<BranchPrototypeSO>("ExplicitFolderPrototype.asset");
+        SetPrivateField(prototype, "woodMesh", woodMesh);
+        SetPrivateField(prototype, "foliageMesh", foliageMesh);
+
+        BranchPlacement placement = CreateBranchPlacement(
+            prototype,
+            new Vector3(0f, 1f, 0f),
+            Quaternion.identity,
+            1f);
+
+        TreeBlueprintSO blueprint = CreateAsset<TreeBlueprintSO>("ExplicitFolderBlueprint.asset");
+        SetPrivateField(blueprint, "trunkMesh", trunkMesh);
+        SetPrivateField(blueprint, "branches", new[] { placement });
+        SetPrivateField(blueprint, "generatedImpostorMeshesRelativeFolder", ExplicitImpostorMeshAssetRoot);
+
+        GameObject authoringObject = CreateTransientGameObject("Authoring");
+        VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
+        SetPrivateField(authoring, "blueprint", blueprint);
+
+        VegetationTreeAuthoringEditorUtility.BakeImpostor(authoring);
+
+        AssertGeneratedMeshStored(blueprint.ImpostorMesh, ExplicitImpostorMeshAssetRoot);
+    }
+
+    private void AssertGeneratedMeshStored(Mesh? mesh, string expectedRoot = GeneratedMeshAssetRoot)
     {
         Assert.IsNotNull(mesh);
         Mesh nonNullMesh = mesh!;
@@ -319,7 +347,7 @@ public sealed class VegetationEditorAuthoringTests
         TrackGeneratedMeshAssetPath(assetPath);
 
         Assert.IsTrue(AssetDatabase.Contains(nonNullMesh));
-        StringAssert.StartsWith($"{GeneratedMeshAssetRoot}/", assetPath);
+        StringAssert.StartsWith($"{expectedRoot}/", assetPath);
         StringAssert.EndsWith(".mesh", assetPath);
     }
 

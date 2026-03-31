@@ -15,6 +15,8 @@ Generated shell and impostor meshes are written beside the owning asset under a 
 
 For canopy shell outputs specifically, `BranchPrototypeSO.generatedCanopyShellsRelativeFolder` can override that location with an explicit folder such as `Assets/Tree/VoxFoliage/GeneratedCanopyShells`.
 
+For impostor outputs specifically, `TreeBlueprintSO.generatedImpostorMeshesRelativeFolder` can override that location with an explicit folder such as `Assets/Tree/VoxFoliage/GeneratedImpostors`.
+
 ## Sample Workflow
 
 1. Import the `Vegetation Demo` sample from Package Manager.

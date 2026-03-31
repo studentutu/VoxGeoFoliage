@@ -46,7 +46,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         /// </summary>
         public static void BakeImpostor(VegetationTreeAuthoring authoring)
         {
-            // Range: requires a valid blueprint with trunk mesh and baked shellL2 data on every referenced branch prototype. Condition: uses the editor-only impostor bake pipeline. Output: the blueprint receives a refreshed impostor mesh asset.
+            // Range: requires a valid blueprint with trunk mesh and readable source branch meshes on every referenced branch prototype. Condition: uses the editor-only coarse MeshVoxelizer impostor bake pipeline. Output: the blueprint receives a refreshed impostor mesh asset.
             if (authoring == null)
             {
                 throw new ArgumentNullException(nameof(authoring));
@@ -63,7 +63,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         /// </summary>
         public static void BakeCanopyShellsAndImpostor(VegetationTreeAuthoring authoring)
         {
-            // Range: requires the same authoring data as the shell and impostor bake steps. Condition: shell L2 is regenerated before the impostor source mesh is assembled. Output: referenced prototypes and the blueprint are updated in one command.
+            // Range: requires the same authoring data as the shell and impostor bake steps. Condition: shells are refreshed first for convenience, then the impostor is rebuilt directly from the original tree meshes. Output: referenced prototypes and the blueprint are updated in one command.
             BakeCanopyShells(authoring);
             BakeImpostor(authoring);
         }

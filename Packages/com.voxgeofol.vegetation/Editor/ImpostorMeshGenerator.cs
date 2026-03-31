@@ -20,7 +20,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         /// </summary>
         public static void BakeImpostorMesh(TreeBlueprintSO blueprint, ImpostorBakeSettings? settings = null)
         {
-            // Range: requires a readable trunk mesh plus readable shellL2 canopy and simplified L2 wood meshes on every placed branch prototype. Condition: merged source geometry stays in tree local space. Output: impostorMesh is assigned on the blueprint asset.
+            // Range: requires a readable trunk mesh plus readable source wood/foliage meshes on every placed branch prototype. Condition: merged source geometry stays in tree local space and is voxelized at very coarse resolution. Output: impostorMesh is assigned on the blueprint asset.
             if (blueprint == null)
             {
                 throw new ArgumentNullException(nameof(blueprint));
@@ -28,8 +28,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
 
             Mesh combinedTreeMesh = CreateCombinedTreeSpaceMesh(blueprint);
             ImpostorBakeSettings activeSettings = settings ?? new ImpostorBakeSettings();
-            int targetTriangles = Mathf.Max(1, activeSettings.TargetTriangles);
-            int voxelResolution = Mathf.Clamp(Mathf.CeilToInt(Mathf.Pow(targetTriangles * 1.5f, 1f / 3f)) * 2, 8, 20);
+            int voxelResolution = Mathf.Max(2, activeSettings.VoxelResolution);
             MeshVoxelizerHierarchyNode[] hierarchyNodes = MeshVoxelizerHierarchyBuilder.BuildHierarchy(
                 combinedTreeMesh,
                 voxelResolution,
@@ -37,6 +36,12 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 voxelResolution,
                 0,
                 1);
+
+            // TODO: Make a direct MeshVoxelizer to Mesh as in the VoxelizerDemo!
+            // Box3 bounds = new Box3(combinedTreeMesh.bounds.min, combinedTreeMesh.bounds.max);
+            // var m_voxelizer = new MeshVoxelizer(Mathf.CeilToInt(bounds.Width), Mathf.CeilToInt(bounds.Height), voxelResolution);
+            // m_voxelizer.Voxelize(combinedTreeMesh.vertices, combinedTreeMesh.triangles, bounds);
+
             Mesh? surfaceMesh = hierarchyNodes.Length == 0 ? null : hierarchyNodes[0].ShellL0Mesh;
             if (surfaceMesh == null || surfaceMesh.triangles.Length == 0)
             {
@@ -50,7 +55,11 @@ namespace VoxGeoFol.Features.Vegetation.Editor
 
             SerializedObject serializedBlueprint = new SerializedObject(blueprint);
             serializedBlueprint.FindProperty("impostorMesh").objectReferenceValue =
-                GeneratedMeshAssetUtility.PersistGeneratedMesh(blueprint, $"{blueprint.name}_Impostor", simplifiedMesh);
+                GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                    blueprint,
+                    $"{blueprint.name}_Impostor",
+                    simplifiedMesh,
+                    blueprint.GeneratedImpostorMeshesRelativeFolder);
             serializedBlueprint.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(blueprint);
         }
@@ -95,16 +104,16 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             {
                 BranchPlacement placement = placements[i] ?? throw new InvalidOperationException($"{blueprint.name} branch placement {i} is missing.");
                 BranchPrototypeSO prototype = placement.Prototype ?? throw new InvalidOperationException($"{blueprint.name} branch placement {i} is missing prototype.");
-                Mesh shellL2WoodMesh = prototype.ShellL2WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing shellL2WoodMesh.");
-                if (!shellL2WoodMesh.isReadable)
+                Mesh woodMesh = prototype.WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing woodMesh.");
+                Mesh foliageMesh = prototype.FoliageMesh ?? throw new InvalidOperationException($"{prototype.name} is missing foliageMesh.");
+                if (!woodMesh.isReadable)
                 {
-                    throw new InvalidOperationException($"{prototype.name} shellL2WoodMesh must be readable before impostor baking.");
+                    throw new InvalidOperationException($"{prototype.name} woodMesh must be readable before impostor baking.");
                 }
 
-                List<BranchShellNode> leafNodes = BranchShellNodeUtility.CollectLeafNodes(prototype.ShellNodes);
-                if (leafNodes.Count == 0)
+                if (!foliageMesh.isReadable)
                 {
-                    throw new InvalidOperationException($"{prototype.name} is missing shellNodes for impostor baking.");
+                    throw new InvalidOperationException($"{prototype.name} foliageMesh must be readable before impostor baking.");
                 }
 
                 Matrix4x4 branchMatrix = Matrix4x4.TRS(
@@ -112,18 +121,8 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     placement.LocalRotation,
                     Vector3.one * placement.Scale);
 
-                AppendMesh(vertices, triangles, shellL2WoodMesh, branchMatrix);
-                for (int leafIndex = 0; leafIndex < leafNodes.Count; leafIndex++)
-                {
-                    Mesh shellL2Mesh = leafNodes[leafIndex].ShellL2Mesh ??
-                                       throw new InvalidOperationException($"{prototype.name} leaf node {leafIndex} is missing shellL2Mesh.");
-                    if (!shellL2Mesh.isReadable)
-                    {
-                        throw new InvalidOperationException($"{prototype.name} leaf node {leafIndex} shellL2Mesh must be readable before impostor baking.");
-                    }
-
-                    AppendMesh(vertices, triangles, shellL2Mesh, branchMatrix);
-                }
+                AppendMesh(vertices, triangles, woodMesh, branchMatrix);
+                AppendMesh(vertices, triangles, foliageMesh, branchMatrix);
             }
 
             Mesh combinedMesh = new Mesh

@@ -23,6 +23,8 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 17. Reusable public-facing features should live in embedded packages under `Packages/`; repo-local-only features can remain under `Assets/Scripts/Features`.
 18. No useless maintenance. Scripts are either completely dropped or fully migrated to new api, no obsolete wrappers!
 19. No useless abstractions, no bloatware.
+20. Avoid constant asset creation and editor refresh in tests! It makes test run multiple times slower!
+21. Avoid constant asset creation if full algorithm is not finished! Create finished asset once but do not refresh editor constantly! Only do AssetDatabase.SaveAssets() once all meshes are created. All operations with AssetDatabase is generally very-very long!
 
 --
 
@@ -55,8 +57,8 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 - `VegetationAuthoringValidator` - Task 1 authoring contract authority: explicit validation for readability, opacity, budgets, bounds, scale, and LOD ordering
 - `CanopyShellGenerator` - editor-side Phase B branch authority: uses `MeshVoxelizerHierarchyBuilder` to voxelize readable foliage at `16/12/8`, split L0 surface voxels into octant `shellNodes`, persist node-local `L0/L1/L2` meshes, and refresh branch-level wood attachments
 - `MeshVoxelizerHierarchyBuilder` / `MeshVoxelizerHierarchyDemo` - shared Phase B hierarchy authority and manual inspection utility: voxelizes a readable mesh at `16/12/8`, splits L0 surface voxels into octant nodes, and emits one mesh triplet per node
-- `ImpostorMeshGenerator` - editor-side Phase B tree authority: merges trunk + branch leaf-frontier `shellNodes[].shellL2Mesh` + branch `shellL2WoodMesh` in tree space, re-voxelizes that aggregate mesh through `MeshVoxelizerHierarchyBuilder`, and stores `impostorMesh`
-- `GeneratedMeshAssetUtility` - editor-side Phase B asset persistence authority: writes generated shell/impostor meshes as explicit `.mesh` files into writable project asset folders beside the owner asset when possible
+- `ImpostorMeshGenerator` - editor-side Phase B tree authority: merges trunk + original placed branch `woodMesh`/`foliageMesh` in tree space, voxelizes that full tree at coarse size `4` through `MeshVoxelizerHierarchyBuilder`, and stores `impostorMesh` without requiring baked canopy shells
+- `GeneratedMeshAssetUtility` - editor-side Phase B asset persistence authority: writes generated shell/impostor meshes as explicit `.mesh` files into writable project asset folders beside the owner asset when possible, while honoring explicit relative-folder overrides from the authoring asset
 - `VegetationTreeAuthoringEditorUtility` - editor-side Phase C authority: bake entry points, aggregated validation, and per-tier authoring summary for `VegetationTreeAuthoring`
 - `VegetationEditorPreview` - editor-side Phase C preview authority: rebuilds transient branch-root hierarchies for all milestone representation tiers
 - `VegetationTreeAuthoringEditor` - editor integration: inspector-side preview controls, bake buttons, validation display, and window launcher

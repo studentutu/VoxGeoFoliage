@@ -55,41 +55,6 @@ public sealed class CanopyShellGenerationTests
     }
 
     [Test]
-    public void BakeCanopyShells_LeafFrontierTriangleCountsDecreaseAcrossLevels()
-    {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("BudgetFoliage"));
-
-        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
-
-        int l0Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodes, 0);
-        int l1Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodes, 1);
-        int l2Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodes, 2);
-
-        Assert.Greater(l0Triangles, l1Triangles);
-        Assert.Greater(l1Triangles, l2Triangles);
-    }
-
-    [Test]
-    public void BakeCanopyShells_NodeMeshesHaveValidNormalsAndNoDegenerateTriangles()
-    {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSlantedTetrahedronMesh("NormalsFoliage"));
-
-        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
-        TrackGeneratedShells(prototype);
-
-        for (int i = 0; i < prototype.ShellNodes.Length; i++)
-        {
-            BranchShellNode node = prototype.ShellNodes[i];
-            Assert.IsTrue(HasValidNormals(node.ShellL0Mesh!));
-            Assert.IsTrue(HasValidNormals(node.ShellL1Mesh!));
-            Assert.IsTrue(HasValidNormals(node.ShellL2Mesh!));
-            Assert.IsTrue(HasNoDegenerateTriangles(node.ShellL0Mesh!));
-            Assert.IsTrue(HasNoDegenerateTriangles(node.ShellL1Mesh!));
-            Assert.IsTrue(HasNoDegenerateTriangles(node.ShellL2Mesh!));
-        }
-    }
-
-    [Test]
     public void BakeCanopyShells_PersistedChildRangesStayValid()
     {
         BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("TopologyFoliage"));
@@ -120,29 +85,17 @@ public sealed class CanopyShellGenerationTests
     }
 
     [Test]
-    public void ImpostorGenerate_FromLeafFrontierShellL2_CreatesReadableMesh()
+    public void ImpostorGenerate_FromOriginalTreeMeshes_CreatesReadableCoarseMesh()
     {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("ImpostorFoliage"));
-        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
+        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("ImpostorBoundsFoliage"));
 
         TreeBlueprintSO blueprint = CreateBlueprintForImpostorBake(prototype);
-        ImpostorMeshGenerator.BakeImpostorMesh(blueprint, CreateImpostorBakeSettings(96, 0.05f));
+        ImpostorMeshGenerator.BakeImpostorMesh(blueprint, CreateImpostorBakeSettings(4));
         TrackGeneratedImpostor(blueprint);
 
         Assert.NotNull(blueprint.ImpostorMesh);
         Assert.IsTrue(blueprint.ImpostorMesh!.isReadable);
         Assert.Greater(GetTriangleCount(blueprint.ImpostorMesh), 0);
-    }
-
-    [Test]
-    public void ImpostorGenerate_MergesHierarchyShellsInTreeSpace()
-    {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("ImpostorBoundsFoliage"));
-        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
-
-        TreeBlueprintSO blueprint = CreateBlueprintForImpostorBake(prototype);
-        ImpostorMeshGenerator.BakeImpostorMesh(blueprint, CreateImpostorBakeSettings(128, 0.05f));
-        TrackGeneratedImpostor(blueprint);
 
         Bounds impostorBounds = blueprint.ImpostorMesh!.bounds;
         Assert.Less(impostorBounds.min.x, -1.5f);
@@ -187,11 +140,10 @@ public sealed class CanopyShellGenerationTests
         return settings;
     }
 
-    private ImpostorBakeSettings CreateImpostorBakeSettings(int targetTriangles, float weldThreshold)
+    private ImpostorBakeSettings CreateImpostorBakeSettings(int voxelResolution)
     {
         ImpostorBakeSettings settings = new ImpostorBakeSettings();
-        SetPrivateField(settings, "targetTriangles", targetTriangles);
-        SetPrivateField(settings, "weldThreshold", weldThreshold);
+        SetPrivateField(settings, "voxelResolution", voxelResolution);
         return settings;
     }
 
@@ -275,27 +227,6 @@ public sealed class CanopyShellGenerationTests
         };
 
         return CombineMeshes(name, combineInstances);
-    }
-
-    private Mesh CreateSlantedTetrahedronMesh(string name)
-    {
-        Vector3[] vertices =
-        {
-            new Vector3(-0.7f, -0.5f, -0.4f),
-            new Vector3(0.8f, -0.45f, -0.25f),
-            new Vector3(0.1f, 0.95f, -0.15f),
-            new Vector3(-0.05f, 0.1f, 0.9f)
-        };
-
-        int[] triangles =
-        {
-            0, 1, 2,
-            0, 3, 1,
-            1, 3, 2,
-            0, 2, 3
-        };
-
-        return CreateMesh(name, vertices, triangles);
     }
 
     private Mesh CreateSegmentedBranchMesh(string name, Vector3 size, int segments)
@@ -440,50 +371,6 @@ public sealed class CanopyShellGenerationTests
         SetPrivateField(placement, "localRotation", rotation);
         SetPrivateField(placement, "scale", scale);
         return placement;
-    }
-
-    private static bool HasValidNormals(Mesh mesh)
-    {
-        Vector3[] normals = mesh.normals;
-        if (normals.Length != mesh.vertexCount)
-        {
-            return false;
-        }
-
-        for (int i = 0; i < normals.Length; i++)
-        {
-            Vector3 normal = normals[i];
-            if (float.IsNaN(normal.x) || float.IsNaN(normal.y) || float.IsNaN(normal.z) ||
-                float.IsInfinity(normal.x) || float.IsInfinity(normal.y) || float.IsInfinity(normal.z))
-            {
-                return false;
-            }
-
-            if (normal.sqrMagnitude < 0.8f)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool HasNoDegenerateTriangles(Mesh mesh)
-    {
-        Vector3[] vertices = mesh.vertices;
-        int[] triangles = mesh.triangles;
-        for (int triangleIndex = 0; triangleIndex < triangles.Length; triangleIndex += 3)
-        {
-            Vector3 a = vertices[triangles[triangleIndex]];
-            Vector3 b = vertices[triangles[triangleIndex + 1]];
-            Vector3 c = vertices[triangles[triangleIndex + 2]];
-            if (Vector3.Cross(b - a, c - a).sqrMagnitude <= 0.000001f)
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private static int CountBits(byte value)

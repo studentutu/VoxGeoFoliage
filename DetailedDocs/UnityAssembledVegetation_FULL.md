@@ -284,7 +284,7 @@ Bake:
 
 This is critical.
 
-Generate a plain opaque far mesh from the shell / reduced canopy volume:
+Generate a plain opaque far mesh from the full assembled tree source:
 - no cards
 - no billboards
 - no alpha-based impostor
@@ -296,11 +296,10 @@ The far mesh should:
 - be stable under lighting and wind
 
 Recommended generation:
-1. Start from shell L2
-2. simplify further
-3. remove cavities that no longer matter at far distance
-4. fuse into one or very few connected volumes
-5. ensure robust normals for stable shading
+1. Reconstruct one temporary tree-space mesh from `trunkMesh` + all placed branch `woodMesh` + `foliageMesh`
+2. Voxelize that source at a deliberately crude size `4`
+3. Emit the root voxel surface as the far mesh
+4. Keep normals stable for simple opaque shading
 
 
 ## 4.5 Validation

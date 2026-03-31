@@ -11,11 +11,8 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
     [Serializable]
     public sealed class ImpostorBakeSettings
     {
-        [SerializeField] [Min(1)] private int targetTriangles = 200;
-        [SerializeField] [Min(0.0001f)] private float weldThreshold = 0.01f;
+        [SerializeField] [Min(2)] private int voxelResolution = 4;
 
-        public int TargetTriangles => targetTriangles;
-
-        public float WeldThreshold => weldThreshold;
+        public int VoxelResolution => voxelResolution;
     }
 }
