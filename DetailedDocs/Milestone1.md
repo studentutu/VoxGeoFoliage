@@ -54,8 +54,8 @@ This system does not use Unity's built-in `LODGroup`. LOD selection is fully own
 
 - Implemented the Task 1 runtime authoring types under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
 - Implemented explicit authoring validation via `VegetationAuthoringValidator`.
-- Added demo authoring sync in `Packages/com.voxgeofol.vegetation/Editor/VegetationPhaseAAuthoringSync.cs` to rebuild branch placements/bounds from the assembled tree prefab.
-- Added EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringValidationTests.cs` and `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringAssetSyncTests.cs`.
+- Public package authoring now keeps branch placements/bounds directly on the authoring assets; only generated shell/impostor meshes are regenerated from that data.
+- Added EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringValidationTests.cs` and `Packages/com.voxgeofol.vegetation/Tests/Editor/VegetationEditorAuthoringTests.cs`.
 - Verified with `Fully Compile by Unity` and the Unity EditMode test runner; the demo `branch_leaves_fullgeo` assets now validate and the demo tree blueprint is populated.
 
 ### 1.1 ScriptableObjects (authoring, immutable asset data)
@@ -146,7 +146,7 @@ No runtime data is stored on the MonoBehaviour. `leafColorTint` lives on `Branch
 - The custom inspector now shows blueprint summary (branch count, per-tier triangle totals, bounds), aggregated validation issues, preview toggle/tier controls, and shell/impostor bake buttons.
 - The dedicated editor window can target the selected `VegetationTreeAuthoring` and reuses the same preview/bake controls outside the Inspector.
 - Preview tiers rebuild a transient hierarchy under the configured branch root using `HideFlags.DontSave | HideFlags.NotEditable`, including the milestone-required `R0`, `R1`, `R2`, `R3`, and shell-only views. Branch reconstruction is defined from the canopy hierarchy root downward, based on the pre-computed hierarchy of canopy shells per each node.
-- Updated `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringAssetSyncTests.cs` to cover the extracted preview utility and editor utility bake entry point.
+- Updated `Packages/com.voxgeofol.vegetation/Tests/Editor/VegetationEditorAuthoringTests.cs` to cover the extracted preview utility and editor utility bake entry point.
 - Verified with `Fully Compile by Unity` on `2026-03-29`.
 
 ### 2.1 `VegetationEditorPreview` Editor Utility
@@ -203,7 +203,7 @@ Driven from the custom inspector and the dedicated editor window. The utility st
 - `CanopyShellGenerator` now bakes `L0/L1/L2` shell meshes on every occupied shell node via `MeshVoxelizerHierarchyBuilder` and still bakes branch-level `shellL1WoodMesh` and `shellL2WoodMesh`.
 - `ImpostorMeshGenerator` now merges `trunkMesh` plus transformed leaf-frontier `shellNodes[].shellL2Mesh` and `shellL2WoodMesh` instances in tree local space, re-voxelizes that aggregate with `MeshVoxelizerHierarchyBuilder`, and writes `impostorMesh` onto `TreeBlueprintSO`.
 - Generated shell and impostor meshes are persisted as explicit `.mesh` assets under owner-local `GeneratedMeshes/` folders in `Assets/` so they survive editor restarts and stay compatible with public package installs.
-- Rewrote EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs`, `AuthoringValidationTests.cs`, and `AuthoringAssetSyncTests.cs` for the hierarchy model.
+- Rewrote EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs`, `AuthoringValidationTests.cs`, and `VegetationEditorAuthoringTests.cs` for the hierarchy model.
 - Removed the obsolete editor-only `Voxelizer`, `VoxelGrid`, and `MarchingTetrahedraMesher` files after the rewrite landed.
 - Verified with `Fully Compile by Unity` on `2026-03-30`; Unity EditMode tests were rewritten but not rerun in this pass.
 
@@ -647,12 +647,12 @@ AuthoringValidationTests:
   - TreeBlueprint_ImpostorTriangleBudget_Under200
   - TreeBlueprint_ScaleConstraint_OnlyAllowedValues
 
-AuthoringAssetSyncTests:
-  - RefreshBranchPrototypeLocalBounds_EncapsulatesWoodAndFoliageMeshes
-  - RefreshBlueprintFromAssemblyAsset_RebuildsPlacementsAssignsLodProfileAndProducesValidBlueprint
-  - ReconstructFromDataAndOriginalBranch_RebuildsBranchHierarchyFromBlueprint
-  - ReconstructShellL1FromData_RebuildsBranchHierarchyFromBlueprintShells
-  - DeleteOriginals_RemovesAllChildrenFromBranchRoot
+VegetationEditorAuthoringTests:
+  - ShowPreview_R0Full_RebuildsTransientHierarchyFromBlueprint
+  - ClearPreview_RemovesAllChildrenFromBranchRoot
+  - ShowPreview_ShellL1Only_RebuildsBranchHierarchyFromLeafFrontier
+  - ShowPreview_R3Impostor_CreatesSingleImpostorObject
+  - BakeCanopyShellsAndImpostor_FromEditorUtility_PopulatesGeneratedMeshes
 ```
 
 ### 10.2 Canopy Shell Generation Tests (`Packages/com.voxgeofol.vegetation/Tests/Editor/`)
@@ -726,7 +726,6 @@ Packages/com.voxgeofol.vegetation/
 |   |   `-- planned URP integration runtime code
 |   `-- Vegetation.asmdef
 |-- Editor/
-|   |-- VegetationPhaseAAuthoringSync.cs
 |   |-- VegetationPreviewTier.cs
 |   |-- VegetationAuthoringSummary.cs
 |   |-- VegetationEditorPreview.cs
@@ -740,7 +739,7 @@ Packages/com.voxgeofol.vegetation/
 |   `-- supporting editor tools
 |-- Tests/
 |   `-- Editor/
-|       |-- AuthoringAssetSyncTests.cs
+|       |-- VegetationEditorAuthoringTests.cs
 |       |-- AuthoringValidationTests.cs
 |       |-- CanopyShellGenerationTests.cs
 |       |-- SpatialGridTests.cs

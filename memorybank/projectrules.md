@@ -35,7 +35,7 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 7. BRG (BatchRendererGroup) is the rendering backend; no MaterialPropertyBlock usage.
 8. Per-instance color variation via `RSUV` only (packed uint) - no MaterialPropertyBlock, no DOTS instanced properties for color. Single variation mechanism preserving SRP batching.
 9. Branch scale is in steps of 0.25 (e.g. 0.25, 0.5, 0.75, 1.0, 1.25...); no scale quantization optimization yet.
-10. Spatial partitioning via uniform grid; cell visibility is CPU frustum test + CullingGroup API (optional occlusion layer, 1024 sphere limit per instance).
+10. Spatial partitioning via uniform grid; cell visibility is CPU frustum test + CullingGroup API (optional occlusion layer, Unity hard limit of 1024 sphere limit per culling group).
 11. Authoring data lives in ScriptableObjects; runtime data in GPU buffers; no runtime data on MonoBehaviours.
 12. Editor preview is transient child GameObjects with `HideFlags.DontSave | HideFlags.NotEditable` - never serialized.
 13. Shell generation and impostor baking are editor-only operations (not runtime).
@@ -51,7 +51,6 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 - `VegetationRendererFeature` - URP integration: schedules compute dispatch + depth prepass + color pass
 - `VegetationBRGManager` - BRG lifecycle: mesh/material registration, draw command emission
 - `VegetationAuthoringValidator` - Task 1 authoring contract authority: explicit validation for readability, opacity, budgets, bounds, scale, and LOD ordering
-- `VegetationPhaseAAuthoringSync` - editor-side Phase A authority: refreshes source bounds/budgets and rebuilds demo tree branch placements from imported sample assets or the repo-local demo mirror
 - `CanopyShellGenerator` - editor-side Phase B branch authority: uses `MeshVoxelizerHierarchyBuilder` to voxelize readable foliage at `16/12/8`, split L0 surface voxels into octant `shellNodes`, persist node-local `L0/L1/L2` meshes, and refresh branch-level wood attachments
 - `MeshVoxelizerHierarchyBuilder` / `MeshVoxelizerHierarchyDemo` - shared Phase B hierarchy authority and manual inspection utility: voxelizes a readable mesh at `16/12/8`, splits L0 surface voxels into octant nodes, and emits one mesh triplet per node
 - `ImpostorMeshGenerator` - editor-side Phase B tree authority: merges trunk + branch leaf-frontier `shellNodes[].shellL2Mesh` + branch `shellL2WoodMesh` in tree space, re-voxelizes that aggregate mesh through `MeshVoxelizerHierarchyBuilder`, and stores `impostorMesh`
@@ -67,7 +66,6 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 
 - EditMode suite in [`Assets/EditorTests`](../Assets/EditorTests) is the primary behavioral safety net.
 - Vegetation authoring coverage currently starts in [`Packages/com.voxgeofol.vegetation/Tests/Editor`](../Packages/com.voxgeofol.vegetation/Tests/Editor).
-- Phase B shell/impostor coverage now lives in [`Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs`](../Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs).
 - `CI/CITestOutput.xml` is authoritative for test results.
 - `CI/CompileErrorsAfterUnityRun.txt` is authoritative for Unity compile errors.
 - Use `Fully Compile by Unity` when files were added, removed, or renamed.

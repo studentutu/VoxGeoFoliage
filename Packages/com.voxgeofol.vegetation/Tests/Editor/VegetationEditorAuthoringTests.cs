@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -10,9 +9,9 @@ using VoxGeoFol.Features.Vegetation.Authoring;
 using VoxGeoFol.Features.Vegetation.Editor;
 
 [TestFixture]
-public sealed class AuthoringAssetSyncTests
+public sealed class VegetationEditorAuthoringTests
 {
-    private const string TestAssetRoot = "Assets/__GeneratedTests__/VegetationAuthoringSync";
+    private const string TestAssetRoot = "Assets/__GeneratedTests__/VegetationEditorAuthoring";
     private const string GeneratedMeshAssetRoot = TestAssetRoot + "/GeneratedMeshes";
     private readonly List<UnityEngine.Object> createdObjects = new List<UnityEngine.Object>();
     private readonly List<string> createdGeneratedMeshAssetPaths = new List<string>();
@@ -48,126 +47,6 @@ public sealed class AuthoringAssetSyncTests
         }
 
         AssetDatabase.Refresh();
-    }
-
-    [Test]
-    public void RefreshBranchPrototypeLocalBounds_EncapsulatesWoodAndFoliageMeshes()
-    {
-        BranchPrototypeSO prototype = ScriptableObject.CreateInstance<BranchPrototypeSO>();
-        Mesh woodMesh = CreateMeshAsset(
-            "Wood.asset",
-            new[]
-            {
-                new Vector3(-2f, -1f, -1f),
-                new Vector3(-1f, 1f, -1f),
-                new Vector3(-2f, -1f, 1f)
-            });
-        Mesh foliageMesh = CreateMeshAsset(
-            "Foliage.asset",
-            new[]
-            {
-                new Vector3(1f, -0.5f, -0.5f),
-                new Vector3(3f, 2f, -0.5f),
-                new Vector3(1f, -0.5f, 2f)
-            });
-
-        SetPrivateField(prototype, "woodMesh", woodMesh);
-        SetPrivateField(prototype, "foliageMesh", foliageMesh);
-
-        VegetationPhaseAAuthoringSync.RefreshBranchPrototypeLocalBounds(prototype);
-
-        Bounds expectedBounds = woodMesh.bounds;
-        expectedBounds.Encapsulate(foliageMesh.bounds);
-        AssertBoundsApproximatelyEqual(expectedBounds, prototype.LocalBounds);
-    }
-
-    [Test]
-    public void RefreshBlueprintFromAssemblyAsset_RebuildsPlacementsAssignsLodProfileAndProducesValidBlueprint()
-    {
-        EnsureTestFolders();
-
-        Mesh woodMesh = CreateMeshAsset(
-            "wood.asset",
-            new[]
-            {
-                new Vector3(-0.25f, -0.25f, -0.25f),
-                new Vector3(0.25f, 0.75f, -0.25f),
-                new Vector3(-0.25f, -0.25f, 0.25f)
-            });
-        Mesh foliageMesh = CreateMeshAsset(
-            "foliage.asset",
-            new[]
-            {
-                new Vector3(-0.5f, 0f, -0.5f),
-                new Vector3(0.5f, 1f, -0.5f),
-                new Vector3(-0.5f, 0f, 0.5f)
-            });
-        Mesh trunkMesh = CreateMeshAsset(
-            "trunk.asset",
-            new[]
-            {
-                new Vector3(-0.25f, -1f, -0.25f),
-                new Vector3(0.25f, 2f, -0.25f),
-                new Vector3(-0.25f, -1f, 0.25f)
-            });
-        Material woodMaterial = CreateMaterialAsset("wood.mat");
-        Material foliageMaterial = CreateMaterialAsset("foliage.mat");
-        Material trunkMaterial = CreateMaterialAsset("trunk.mat");
-
-        BranchPrototypeSO prototype = CreateAsset<BranchPrototypeSO>("Prototype.asset");
-        SetPrivateField(prototype, "woodMesh", woodMesh);
-        SetPrivateField(prototype, "woodMaterial", woodMaterial);
-        SetPrivateField(prototype, "foliageMesh", foliageMesh);
-        SetPrivateField(prototype, "foliageMaterial", foliageMaterial);
-        SetPrivateField(prototype, "localBounds", new Bounds(Vector3.zero, Vector3.one * 0.1f));
-        SetPrivateField(prototype, "triangleBudgetWood", 8);
-        SetPrivateField(prototype, "triangleBudgetFoliage", 8);
-
-        LODProfileSO lodProfile = CreateAsset<LODProfileSO>("Lod.asset");
-        SetPrivateField(lodProfile, "r0MinProjectedArea", 0.5f);
-        SetPrivateField(lodProfile, "r1MinProjectedArea", 0.25f);
-        SetPrivateField(lodProfile, "shellL0MinProjectedArea", 0.12f);
-        SetPrivateField(lodProfile, "shellL1MinProjectedArea", 0.06f);
-        SetPrivateField(lodProfile, "shellL2MinProjectedArea", 0.02f);
-        SetPrivateField(lodProfile, "absoluteCullProjectedMin", 0.005f);
-        SetPrivateField(lodProfile, "backsideBiasScale", 0.2f);
-        SetPrivateField(lodProfile, "silhouetteKeepThreshold", 0.7f);
-
-        TreeBlueprintSO blueprint = CreateAsset<TreeBlueprintSO>("Blueprint.asset");
-        SetPrivateField(blueprint, "trunkMesh", trunkMesh);
-        SetPrivateField(blueprint, "trunkMaterial", trunkMaterial);
-        SetPrivateField(blueprint, "treeBounds", new Bounds(Vector3.zero, Vector3.one * 0.1f));
-
-        string branchPrefabPath = CreateBranchPrefabAsset("Branch.prefab", woodMesh, woodMaterial, foliageMesh, foliageMaterial);
-        string assemblyPrefabPath = CreateAssemblyPrefabAsset("Tree.prefab", branchPrefabPath);
-
-        VegetationPhaseAAuthoringSync.RefreshBranchPrototypeLocalBounds(prototype);
-        VegetationPhaseAAuthoringSync.RefreshBlueprintFromAssemblyAsset(
-            blueprint,
-            assemblyPrefabPath,
-            new[] { prototype },
-            lodProfile);
-
-        AssetDatabase.SaveAssets();
-        AssetDatabase.Refresh();
-
-        Assert.AreEqual(lodProfile, blueprint.LodProfile);
-        Assert.AreEqual(2, blueprint.Branches.Length);
-
-        float[] scales = { blueprint.Branches[0].Scale, blueprint.Branches[1].Scale };
-        Array.Sort(scales);
-        Assert.AreEqual(0.75f, scales[0], 0.0001f);
-        Assert.AreEqual(1.25f, scales[1], 0.0001f);
-
-        for (int i = 0; i < blueprint.Branches.Length; i++)
-        {
-            Assert.AreEqual(prototype, blueprint.Branches[i].Prototype);
-        }
-
-        VegetationValidationResult validationResult = blueprint.Validate();
-        Assert.IsFalse(
-            validationResult.HasErrors,
-            string.Join(Environment.NewLine, GetMessages(validationResult)));
     }
 
     [Test]
@@ -452,33 +331,12 @@ public sealed class AuthoringAssetSyncTests
         }
     }
 
-    private static void AssertBoundsApproximatelyEqual(Bounds expected, Bounds actual)
-    {
-        Assert.AreEqual(expected.center.x, actual.center.x, 0.0001f);
-        Assert.AreEqual(expected.center.y, actual.center.y, 0.0001f);
-        Assert.AreEqual(expected.center.z, actual.center.z, 0.0001f);
-        Assert.AreEqual(expected.size.x, actual.size.x, 0.0001f);
-        Assert.AreEqual(expected.size.y, actual.size.y, 0.0001f);
-        Assert.AreEqual(expected.size.z, actual.size.z, 0.0001f);
-    }
-
     private static void AssertQuaternionApproximatelyEqual(Quaternion expected, Quaternion actual)
     {
         Assert.AreEqual(expected.x, actual.x, 0.0001f);
         Assert.AreEqual(expected.y, actual.y, 0.0001f);
         Assert.AreEqual(expected.z, actual.z, 0.0001f);
         Assert.AreEqual(expected.w, actual.w, 0.0001f);
-    }
-
-    private static string[] GetMessages(VegetationValidationResult result)
-    {
-        string[] messages = new string[result.Issues.Count];
-        for (int i = 0; i < result.Issues.Count; i++)
-        {
-            messages[i] = result.Issues[i].Message;
-        }
-
-        return messages;
     }
 
     private void EnsureTestFolders()
@@ -490,7 +348,7 @@ public sealed class AuthoringAssetSyncTests
 
         if (!AssetDatabase.IsValidFolder(TestAssetRoot))
         {
-            AssetDatabase.CreateFolder("Assets/__GeneratedTests__", "VegetationAuthoringSync");
+            AssetDatabase.CreateFolder("Assets/__GeneratedTests__", "VegetationEditorAuthoring");
         }
     }
 
@@ -597,70 +455,6 @@ public sealed class AuthoringAssetSyncTests
         AssetDatabase.CreateAsset(material, assetPath);
         createdObjects.Add(material);
         return material;
-    }
-
-    private string CreateBranchPrefabAsset(
-        string fileName,
-        Mesh woodMesh,
-        Material woodMaterial,
-        Mesh foliageMesh,
-        Material foliageMaterial)
-    {
-        EnsureTestFolders();
-
-        GameObject root = new GameObject("BranchRoot");
-        createdObjects.Add(root);
-
-        GameObject woodChild = new GameObject("Wood");
-        woodChild.transform.SetParent(root.transform, false);
-        MeshFilter woodFilter = woodChild.AddComponent<MeshFilter>();
-        woodFilter.sharedMesh = woodMesh;
-        MeshRenderer woodRenderer = woodChild.AddComponent<MeshRenderer>();
-        woodRenderer.sharedMaterial = woodMaterial;
-
-        GameObject foliageChild = new GameObject("Foliage");
-        foliageChild.transform.SetParent(root.transform, false);
-        MeshFilter foliageFilter = foliageChild.AddComponent<MeshFilter>();
-        foliageFilter.sharedMesh = foliageMesh;
-        MeshRenderer foliageRenderer = foliageChild.AddComponent<MeshRenderer>();
-        foliageRenderer.sharedMaterial = foliageMaterial;
-
-        string prefabPath = $"{TestAssetRoot}/{fileName}";
-        PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
-        UnityEngine.Object.DestroyImmediate(root);
-        return prefabPath;
-    }
-
-    private string CreateAssemblyPrefabAsset(string fileName, string branchPrefabPath)
-    {
-        EnsureTestFolders();
-
-        GameObject branchPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(branchPrefabPath);
-        GameObject root = new GameObject("TreeRoot");
-        createdObjects.Add(root);
-
-        GameObject directBranch = (GameObject)PrefabUtility.InstantiatePrefab(branchPrefab);
-        directBranch.transform.SetParent(root.transform, false);
-        directBranch.transform.localPosition = new Vector3(0f, 1f, 0f);
-        directBranch.transform.localRotation = Quaternion.Euler(0f, 30f, 0f);
-        directBranch.transform.localScale = Vector3.one * 1.2f;
-
-        GameObject group = new GameObject("GroupedBranches");
-        group.transform.SetParent(root.transform, false);
-        group.transform.localPosition = new Vector3(1f, 0.5f, 0.25f);
-        group.transform.localRotation = Quaternion.Euler(0f, 15f, 0f);
-        group.transform.localScale = Vector3.one * 0.5f;
-
-        GameObject groupedBranch = (GameObject)PrefabUtility.InstantiatePrefab(branchPrefab);
-        groupedBranch.transform.SetParent(group.transform, false);
-        groupedBranch.transform.localPosition = new Vector3(0.5f, 0.25f, 1f);
-        groupedBranch.transform.localRotation = Quaternion.Euler(10f, 0f, 45f);
-        groupedBranch.transform.localScale = Vector3.one * 1.5f;
-
-        string prefabPath = $"{TestAssetRoot}/{fileName}";
-        PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
-        UnityEngine.Object.DestroyImmediate(root);
-        return prefabPath;
     }
 
     private BranchShellNode CreateShellNode(Mesh l0Mesh, Mesh l1Mesh, Mesh l2Mesh)
