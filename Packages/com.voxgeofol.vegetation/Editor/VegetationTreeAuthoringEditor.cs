@@ -1,5 +1,6 @@
 #nullable enable
 
+using MeshVoxelizerProject;
 using UnityEditor;
 using VoxGeoFol.Features.Vegetation.Authoring;
 
@@ -13,8 +14,11 @@ namespace VoxGeoFol.Features.Vegetation.Editor
     {
         public override void OnInspectorGUI()
         {
+            if (MeshVoxelizerHierarchyBuilder.Generating)
+                return;
+
             VegetationTreeAuthoring authoring = (VegetationTreeAuthoring)target;
-            VegetationTreeAuthoringEditorPanel.Draw(serializedObject, authoring, showOpenWindowButton: true);
+            VegetationTreeAuthoringEditorPanel.Draw(serializedObject, authoring);
         }
     }
 }

@@ -18,6 +18,7 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         [SerializeField] private Mesh? impostorMesh;
         [SerializeField] private Material? impostorMaterial;
         [SerializeField] private LODProfileSO? lodProfile;
+        [SerializeField] private ImpostorBakeSettings? ImposterBakeSettings;
         [SerializeField] private Bounds treeBounds = new Bounds(Vector3.zero, Vector3.one);
 
         public Mesh? TrunkMesh => trunkMesh;
@@ -31,6 +32,7 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         public Mesh? ImpostorMesh => impostorMesh;
 
         public Material? ImpostorMaterial => impostorMaterial;
+        public ImpostorBakeSettings ImposterSettings => ImposterBakeSettings?? new ImpostorBakeSettings();
 
         public LODProfileSO? LodProfile => lodProfile;
 

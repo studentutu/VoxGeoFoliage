@@ -93,7 +93,6 @@ namespace MeshVoxelizerProject
 
         public MeshRay TraceRay(Vector3 start, Vector3 dir)
         {
-
             MeshRay ray = new MeshRay();
             ray.distance = float.PositiveInfinity;
 
@@ -160,49 +159,6 @@ namespace MeshVoxelizerProject
                     }
                 }
             }
-        }
-
-        public MeshRay TraceRaySlow(Vector3 start, Vector3 dir)
-        {    
-            float minT, minU, minV, minW, minS;
-	        minT = minU = minV = minW = minS = float.PositiveInfinity;
-
-            float t, u, v, w, s;
-            bool hit = false;
-	        int minIndex = 0;
-
-            for (int i = 0; i < NumFaces; ++i)
-            {
-                Vector3 a = Vertices[Indices[i*3+0]];
-                Vector3 b = Vertices[Indices[i*3+1]];
-                Vector3 c = Vertices[Indices[i * 3 + 2]];
-
-                if (IntersectRayTriTwoSided(start, dir, a, b, c, out t, out u, out v, out w, out s))
-                {
-                    if (t < minT)
-                    {
-                        minT = t;
-				        minU = u;
-				        minV = v;
-				        minW = w;
-				        minS = s;
-				        minIndex = i;
-                        hit = true;
-                    }
-                }
-            }
-
-            MeshRay ray = new MeshRay();
-
-            ray.distance = minT;
-            ray.u = minU;
-            ray.v = minV;
-            ray.w = minW;
-            ray.faceSign = minS;
-            ray.faceIndex = minIndex;
-            ray.hit = hit;
-
-            return ray;
         }
 
         private void BuildRecursive(int nodeIndex, int start, int numFaces)

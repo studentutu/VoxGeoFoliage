@@ -12,6 +12,51 @@ namespace MeshVoxelizerProject
     /// </summary>
     public static class MeshVoxelizerHierarchyBuilder
     {
+        public static bool Generating = false;
+
+        /// <summary>
+        /// [INTEGRATION] Builds one coarse MeshVoxelizer surface mesh without creating hierarchy nodes.
+        /// </summary>
+        public static Mesh BuildSurfaceMesh(Mesh sourceMesh, int voxelResolution)
+        {
+            Generating = true;
+            try
+            {
+                // Range: sourceMesh must be readable and voxelResolution must be >= 2. Condition: the entire mesh bounds are voxelized once at the requested resolution. Output: one surface mesh covering the full source bounds.
+                if (sourceMesh == null)
+                {
+                    throw new ArgumentNullException(nameof(sourceMesh));
+                }
+
+                if (!sourceMesh.isReadable)
+                {
+                    throw new InvalidOperationException(
+                        $"{sourceMesh.name} must be readable before MeshVoxelizer surface generation.");
+                }
+
+                ValidateResolution(voxelResolution, nameof(voxelResolution));
+                Bounds sourceBounds = sourceMesh.bounds;
+                if (sourceBounds.size.x <= Mathf.Epsilon ||
+                    sourceBounds.size.y <= Mathf.Epsilon ||
+                    sourceBounds.size.z <= Mathf.Epsilon)
+                {
+                    throw new InvalidOperationException($"{sourceMesh.name} has invalid bounds {sourceBounds}.");
+                }
+
+                VoxelLevelData level = CreateVoxelLevel(sourceMesh, voxelResolution);
+                return BuildNodeMesh(level, sourceBounds, $"{sourceMesh.name}_Surface_{voxelResolution}");
+            }
+            catch (Exception e)
+            {
+                Generating = false;
+                throw;
+            }
+            finally
+            {
+                Generating = false;
+            }
+        }
+
         /// <summary>
         /// [INTEGRATION] Builds a preorder hierarchy where each node owns MeshVoxelizer meshes for L0/L1/L2.
         /// </summary>
@@ -23,56 +68,71 @@ namespace MeshVoxelizerProject
             int maxDepth = 2,
             int minimumSurfaceVoxelCountToSplit = 4)
         {
-            // Range: sourceMesh must be readable and the resolutions must be >= 2. Condition: L0 drives node subdivision and L1/L2 reuse the same node bounds. Output: preorder node array with one L0/L1/L2 mesh triplet per node.
-            if (sourceMesh == null)
+            Generating = true;
+            try
             {
-                throw new ArgumentNullException(nameof(sourceMesh));
-            }
+                // Range: sourceMesh must be readable and the resolutions must be >= 2. Condition: L0 drives node subdivision and L1/L2 reuse the same node bounds. Output: preorder node array with one L0/L1/L2 mesh triplet per node.
+                if (sourceMesh == null)
+                {
+                    throw new ArgumentNullException(nameof(sourceMesh));
+                }
 
-            if (!sourceMesh.isReadable)
+                if (!sourceMesh.isReadable)
+                {
+                    throw new InvalidOperationException(
+                        $"{sourceMesh.name} must be readable before MeshVoxelizer hierarchy generation.");
+                }
+
+                ValidateResolution(voxelResolutionL0, nameof(voxelResolutionL0));
+                ValidateResolution(voxelResolutionL1, nameof(voxelResolutionL1));
+                ValidateResolution(voxelResolutionL2, nameof(voxelResolutionL2));
+                if (maxDepth < 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(maxDepth), maxDepth,
+                        "maxDepth must be zero or greater.");
+                }
+
+                Bounds sourceBounds = sourceMesh.bounds;
+                if (sourceBounds.size.x <= Mathf.Epsilon ||
+                    sourceBounds.size.y <= Mathf.Epsilon ||
+                    sourceBounds.size.z <= Mathf.Epsilon)
+                {
+                    throw new InvalidOperationException($"{sourceMesh.name} has invalid bounds {sourceBounds}.");
+                }
+
+                VoxelLevelData l0 = CreateVoxelLevel(sourceMesh, voxelResolutionL0);
+                VoxelLevelData l1 = CreateVoxelLevel(sourceMesh, voxelResolutionL1);
+                VoxelLevelData l2 = CreateVoxelLevel(sourceMesh, voxelResolutionL2);
+
+                List<NodeBuildRecord> nodeRecords = new List<NodeBuildRecord>();
+                AddNodeRecursive(
+                    nodeRecords,
+                    sourceMesh.name,
+                    l0,
+                    l1,
+                    l2,
+                    sourceBounds,
+                    -1,
+                    0,
+                    maxDepth,
+                    Mathf.Max(1, minimumSurfaceVoxelCountToSplit));
+
+                if (nodeRecords.Count == 0)
+                {
+                    throw new InvalidOperationException($"{sourceMesh.name} produced no surface hierarchy nodes.");
+                }
+
+                return NormalizeHierarchy(nodeRecords);
+            }
+            catch (Exception e)
             {
-                throw new InvalidOperationException($"{sourceMesh.name} must be readable before MeshVoxelizer hierarchy generation.");
+                Generating = false;
+                throw;
             }
-
-            ValidateResolution(voxelResolutionL0, nameof(voxelResolutionL0));
-            ValidateResolution(voxelResolutionL1, nameof(voxelResolutionL1));
-            ValidateResolution(voxelResolutionL2, nameof(voxelResolutionL2));
-            if (maxDepth < 0)
+            finally
             {
-                throw new ArgumentOutOfRangeException(nameof(maxDepth), maxDepth, "maxDepth must be zero or greater.");
+                Generating = false;
             }
-
-            Bounds sourceBounds = sourceMesh.bounds;
-            if (sourceBounds.size.x <= Mathf.Epsilon ||
-                sourceBounds.size.y <= Mathf.Epsilon ||
-                sourceBounds.size.z <= Mathf.Epsilon)
-            {
-                throw new InvalidOperationException($"{sourceMesh.name} has invalid bounds {sourceBounds}.");
-            }
-
-            VoxelLevelData l0 = CreateVoxelLevel(sourceMesh, voxelResolutionL0);
-            VoxelLevelData l1 = CreateVoxelLevel(sourceMesh, voxelResolutionL1);
-            VoxelLevelData l2 = CreateVoxelLevel(sourceMesh, voxelResolutionL2);
-
-            List<NodeBuildRecord> nodeRecords = new List<NodeBuildRecord>();
-            AddNodeRecursive(
-                nodeRecords,
-                sourceMesh.name,
-                l0,
-                l1,
-                l2,
-                sourceBounds,
-                -1,
-                0,
-                maxDepth,
-                Mathf.Max(1, minimumSurfaceVoxelCountToSplit));
-
-            if (nodeRecords.Count == 0)
-            {
-                throw new InvalidOperationException($"{sourceMesh.name} produced no surface hierarchy nodes.");
-            }
-
-            return NormalizeHierarchy(nodeRecords);
         }
 
         private static MeshVoxelizerHierarchyNode[] NormalizeHierarchy(List<NodeBuildRecord> nodeRecords)
@@ -159,8 +219,10 @@ namespace MeshVoxelizerProject
 
         private static VoxelLevelData CreateVoxelLevel(Mesh sourceMesh, int resolution)
         {
-            MeshVoxelizer voxelizer = new MeshVoxelizer(resolution, resolution, resolution);
             Box3 bounds = new Box3(sourceMesh.bounds.min, sourceMesh.bounds.max);
+            var width = Mathf.CeilToInt(bounds.Width);
+            var height = Mathf.CeilToInt(bounds.Height);
+            MeshVoxelizer voxelizer = new MeshVoxelizer(width, height, resolution);
             voxelizer.Voxelize(sourceMesh.vertices, sourceMesh.triangles, bounds);
             return new VoxelLevelData(sourceMesh.bounds, voxelizer.Voxels, resolution);
         }
@@ -532,7 +594,8 @@ namespace MeshVoxelizerProject
 
         private sealed class NodeBuildRecord
         {
-            public NodeBuildRecord(Bounds localBounds, int depth, int parentIndex, Mesh shellL0Mesh, Mesh shellL1Mesh, Mesh shellL2Mesh)
+            public NodeBuildRecord(Bounds localBounds, int depth, int parentIndex, Mesh shellL0Mesh, Mesh shellL1Mesh,
+                Mesh shellL2Mesh)
             {
                 LocalBounds = localBounds;
                 Depth = depth;

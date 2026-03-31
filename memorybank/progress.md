@@ -43,11 +43,12 @@ Status note:
 
 Status note:
 - Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-30` after removing the legacy editor voxel pipeline and rebuilding the Phase B bake path around `MeshVoxelizerHierarchyBuilder`.
-- Rider MSBuild compile (`Compile by Rider MSBuild`) passed on `2026-03-31` after switching impostor baking to direct original-tree MeshVoxelizer extraction and trimming the affected EditMode tests.
+- Rider MSBuild compile (`Compile by Rider MSBuild`) passed on `2026-03-31` after simplifying impostor baking to direct original-tree MeshVoxelizer surface extraction without temporary hierarchy allocation.
 - The authoritative branch canopy data is now `BranchPrototypeSO.shellNodes`; branch-wide `shellL0Mesh/shellL1Mesh/shellL2Mesh` were removed.
 - `CanopyShellGenerator` now voxelizes readable foliage at `16/12/8`, splits L0 surface voxels into octant nodes, and persists one `L0/L1/L2` mesh triplet per node.
 - `ShellBakeSettings` now expose `maxOctreeDepth`, `voxelResolutionL0`, `voxelResolutionL1`, `voxelResolutionL2`, and `minimumSurfaceVoxelCountToSplit`.
-- `ImpostorMeshGenerator` now merges the original tree meshes (`trunkMesh` + placed branch `woodMesh`/`foliageMesh`) and extracts a coarse size-4 impostor surface from the root MeshVoxelizer node; baked canopy shells are no longer required for impostor generation.
+- `ImpostorMeshGenerator` now merges the original tree meshes (`trunkMesh` + placed branch `woodMesh`/`foliageMesh`) and extracts a coarse size-4 impostor surface through direct MeshVoxelizer surface generation; baked canopy shells are no longer required for impostor generation.
+- `2026-03-31`: simplified the impostor bake path again so it no longer allocates a temporary `MeshVoxelizerHierarchyNode[]`; the coarse impostor mesh now comes from a single direct surface bake.
 - `ImpostorBakeSettings` now expose `voxelResolution` with default `4`.
 - `TreeBlueprintSO` now exposes `generatedImpostorMeshesRelativeFolder`, matching the branch prototype shell-folder override pattern so impostor meshes can be written into a caller-selected project folder.
 - Editor preview, authoring validation, and summary accounting consume the leaf frontier of the hierarchy; impostor generation now voxelizes the original assembled tree meshes directly.

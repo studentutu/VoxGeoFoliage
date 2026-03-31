@@ -13,7 +13,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
     /// </summary>
     public static class VegetationTreeAuthoringEditorPanel
     {
-        public static void Draw(SerializedObject serializedAuthoring, VegetationTreeAuthoring authoring, bool showOpenWindowButton)
+        public static void Draw(SerializedObject serializedAuthoring, VegetationTreeAuthoring authoring)
         {
             if (serializedAuthoring == null)
             {
@@ -64,15 +64,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             DrawPreviewControls(authoring);
             EditorGUILayout.Space();
             DrawBakeControls(authoring);
-
-            if (showOpenWindowButton)
-            {
-                EditorGUILayout.Space();
-                if (GUILayout.Button("Open Editor Window"))
-                {
-                    VegetationTreeAuthoringWindow.Open(authoring);
-                }
-            }
         }
 
         private static void DrawSummary(VegetationTreeAuthoring authoring)

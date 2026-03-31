@@ -54,7 +54,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
 
             TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
             GetRequiredPlacements(blueprint);
-            ImpostorMeshGenerator.BakeImpostorMesh(blueprint);
+            ImpostorMeshGenerator.BakeImpostorMesh(blueprint, blueprint.ImposterSettings);
             SaveAuthoringChanges(authoring, blueprint);
         }
 

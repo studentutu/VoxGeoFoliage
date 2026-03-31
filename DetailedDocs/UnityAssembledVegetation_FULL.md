@@ -196,7 +196,7 @@ Current production authoring path (`2026-03-30`):
 2. Use `L0` surface occupancy to split the branch bounds into octant shell nodes
 3. Emit one `L0/L1/L2` mesh triplet per occupied node
 4. Persist the node hierarchy on `BranchPrototypeSO.shellNodes`
-5. Reuse the same builder to derive the far impostor source from the merged tree-space assembly
+5. Run one coarse direct MeshVoxelizer surface extraction on the merged tree-space assembly for the far impostor
 
 ### Runtime / GPU Extension
 
@@ -298,7 +298,7 @@ The far mesh should:
 Recommended generation:
 1. Reconstruct one temporary tree-space mesh from `trunkMesh` + all placed branch `woodMesh` + `foliageMesh`
 2. Voxelize that source at a deliberately crude size `4`
-3. Emit the root voxel surface as the far mesh
+3. Emit the direct voxel surface as the far mesh
 4. Keep normals stable for simple opaque shading
 
 

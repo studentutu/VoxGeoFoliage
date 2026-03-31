@@ -29,28 +29,15 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             Mesh combinedTreeMesh = CreateCombinedTreeSpaceMesh(blueprint);
             ImpostorBakeSettings activeSettings = settings ?? new ImpostorBakeSettings();
             int voxelResolution = Mathf.Max(2, activeSettings.VoxelResolution);
-            MeshVoxelizerHierarchyNode[] hierarchyNodes = MeshVoxelizerHierarchyBuilder.BuildHierarchy(
-                combinedTreeMesh,
-                voxelResolution,
-                voxelResolution,
-                voxelResolution,
-                0,
-                1);
-
-            // TODO: Make a direct MeshVoxelizer to Mesh as in the VoxelizerDemo!
-            // Box3 bounds = new Box3(combinedTreeMesh.bounds.min, combinedTreeMesh.bounds.max);
-            // var m_voxelizer = new MeshVoxelizer(Mathf.CeilToInt(bounds.Width), Mathf.CeilToInt(bounds.Height), voxelResolution);
-            // m_voxelizer.Voxelize(combinedTreeMesh.vertices, combinedTreeMesh.triangles, bounds);
-
-            Mesh? surfaceMesh = hierarchyNodes.Length == 0 ? null : hierarchyNodes[0].ShellL0Mesh;
-            if (surfaceMesh == null || surfaceMesh.triangles.Length == 0)
+            
+            Mesh surfaceMesh = MeshVoxelizerHierarchyBuilder.BuildSurfaceMesh(combinedTreeMesh, voxelResolution);
+            if (surfaceMesh.triangles.Length == 0)
             {
+                UnityEngine.Object.DestroyImmediate(surfaceMesh);
                 UnityEngine.Object.DestroyImmediate(combinedTreeMesh);
                 throw new InvalidOperationException($"{blueprint.name} did not produce a valid impostor surface mesh.");
             }
 
-            Mesh simplifiedMesh = surfaceMesh; // no simplification for now.
-            DestroyUnusedHierarchyMeshes(hierarchyNodes, simplifiedMesh);
             UnityEngine.Object.DestroyImmediate(combinedTreeMesh);
 
             SerializedObject serializedBlueprint = new SerializedObject(blueprint);
@@ -58,28 +45,10 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 GeneratedMeshAssetUtility.PersistGeneratedMesh(
                     blueprint,
                     $"{blueprint.name}_Impostor",
-                    simplifiedMesh,
+                    surfaceMesh,
                     blueprint.GeneratedImpostorMeshesRelativeFolder);
             serializedBlueprint.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(blueprint);
-        }
-
-        private static void DestroyUnusedHierarchyMeshes(MeshVoxelizerHierarchyNode[] hierarchyNodes, Mesh retainedMesh)
-        {
-            for (int i = 0; i < hierarchyNodes.Length; i++)
-            {
-                DestroyIfDifferent(hierarchyNodes[i].ShellL0Mesh, retainedMesh);
-                DestroyIfDifferent(hierarchyNodes[i].ShellL1Mesh, retainedMesh);
-                DestroyIfDifferent(hierarchyNodes[i].ShellL2Mesh, retainedMesh);
-            }
-        }
-
-        private static void DestroyIfDifferent(Mesh? mesh, Mesh retainedMesh)
-        {
-            if (mesh != null && !ReferenceEquals(mesh, retainedMesh))
-            {
-                UnityEngine.Object.DestroyImmediate(mesh);
-            }
         }
 
         private static Mesh CreateCombinedTreeSpaceMesh(TreeBlueprintSO blueprint)

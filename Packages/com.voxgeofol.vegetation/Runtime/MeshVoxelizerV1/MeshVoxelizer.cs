@@ -1,11 +1,9 @@
 using System;
 using System.Collections.Generic;
-
 using UnityEngine;
 
 namespace MeshVoxelizerProject
 {
-
     /// <summary>
     /// Simple voxelization based on the https://github.com/Scrawk/Mesh-Voxelization
     /// The idea is to ray trace the mesh and find where each ray intersects a triangle. These positions can then be used to make a 3D array of voxels.
@@ -13,7 +11,6 @@ namespace MeshVoxelizerProject
     /// </summary>
     public class MeshVoxelizer
     {
-
         public int Count { get; private set; }
 
         public int Width { get; private set; }
@@ -34,7 +31,6 @@ namespace MeshVoxelizerProject
         /// <param name="depth">bigger depth mean smaller voxels.</param>
         public MeshVoxelizer(int width, int height, int depth)
         {
-
             Width = width;
             Height = height;
             Depth = depth;
@@ -69,11 +65,13 @@ namespace MeshVoxelizerProject
                     Vector3 rayDir = new Vector3(0.0f, 0.0f, 1.0f);
 
                     // z-coord starts somewhat outside bounds 
-                    Vector3 rayStart = bounds.Min + new Vector3(x * delta.x + offset.x, y * delta.y + offset.y, -0.0f * extents.z);
+                    Vector3 rayStart = bounds.Min +
+                                       new Vector3(x * delta.x + offset.x, y * delta.y + offset.y, -0.0f * extents.z);
 
-                    while (true)
+                    MeshRay ray = tree.TraceRay(rayStart, rayDir);
+                    while (ray.hit)
                     {
-                        MeshRay ray = tree.TraceRay(rayStart, rayDir);
+                        ray = tree.TraceRay(rayStart, rayDir);
 
                         if (ray.hit)
                         {
@@ -104,7 +102,5 @@ namespace MeshVoxelizerProject
 
             //end
         }
-
     }
-
 }

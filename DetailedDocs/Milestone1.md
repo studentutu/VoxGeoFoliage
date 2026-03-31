@@ -202,11 +202,11 @@ Driven from the custom inspector and the dedicated editor window. The utility st
 - Implemented `BranchShellNode`, `BranchShellNodeUtility`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, `ImpostorMeshGenerator`, and the shared `Runtime/MeshVoxelizerV1/` hierarchy builder under the package runtime/editor folders.
 - Replaced the MVP single-branch shell chain with hierarchical `BranchPrototypeSO.shellNodes`.
 - `CanopyShellGenerator` now bakes `L0/L1/L2` shell meshes on every occupied shell node via `MeshVoxelizerHierarchyBuilder` and still bakes branch-level `shellL1WoodMesh` and `shellL2WoodMesh`.
-- `ImpostorMeshGenerator` now merges `trunkMesh` plus transformed source branch `woodMesh` and `foliageMesh` instances in tree local space, voxelizes that aggregate at coarse size `4` with `MeshVoxelizerHierarchyBuilder`, and writes `impostorMesh` onto `TreeBlueprintSO`.
+- `ImpostorMeshGenerator` now merges `trunkMesh` plus transformed source branch `woodMesh` and `foliageMesh` instances in tree local space, voxelizes that aggregate at coarse size `4` through direct MeshVoxelizer surface extraction, and writes `impostorMesh` onto `TreeBlueprintSO`.
 - Generated shell and impostor meshes are persisted as explicit `.mesh` assets under owner-local `GeneratedMeshes/` folders in `Assets/` so they survive editor restarts and stay compatible with public package installs.
 - Rewrote EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs`, `AuthoringValidationTests.cs`, and `VegetationEditorAuthoringTests.cs` for the hierarchy model, then trimmed the directly affected bake tests to keep the suite smaller.
 - Removed the obsolete editor-only `Voxelizer`, `VoxelGrid`, and `MarchingTetrahedraMesher` files after the rewrite landed.
-- Verified with `Fully Compile by Unity` on `2026-03-30`; Unity EditMode tests were rewritten but not rerun in this pass.
+- Verified with `Fully Compile by Unity` on `2026-03-30`, then with `Compile by Rider MSBuild` on `2026-03-31` after simplifying the impostor path to single-surface extraction; Unity EditMode tests were rewritten but not rerun in this pass.
 
 ### 3.1 Pipeline Overview
 
@@ -250,10 +250,9 @@ Output: `TreeBlueprintSO.impostorMesh` in tree local space
 
 ```
 1. Assemble a temporary tree-space mesh from `trunkMesh` + all placed branch `woodMesh` + branch `foliageMesh`
-2. Run `MeshVoxelizerHierarchyBuilder.BuildHierarchy` with `4/4/4` and `maxDepth = 0` so only the root node is produced
+2. Run one coarse direct MeshVoxelizer surface extraction at size `4`
 3. Do not require any baked canopy shells for this step
-4. Use the root `shellL0Mesh` as the persisted impostor mesh
-5. Store the result as `impostorMesh`
+4. Persist that generated surface mesh as the impostor mesh
 ```
 
 ### 3.5 Hierarchy Status
@@ -265,8 +264,8 @@ Full-assembly rule:
 - Branch reconstruction and runtime classification start at each branch root and traverse down only when parent bounds survive culling.
 - The visible `L0/L1/L2` node frontier is therefore a per-frame derived result of hierarchy traversal, not a separate stored representation!
 
-Follow-up note (`2026-03-30`):
-- The production editor baker now uses `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder`.
+Follow-up note (`2026-03-30` / `2026-03-31`):
+- The production editor baker now uses `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder` for hierarchical canopy shells and its direct surface extraction path for impostors.
 - `MeshVoxelizerHierarchyDemo` remains the manual validation tool for inspecting the hierarchy split on real branches.
 
 ### 3.6 API

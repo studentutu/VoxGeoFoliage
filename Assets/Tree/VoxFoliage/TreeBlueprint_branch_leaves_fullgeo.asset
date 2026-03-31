@@ -224,9 +224,11 @@ MonoBehaviour:
     localRotation: {x: -0.2481608, y: 0.44452524, z: 0.6540133, w: 0.5595356}
     scale: 0.5
   generatedImpostorMeshesRelativeFolder: Tree/VoxFoliage/GeneratedMeshes
-  impostorMesh: {fileID: 4300000, guid: d6cd3e8e969ceea49bcc1e103354c279, type: 2}
+  impostorMesh: {fileID: 4300000, guid: c2cc52941ec3715449e0390b43d6abf4, type: 2}
   impostorMaterial: {fileID: 2100000, guid: 13afca846240643419bc7f56951c14ca, type: 2}
   lodProfile: {fileID: 11400000, guid: 4107cf5d573903340aab43e949eebccd, type: 2}
+  ImposterBakeSettings:
+    voxelResolution: 3
   treeBounds:
     m_Center: {x: 0.08718228, y: 0.05807948, z: 3.7017925}
     m_Extent: {x: 2.1281805, y: 2.0680065, z: 4.100898}
