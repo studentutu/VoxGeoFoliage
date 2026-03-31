@@ -67,12 +67,13 @@ namespace MeshVoxelizerProject
                     // z-coord starts somewhat outside bounds 
                     Vector3 rayStart = bounds.Min +
                                        new Vector3(x * delta.x + offset.x, y * delta.y + offset.y, -0.0f * extents.z);
-
-                    MeshRay ray = tree.TraceRay(rayStart, rayDir);
-                    while (ray.hit)
+                    
+                    var wasHit = true;
+                    while (wasHit)
                     {
-                        ray = tree.TraceRay(rayStart, rayDir);
-
+                        MeshRay ray = tree.TraceRay(rayStart, rayDir);
+                        wasHit = ray.hit;
+                        
                         if (ray.hit)
                         {
                             // calculate cell in which intersection occurred
