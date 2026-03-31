@@ -145,30 +145,31 @@ No runtime data is stored on the MonoBehaviour. `leafColorTint` lives on `Branch
 - `VegetationTreeAuthoring` is back to being a clean scene binding plus validation surface; preview reconstruction and bake entry points now live in editor-only code.
 - The custom inspector now shows blueprint summary (branch count, per-tier triangle totals, bounds), aggregated validation issues, preview toggle/tier controls, and shell/impostor bake buttons.
 - The dedicated editor window can target the selected `VegetationTreeAuthoring` and reuses the same preview/bake controls outside the Inspector.
-- Preview tiers rebuild a transient hierarchy under the configured branch root using `HideFlags.DontSave | HideFlags.NotEditable`, including the milestone-required `R0`, `R1`, `R2`, `R3`, and shell-only views.
+- Preview tiers rebuild a transient hierarchy under the configured branch root using `HideFlags.DontSave | HideFlags.NotEditable`, including the milestone-required `R0`, `R1`, `R2`, `R3`, and shell-only views. Branch reconstruction is defined from the canopy hierarchy root downward, based on the pre-computed hierarchy of canopy shells per each node.
 - Updated `Packages/com.voxgeofol.vegetation/Tests/Editor/AuthoringAssetSyncTests.cs` to cover the extracted preview utility and editor utility bake entry point.
 - Verified with `Fully Compile by Unity` on `2026-03-29`.
 
 ### 2.1 `VegetationEditorPreview` Editor Utility
 
-Driven from the custom inspector and the dedicated editor window. The utility stores the last selected preview tier in editor session state and rebuilds the preview directly from `TreeBlueprintSO` plus the referenced branch prototypes.
+Driven from the custom inspector and the dedicated editor window. The utility stores the last selected preview tier in editor session state and rebuilds the preview directly from `TreeBlueprintSO` plus the referenced branch prototypes. Each branch preview starts from `BranchPrototypeSO.shellNodes[0]` and traverses the canopy hierarchy so parent bounds can reject descendants before they are reconstructed.
 
 **Behavior**
 - Spawns transient child GameObjects under the configured tree branch root for the selected representation tier.
 - Editor enum: `VegetationPreviewTier { R0Full, R1ShellL1, R2ShellL2, R3Impostor, ShellL0Only, ShellL1Only, ShellL2Only }`
 - On tier change: destroy previous preview children, then spawn the new preview set.
+- Preview reconstruction must keep the full branch hierarchy and traverse it from parent to child so branch-local canopy culling can stop before deeper shell nodes are instantiated.
 
 **Preview child structure**
 
 | Tier | Spawned Children |
 |------|------------------|
-| R0_Full | Trunk GO + N x Branch Wood GOs + N x Branch Foliage GOs + N x ShellL0 GOs |
-| R1_ShellL1 | Trunk GO + N x WoodL1 GOs + N x ShellL1 GOs |
-| R2_ShellL2 | Trunk GO + N x WoodL2 GOs + N x ShellL2 GOs |
+| R0_Full | Trunk GO + N x Branch Hierarchy Roots, where each branch root reconstructs source wood + foliage + the visible `shellL0` node frontier |
+| R1_ShellL1 | Trunk GO + N x Branch Hierarchy Roots, where each branch root reconstructs `woodL1` + the visible `shellL1` node frontier |
+| R2_ShellL2 | Trunk GO + N x Branch Hierarchy Roots, where each branch root reconstructs `woodL2` + the visible `shellL2` node frontier |
 | R3_Impostor | Single impostor GO |
-| ShellL0_Only | N x Wood GOs + N x ShellL0 GOs |
-| ShellL1_Only | N x WoodL1 GOs + N x ShellL1 GOs |
-| ShellL2_Only | N x WoodL2 GOs + N x ShellL2 GOs |
+| ShellL0_Only | N x Branch Hierarchy Roots, where each branch root reconstructs source wood + the visible `shellL0` node frontier |
+| ShellL1_Only | N x Branch Hierarchy Roots, where each branch root reconstructs `woodL1` + the visible `shellL1` node frontier |
+| ShellL2_Only | N x Branch Hierarchy Roots, where each branch root reconstructs `woodL2` + the visible `shellL2` node frontier |
 
 **Implementation notes**
 - All preview GOs are transient: `HideFlags.DontSave | HideFlags.NotEditable`.
@@ -211,7 +212,7 @@ Driven from the custom inspector and the dedicated editor window. The utility st
 Input: `BranchPrototypeSO.foliageMesh`  
 Output: `shellNodes`, `shellL1WoodMesh`, `shellL2WoodMesh`
 
-`woodMesh` is explicitly excluded from canopy voxelization. `L0` preview reconstruction reuses the source `woodMesh`, while `L1/L2` bake simplified branch wood attachments alongside the hierarchical canopy shells.
+`woodMesh` is explicitly excluded from canopy voxelization. `L0` preview reconstruction reuses the source `woodMesh`, while `L1/L2` bake simplified branch wood attachments alongside the hierarchical canopy shells. `shellNodes` are the authoritative branch reconstruction data: preview and runtime full-tree assembly both start from the branch hierarchy root and only derive the active per-level frontier after parent-node culling.
 Generated outputs are saved as standalone `.mesh` assets beside the owning authoring asset under `GeneratedMeshes/` when that asset lives in `Assets/`. Package-root assets fall back to `Assets/VoxGeoFol.Generated/Vegetation/Meshes/`.
 
 ### 3.2 Algorithm: MeshVoxelizer-Based Hierarchical Shell Extraction
@@ -237,7 +238,7 @@ Generated outputs are saved as standalone `.mesh` assets beside the owning autho
 ### 3.3 Shell Quality Constraints
 
 - L0 preserves major canopy lobes and silhouette detail across the branch bounds.
-- L1 and L2 reduce triangle counts monotonically on the leaf frontier.
+- L1 and L2 reduce triangle counts monotonically on the active frontier selected after hierarchy traversal.
 - Shell nodes must remain spatially valid: children stay inside the parent bounds and child ranges stay contiguous in the persisted node array.
 - All shells must have stable outward normals and no degenerate triangles.
 
@@ -256,7 +257,12 @@ Output: `TreeBlueprintSO.impostorMesh` in tree local space
 
 ### 3.5 Hierarchy Status
 
-Hierarchical sub-branch canopy shells are now implemented in the editor authoring path. `BranchPrototypeSO.shellNodes` is the authoritative canopy shell representation for preview, validation, triangle accounting, and impostor baking.
+Hierarchical sub-branch canopy shells are now implemented in the editor authoring path. `BranchPrototypeSO.shellNodes` is the authoritative canopy shell representation for preview, validation, triangle accounting, impostor baking, and branch reconstruction inside a full assembled tree.
+
+Full-assembly rule:
+- A full tree always keeps the full branch shell hierarchy for every placed branch. Assembly is already in the memory, contains branch with hierarchy, once for all trees.
+- Branch reconstruction and runtime classification start at each branch root and traverse down only when parent bounds survive culling.
+- The visible `L0/L1/L2` node frontier is therefore a per-frame derived result of hierarchy traversal, not a separate stored representation!
 
 Follow-up note (`2026-03-30`):
 - The production editor baker now uses `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder`.
@@ -273,7 +279,7 @@ static void BakeCanopyShells(BranchPrototypeSO prototype, ShellBakeSettings sett
 
 /// Bakes the far-LOD impostor mesh for a full tree blueprint.
 /// [INTEGRATION] Called from editor tooling.
-/// Range: blueprint must have valid leaf-frontier shellL2 meshes on all referenced branch prototypes.
+/// Range: blueprint must have valid branch shell hierarchies on all referenced branch prototypes; impostor assembly derives the needed shellL2 frontier from that hierarchy.
 /// Output: populates impostorMesh.
 static void BakeImpostorMesh(TreeBlueprintSO blueprint, ImpostorBakeSettings settings)
 ```
@@ -305,7 +311,7 @@ Responsibilities
   - trunk draw slot per tree blueprint
   - branch wood draw slot per branch prototype
   - branch foliage draw slot per branch prototype
-  - shell L0/L1/L2 draw slots per shell node mesh on the leaf frontier
+  - shell L0/L1/L2 draw slots per shell node mesh in the full branch hierarchy
   - impostor draw slot per tree blueprint
 - Own the draw-slot registry used by GPU classification.
 - Feed visible instance data from GPU classification results.
@@ -318,9 +324,9 @@ Responsibilities
 | Trunk | `TreeBlueprintSO.trunkMesh` | `VegetationTrunkLit` | transform only |
 | BranchWood | `BranchPrototypeSO.woodMesh` | `VegetationTrunkLit` | transform only |
 | BranchFoliage | `BranchPrototypeSO.foliageMesh` | `VegetationCanopyLit` | transform + packed leaf tint |
-| ShellL0 | `BranchShellNode.shellL0Mesh` (leaf frontier) | `VegetationCanopyLit` | transform + packed leaf tint |
-| ShellL1 | `BranchShellNode.shellL1Mesh` (leaf frontier) | `VegetationCanopyLit` | transform + packed leaf tint |
-| ShellL2 | `BranchShellNode.shellL2Mesh` (leaf frontier) | `VegetationCanopyLit` | transform + packed leaf tint |
+| ShellL0 | `BranchShellNode.shellL0Mesh` (full hierarchy, emitted from the surviving frontier after node culling) | `VegetationCanopyLit` | transform + packed leaf tint |
+| ShellL1 | `BranchShellNode.shellL1Mesh` (full hierarchy, emitted from the surviving frontier after node culling) | `VegetationCanopyLit` | transform + packed leaf tint |
+| ShellL2 | `BranchShellNode.shellL2Mesh` (full hierarchy, emitted from the surviving frontier after node culling) | `VegetationCanopyLit` | transform + packed leaf tint |
 | Impostor | `TreeBlueprintSO.impostorMesh` | `VegetationImpostorLit` | transform only |
 
 ### 4.3 Shaders
@@ -401,9 +407,9 @@ Output buffers:
 7. LOD SELECTION (R0 / R1 / R2 / R3)
 8. EMIT tree-level VisibleVegetationRecord
 9. INCREMENT DRAW ARGS
-   - R0: trunk + each branch placement's wood + foliage + leaf-frontier shellL0 node slots
-   - R1: trunk + each branch placement's leaf-frontier shellL1 node slots
-   - R2: trunk + each branch placement's leaf-frontier shellL2 node slots
+   - R0: trunk + each branch placement's wood + foliage + shellL0 node slots selected from the traversed branch hierarchy
+   - R1: trunk + each branch placement's shellL1 node slots selected from the traversed branch hierarchy
+   - R2: trunk + each branch placement's shellL2 node slots selected from the traversed branch hierarchy
    - R3: impostor slot only
 ```
 

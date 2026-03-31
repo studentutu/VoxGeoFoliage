@@ -72,7 +72,15 @@ Authoring → Baking → Runtime (Gather/Switch LOD) → GPU Classification → 
 
 ## 2.2 Tree Composition
 
-Tree = Trunk + Σ (Branch -> BranchShellNodeHierarchy -> Shell L0/L1/L2)
+Authoritative form: `Tree = Trunk + Σ (BranchPlacement -> BranchPrototype -> Full (editor authoring)/ Properly culled (runtime) BranchShellNodeHierarchy)`
+
+### Branch Reconstruction Rule
+
+- `BranchPrototypeSO.shellNodes` is the authoritative canopy reconstruction source for a branch.
+- Branch reconstruction always starts at the hierarchy root and traverses downward; it does not start from a pre-pruned leaf frontier.
+- Parent node bounds are tested first. If a parent node is rejected, its descendants are rejected without further work.
+- A full assembled tree always keeps the full branch hierarchy so branch-local canopy culling can happen early, before per-node mesh emission.
+
 
 ---
 
@@ -178,7 +186,7 @@ BranchShellNode:
   - Mesh shellL2Mesh
 ```
 
-Each occupied node stores its own `L0/L1/L2` shell chain. Parent and child shell nodes are mutually exclusive at render time; preview, validation, triangle accounting, and impostor baking all consume the leaf frontier only.
+Each occupied node stores its own `L0/L1/L2` shell chain. Parent and child shell nodes are mutually exclusive at render time, but the full hierarchy is always retained. Preview and runtime reconstruction start at the root node and derive the active frontier only after parent-bound culling decides which descendants remain relevant.
 
 ### Hierarchical Bake Pipeline
 
@@ -209,7 +217,7 @@ BranchShellNodeData:
   - uint shellL2MeshIndex
 ```
 
-GPU classification then evaluates shell-node AABBs instead of one branch-wide shell AABB, allowing a single branch instance to render a mix of `L0/L1/L2` shell nodes.
+GPU classification then evaluates shell-node AABBs instead of one branch-wide shell AABB. Full-tree reconstruction keeps the full branch hierarchy alive for every branch instance, starts traversal at the branch root, and performs early culling on parent shell-node bounds before visiting children. The surviving nodes form the active frontier that emits `L0/L1/L2` shell meshes for that branch instance.
 
 ### Benefits
 
