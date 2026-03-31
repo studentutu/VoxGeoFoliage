@@ -21,6 +21,8 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 15. Keep authoring, runtime ECS data, and Unity binding logic separate.
 16. Hot paths should be allocation-aware and follow DRY/SingleResponsibility best practices.
 17. Reusable public-facing features should live in embedded packages under `Packages/`; repo-local-only features can remain under `Assets/Scripts/Features`.
+18. No useless maintenance. Scripts are either completely dropped or fully migrated to new api, no obsolete wrappers!
+19. No useless abstractions, no bloatware.
 
 --
 

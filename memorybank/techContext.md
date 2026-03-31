@@ -68,6 +68,8 @@ Repo-used libraries and plugins:
 ## Constraints
 
 - EditMode tests must not rely on Unity lifecycle callbacks.
+- No useless maintenance. Scripts are either completely dropped or fully migrated to new api, no obsolete wrappers!
+- No useless abstractions, no bloatware.
 - Because Unity generates the authoritative compile/test outputs, the Unity editor must be closed before running the required compile/test scripts.
 - New or renamed `.cs` files require Full Unity compile path so the generated solution is rebuilt from Unity itself.
 - Vegetation package code lives under `Packages/com.voxgeofol.vegetation`; do not add new vegetation scripts back under `Assets/Scripts/Features/Vegetation`.
