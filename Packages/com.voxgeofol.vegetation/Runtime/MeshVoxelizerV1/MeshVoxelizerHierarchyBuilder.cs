@@ -8,8 +8,9 @@ using UnityEngine.Rendering;
 namespace MeshVoxelizerProject
 {
     /// <summary>
-    /// Builds an experimental shell hierarchy by splitting MeshVoxelizer surface voxels into octants.
+    /// Builds an  shell hierarchy by splitting MeshVoxelizer surface voxels into octants.
     /// </summary>
+    /// TODO: Move to Editor and replace with VoxelSystem.CpuMeshBuildUtility and  CPUVoxelizer!
     public static class MeshVoxelizerHierarchyBuilder
     {
         public static bool Generating = false;

@@ -19,9 +19,9 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - LOD
   - spatial grid
 - Read:
-  - [UnityAssembledVegetation_FULL](../DetailedDocs/UnityAssembledVegetation_FULL.md) — architecture authority
-  - [Milestone1](../DetailedDocs/Milestone1.md) — MVP plan, task breakdown, data model, folder structure
-  - [ReplaceMVPCanopyModel](../DetailedDocs/ReplaceMVPCanopyModel.md) — hierarchy replacement spec and progress tracker
+  - [UnityAssembledVegetation_FULL](../DetailedDocs/UnityAssembledVegetation_FULL.md) - architecture authority
+  - [Milestone1](../DetailedDocs/Milestone1.md) - MVP plan, task breakdown, data model, folder structure
+  - [VoxelizerBackendInvestigation](../DetailedDocs/VoxelizerBackendInvestigation.md) - current impostor backend status and canopy rewrite recommendation
 
 ## CI and Tests
 

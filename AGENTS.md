@@ -52,7 +52,7 @@ This file provides guidance to agents when working with code in this repository.
 ## Memory bank
 
 Only if user asked "read memory bank": MUST read ALL memory bank files before the actual task - this is not optional. Make sure to review and plan beforehand, if any questions/inconsistencies arise - ask user explicitly. We need to be sure no hidden assumptions are made. Reading memory bank is required:
-Source-of-truth docs live under [memory-bank/](memory-bank/): read [techContext](memorybank/techContext.md), [projectrules](memorybank/projectrules.md), [FeatureRouter](memorybank/FeatureRouter.md).
+Source-of-truth docs live under [memorybank/](memorybank/): read [techContext](memorybank/techContext.md), [projectrules](memorybank/projectrules.md), [FeatureRouter](memorybank/FeatureRouter.md).
 
 ## Core Files (Required)
 

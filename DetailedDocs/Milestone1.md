@@ -20,7 +20,7 @@ Package note (`2026-03-29`):
 | Full authoring data model with real two-mesh branch prototypes (wood + foliage) | Auto-baking of reduced geometry from arbitrary imported trees |
 | Readable source branch meshes as a hard validation rule | HiZ depth pyramid occlusion |
 | Canopy shell generation (L0/L1/L2) from branch foliage geometry | LOD transition dithering / cross-fade |
-| Impostor mesh generation from original tree meshes via coarse size-4 MeshVoxelizer extraction | Runtime streaming / dynamic loading |
+| Impostor mesh generation from original tree meshes via coarse size-4 CPU voxel extraction | Runtime streaming / dynamic loading |
 | Editor preview of all representation tiers | Hierarchical wind system |
 | BRG rendering with minimal vertex-lit opaque shaders | Placement tools (terrain scatter, paint) |
 | RSUV-only prototype canopy tint payload for foliage and shell draws | Random per-instance tint variation |
@@ -202,11 +202,12 @@ Driven from the custom inspector and the dedicated editor window. The utility st
 - Implemented `BranchShellNode`, `BranchShellNodeUtility`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, `ImpostorMeshGenerator`, and the shared `Runtime/MeshVoxelizerV1/` hierarchy builder under the package runtime/editor folders.
 - Replaced the MVP single-branch shell chain with hierarchical `BranchPrototypeSO.shellNodes`.
 - `CanopyShellGenerator` now bakes `L0/L1/L2` shell meshes on every occupied shell node via `MeshVoxelizerHierarchyBuilder` and still bakes branch-level `shellL1WoodMesh` and `shellL2WoodMesh`.
-- `ImpostorMeshGenerator` now merges `trunkMesh` plus transformed source branch `woodMesh` and `foliageMesh` instances in tree local space, voxelizes that aggregate at coarse size `4` through direct MeshVoxelizer surface extraction, and writes `impostorMesh` onto `TreeBlueprintSO`.
+- `ImpostorMeshGenerator` now merges `trunkMesh` plus transformed source branch `woodMesh` and `foliageMesh` instances in tree local space, voxelizes that aggregate at coarse size `4` through the `VoxelizerV2` CPU volume + surface path, and writes `impostorMesh` onto `TreeBlueprintSO`.
 - Generated shell and impostor meshes are persisted as explicit `.mesh` assets under owner-local `GeneratedMeshes/` folders in `Assets/` so they survive editor restarts and stay compatible with public package installs.
 - Rewrote EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs`, `AuthoringValidationTests.cs`, and `VegetationEditorAuthoringTests.cs` for the hierarchy model, then trimmed the directly affected bake tests to keep the suite smaller.
 - Removed the obsolete editor-only `Voxelizer`, `VoxelGrid`, and `MarchingTetrahedraMesher` files after the rewrite landed.
 - Verified with `Fully Compile by Unity` on `2026-03-30`, then with `Compile by Rider MSBuild` on `2026-03-31` after simplifying the impostor path to single-surface extraction; Unity EditMode tests were rewritten but not rerun in this pass.
+- Verified again with `Fully Compile by Unity` on `2026-04-01` after switching the production impostor bake to the `VoxelizerV2` CPU volume + surface backend.
 
 ### 3.1 Pipeline Overview
 
@@ -250,7 +251,7 @@ Output: `TreeBlueprintSO.impostorMesh` in tree local space
 
 ```
 1. Assemble a temporary tree-space mesh from `trunkMesh` + all placed branch `woodMesh` + branch `foliageMesh`
-2. Run one coarse direct MeshVoxelizer surface extraction at size `4`
+2. Run one coarse direct CPU voxel surface extraction at size `4`
 3. Do not require any baked canopy shells for this step
 4. Persist that generated surface mesh as the impostor mesh
 ```
@@ -265,8 +266,9 @@ Full-assembly rule:
 - The visible `L0/L1/L2` node frontier is therefore a per-frame derived result of hierarchy traversal, not a separate stored representation!
 
 Follow-up note (`2026-03-30` / `2026-03-31`):
-- The production editor baker now uses `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder` for hierarchical canopy shells and its direct surface extraction path for impostors.
+- The production editor baker now uses `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder` for hierarchical canopy shells, while impostor baking uses the `Runtime/VoxelizerV2` CPU volume + surface path.
 - `MeshVoxelizerHierarchyDemo` remains the manual validation tool for inspecting the hierarchy split on real branches.
+- `DetailedDocs/VoxelizerBackendInvestigation.md` records the current recommendation to move the next canopy rewrite to the CPU volume backend instead of optimizing `MeshRayTracer` first.
 
 ### 3.6 API
 
@@ -763,7 +765,7 @@ Packages/com.voxgeofol.vegetation/
 1. Implement MeshVoxelizer-based hierarchy generation on foliage geometry
 2. Implement shell extraction by splitting L0 surface voxels into octant nodes
 3. Implement `CanopyShellGenerator`
-4. Implement `ImpostorMeshGenerator` from original tree meshes via coarse size-4 MeshVoxelizer extraction
+4. Implement `ImpostorMeshGenerator` from original tree meshes via coarse size-4 CPU voxel extraction
 5. Wire shell / impostor baking into SOs
 6. Write shell generation EditMode tests
 7. Compile check + run tests
@@ -802,7 +804,7 @@ Packages/com.voxgeofol.vegetation/
 - One tree species is authored as a `TreeBlueprintSO` using reusable two-mesh branch prototypes
 - Source branch meshes validate as readable
 - Shell L0 / L1 / L2 are auto-generated from branch foliage geometry
-- Impostor mesh is auto-generated from original tree meshes via coarse MeshVoxelizer extraction
+- Impostor mesh is auto-generated from original tree meshes via coarse CPU voxel extraction
 - Editor preview shows all 7 representation views correctly
 - Runtime GPU classification selects the correct tier by distance / projected area
 - BRG renders trunk, branch wood, branch foliage, shell tiers, and impostor with correct batching

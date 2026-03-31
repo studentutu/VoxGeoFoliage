@@ -33,7 +33,7 @@ Status note:
 - [x] Implement shell extraction by splitting L0 surface voxels into octant nodes
 - [x] Rebuild `CanopyShellGenerator` on `MeshVoxelizerHierarchyBuilder`
 - [x] Replace the MVP single-chain branch shell model with hierarchical `shellNodes`
-- [x] Rebuild `ImpostorMeshGenerator` on direct original-tree MeshVoxelizer extraction
+- [x] Rebuild `ImpostorMeshGenerator` on direct original-tree CPU voxel extraction
 - [x] Wire shell / impostor baking into SOs
 - [x] Shape bake outputs so editor preview can reconstruct shell tiers by level from blueprint data
 - [x] Rewrite shell generation EditMode tests around the hierarchy builder and new bake path
@@ -43,12 +43,13 @@ Status note:
 
 Status note:
 - Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-30` after removing the legacy editor voxel pipeline and rebuilding the Phase B bake path around `MeshVoxelizerHierarchyBuilder`.
-- Rider MSBuild compile (`Compile by Rider MSBuild`) passed on `2026-03-31` after simplifying impostor baking to direct original-tree MeshVoxelizer surface extraction without temporary hierarchy allocation.
+- Rider MSBuild compile (`Compile by Rider MSBuild`) passed on `2026-03-31` after simplifying impostor baking to direct original-tree surface extraction without temporary hierarchy allocation.
+- Full Unity compile (`Fully Compile by Unity`) passed on `2026-04-01` after switching production impostor baking to the `VoxelizerV2` CPU volume + surface path and adding the new runtime voxel helpers.
 - The authoritative branch canopy data is now `BranchPrototypeSO.shellNodes`; branch-wide `shellL0Mesh/shellL1Mesh/shellL2Mesh` were removed.
 - `CanopyShellGenerator` now voxelizes readable foliage at `16/12/8`, splits L0 surface voxels into octant nodes, and persists one `L0/L1/L2` mesh triplet per node.
 - `ShellBakeSettings` now expose `maxOctreeDepth`, `voxelResolutionL0`, `voxelResolutionL1`, `voxelResolutionL2`, and `minimumSurfaceVoxelCountToSplit`.
-- `ImpostorMeshGenerator` now merges the original tree meshes (`trunkMesh` + placed branch `woodMesh`/`foliageMesh`) and extracts a coarse size-4 impostor surface through direct MeshVoxelizer surface generation; baked canopy shells are no longer required for impostor generation.
-- `2026-03-31`: simplified the impostor bake path again so it no longer allocates a temporary `MeshVoxelizerHierarchyNode[]`; the coarse impostor mesh now comes from a single direct surface bake.
+- `ImpostorMeshGenerator` now merges the original tree meshes (`trunkMesh` + placed branch `woodMesh`/`foliageMesh`) and extracts a coarse size-4 impostor surface through the `VoxelizerV2` CPU volume + surface path; baked canopy shells are no longer required for impostor generation.
+- `2026-04-01`: canopy hierarchy remains on `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder.cs`, while `DetailedDocs/VoxelizerBackendInvestigation.md` records the current recommendation to move the next canopy rewrite to the CPU volume backend rather than optimize `MeshRayTracer` first.
 - `ImpostorBakeSettings` now expose `voxelResolution` with default `4`.
 - `TreeBlueprintSO` now exposes `generatedImpostorMeshesRelativeFolder`, matching the branch prototype shell-folder override pattern so impostor meshes can be written into a caller-selected project folder.
 - Editor preview, authoring validation, and summary accounting consume the leaf frontier of the hierarchy; impostor generation now voxelizes the original assembled tree meshes directly.
@@ -65,6 +66,8 @@ Status note:
 ### Phase B Follow-up: MeshVoxelizer Rewrite Investigation
 - [x] Add an experimental MeshVoxelizer-based hierarchy sample using `16/12/8` voxel levels
 - [x] Replace the production `CanopyShellGenerator` bake path with the MeshVoxelizer-based hierarchy once the split strategy is validated on real branches
+- [x] Cut over the production impostor baker to the `VoxelizerV2` CPU volume + surface backend
+- [x] Document the follow-up recommendation to move the canopy rewrite to the CPU volume backend
 - [ ] Run the full Unity EditMode test suite on the rebuilt Phase B bake path
 
 ### Phase C: Editor Preview

@@ -46,7 +46,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         /// </summary>
         public static void BakeImpostor(VegetationTreeAuthoring authoring)
         {
-            // Range: requires a valid blueprint with trunk mesh and readable source branch meshes on every referenced branch prototype. Condition: uses the editor-only coarse MeshVoxelizer impostor bake pipeline. Output: the blueprint receives a refreshed impostor mesh asset.
+            // Range: requires a valid blueprint with trunk mesh and readable source branch meshes on every referenced branch prototype. Condition: uses the editor-only coarse CPU voxel impostor bake pipeline. Output: the blueprint receives a refreshed impostor mesh asset.
             if (authoring == null)
             {
                 throw new ArgumentNullException(nameof(authoring));

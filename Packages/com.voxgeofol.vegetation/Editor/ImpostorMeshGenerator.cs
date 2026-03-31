@@ -2,10 +2,10 @@
 
 using System;
 using System.Collections.Generic;
-using MeshVoxelizerProject;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using VoxelSystem;
 using VoxGeoFol.Features.Vegetation.Authoring;
 
 namespace VoxGeoFol.Features.Vegetation.Editor
@@ -20,7 +20,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         /// </summary>
         public static void BakeImpostorMesh(TreeBlueprintSO blueprint, ImpostorBakeSettings? settings = null)
         {
-            // Range: requires a readable trunk mesh plus readable source wood/foliage meshes on every placed branch prototype. Condition: merged source geometry stays in tree local space and is voxelized at very coarse resolution. Output: impostorMesh is assigned on the blueprint asset.
+            // Range: requires a readable trunk mesh plus readable source wood/foliage meshes on every placed branch prototype. Condition: merged source geometry stays in tree local space and is voxelized at very coarse resolution through the CPU voxel volume path. Output: impostorMesh is assigned on the blueprint asset.
             if (blueprint == null)
             {
                 throw new ArgumentNullException(nameof(blueprint));
@@ -29,8 +29,9 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             Mesh combinedTreeMesh = CreateCombinedTreeSpaceMesh(blueprint);
             ImpostorBakeSettings activeSettings = settings ?? new ImpostorBakeSettings();
             int voxelResolution = Mathf.Max(2, activeSettings.VoxelResolution);
-            
-            Mesh surfaceMesh = MeshVoxelizerHierarchyBuilder.BuildSurfaceMesh(combinedTreeMesh, voxelResolution);
+
+            CpuVoxelVolume voxelVolume = CPUVoxelizer.VoxelizeToVolume(combinedTreeMesh, voxelResolution);
+            Mesh surfaceMesh = CpuVoxelSurfaceMeshBuilder.BuildSurfaceMesh(voxelVolume, $"{blueprint.name}_ImpostorSurface");
             if (surfaceMesh.triangles.Length == 0)
             {
                 UnityEngine.Object.DestroyImmediate(surfaceMesh);

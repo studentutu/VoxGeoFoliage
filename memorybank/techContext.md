@@ -32,7 +32,8 @@ Repo-used libraries and plugins:
   - embedded public package for the vegetation feature
 - `Packages/com.voxgeofol.vegetation/Runtime`
   - runtime-side authoring data and shared vegetation code, including hierarchical `BranchShellNode` canopy authoring data
-  - `MeshVoxelizerV1/` hosts the shared MeshVoxelizer surface/hierarchy utilities and demo used by the current Phase B shell bake path and the coarse size-4 impostor bake path
+  - `MeshVoxelizerV1/` hosts the shared canopy hierarchy utilities and demo used by the current Phase B shell bake path
+  - `VoxelizerV2/` hosts the CPU/GPU voxel utilities; the production impostor bake now uses the CPU volume + surface mesh path from this folder
 - `Packages/com.voxgeofol.vegetation/Editor`
   - Phase B hierarchical shell/impostor bake tooling and Phase C preview/inspector/window tooling
 - `Packages/com.voxgeofol.vegetation/Tests/Editor`
