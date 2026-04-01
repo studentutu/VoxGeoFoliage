@@ -14,10 +14,10 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         [SerializeField] [Min(1)] private int maxOctreeDepth = 4;
         [Tooltip("Highest detail shell resolution. Defaults to the verified 80 subdivision level.")]
         [SerializeField] [Min(4)] private int voxelResolutionL0 = 80;
-        [Tooltip("Mid detail shell resolution. Defaults to the verified 16 subdivision level.")]
-        [SerializeField] [Min(4)] private int voxelResolutionL1 = 16;
-        [Tooltip("Lowest detail shell resolution. Defaults to the verified 10 subdivision level.")]
-        [SerializeField] [Min(4)] private int voxelResolutionL2 = 10;
+        [Tooltip("Mid detail shell resolution. Defaults to the verified 30 subdivision level.")]
+        [SerializeField] [Min(4)] private int voxelResolutionL1 = 30;
+        [Tooltip("Lowest detail shell resolution. Defaults to the verified 20 subdivision level.")]
+        [SerializeField] [Min(4)] private int voxelResolutionL2 = 20;
         [SerializeField] [Min(1)] private int minimumSurfaceVoxelCountToSplit = 8;
 
         public int MaxOctreeDepth => maxOctreeDepth;
