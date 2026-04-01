@@ -711,12 +711,8 @@ Packages/com.voxgeofol.vegetation/
 |   |   `-- VegetationAuthoringValidator.cs
 |   |-- MeshVoxelizerV1/
 |   |   |-- Box3.cs
-|   |   |-- DrawLines.cs
 |   |   |-- MeshRayTracer.cs
 |   |   |-- MeshVoxelizer.cs
-|   |   |-- MeshVoxelizerHierarchyBuilder.cs
-|   |   |-- MeshVoxelizerHierarchyDemo.cs
-|   |   |-- MeshVoxelizerHierarchyNode.cs
 |   |   `-- VoxelizerDemo.cs
 |   |-- Shaders/
 |   |   `-- planned GPU pipeline assets
@@ -730,7 +726,6 @@ Packages/com.voxgeofol.vegetation/
 |   |-- VegetationTreeAuthoringEditor.cs
 |   |-- VegetationTreeAuthoringEditorPanel.cs
 |   |-- VegetationTreeAuthoringEditorUtility.cs
-|   |-- VegetationTreeAuthoringWindow.cs
 |   |-- CanopyShellGenerator.cs
 |   |-- GeneratedMeshAssetUtility.cs
 |   |-- ImpostorMeshGenerator.cs
