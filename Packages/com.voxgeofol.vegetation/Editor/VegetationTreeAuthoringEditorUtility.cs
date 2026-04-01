@@ -34,6 +34,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                                               throw new InvalidOperationException($"branches[{i}] is missing prototype.");
                 if (bakedPrototypes.Add(prototype))
                 {
+                    // Generate one per branchPrototype 
                     CanopyShellGenerator.BakeCanopyShells(prototype);
                 }
             }

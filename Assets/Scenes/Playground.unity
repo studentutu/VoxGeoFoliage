@@ -511,11 +511,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db7d9b003b0ed5c43af30d2ffbbd3f35, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Vegetation::MeshVoxelizerProject.MeshVoxelizerHierarchyDemo
-  voxelResolutionL0: 16
-  voxelResolutionL1: 12
-  voxelResolutionL2: 8
-  maxDepth: 2
-  minimumSurfaceVoxelCountToSplit: 4
+  settings:
+    maxOctreeDepth: 4
+    voxelResolutionL0: 80
+    voxelResolutionL1: 16
+    voxelResolutionL2: 10
+    minimumSurfaceVoxelCountToSplit: 8
   fromMesh: {fileID: 276435249}
   previewMaterial: {fileID: 2100000, guid: ecaffefaa3a08ce43b2fb6c79d1b2bb4, type: 2}
   showShellL0: 1

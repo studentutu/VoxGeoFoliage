@@ -29,7 +29,7 @@ Status note:
 - `Assets/Tree/VoxFoliage/BranchPrototype_branch_leaves_fullgeo.asset` now uses mesh-derived `localBounds` and a foliage budget aligned with the real imported source mesh.
 
 ### Phase B: Shell Generation (Canopy Shell + Impostor Baking + Tests)
-- [x] Implement MeshVoxelizer-based `16/12/8` hierarchy generation on foliage geometry
+- [x] Implement MeshVoxelizer-based hierarchical canopy generation on foliage geometry
 - [x] Implement shell extraction by splitting L0 surface voxels into octant nodes
 - [x] Rebuild `CanopyShellGenerator` on `MeshVoxelizerHierarchyBuilder`
 - [x] Replace the MVP single-chain branch shell model with hierarchical `shellNodes`
@@ -45,11 +45,13 @@ Status note:
 - Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-30` after removing the legacy editor voxel pipeline and rebuilding the Phase B bake path around `MeshVoxelizerHierarchyBuilder`.
 - Rider MSBuild compile (`Compile by Rider MSBuild`) passed on `2026-03-31` after simplifying impostor baking to direct original-tree surface extraction without temporary hierarchy allocation.
 - Full Unity compile (`Fully Compile by Unity`) passed on `2026-04-01` after switching production impostor baking to the `VoxelizerV2` CPU volume + surface path and adding the new runtime voxel helpers.
+- Rider MSBuild compile (`Compile by Rider MSBuild`) passed on `2026-04-01` after switching the canopy hierarchy builder internals to the `VoxelizerV2` CPU volume backend while preserving the existing hierarchy node contract.
 - The authoritative branch canopy data is now `BranchPrototypeSO.shellNodes`; branch-wide `shellL0Mesh/shellL1Mesh/shellL2Mesh` were removed.
-- `CanopyShellGenerator` now voxelizes readable foliage at `16/12/8`, splits L0 surface voxels into octant nodes, and persists one `L0/L1/L2` mesh triplet per node.
+- `2026-04-01`: canopy shell resolution defaults were updated for the CPU voxel backend to `80/16/6` (`L0/L1/L2`) across `ShellBakeSettings`, `MeshVoxelizerHierarchyBuilder`, tests, and the demo scene.
+- `CanopyShellGenerator` now voxelizes readable foliage at `80/16/6`, splits L0 surface voxels into octant nodes, and persists one `L0/L1/L2` mesh triplet per node.
 - `ShellBakeSettings` now expose `maxOctreeDepth`, `voxelResolutionL0`, `voxelResolutionL1`, `voxelResolutionL2`, and `minimumSurfaceVoxelCountToSplit`.
 - `ImpostorMeshGenerator` now merges the original tree meshes (`trunkMesh` + placed branch `woodMesh`/`foliageMesh`) and extracts a coarse size-4 impostor surface through the `VoxelizerV2` CPU volume + surface path; baked canopy shells are no longer required for impostor generation.
-- `2026-04-01`: canopy hierarchy remains on `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder.cs`, while `DetailedDocs/VoxelizerBackendInvestigation.md` records the current recommendation to move the next canopy rewrite to the CPU volume backend rather than optimize `MeshRayTracer` first.
+- `2026-04-01`: `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder.cs` now uses the `VoxelizerV2` CPU volume backend internally, while `DetailedDocs/VoxelizerBackendInvestigation.md` records the follow-up recommendation to remove or archive the obsolete ray-traced voxelizer path after validation.
 - `ImpostorBakeSettings` now expose `voxelResolution` with default `4`.
 - `TreeBlueprintSO` now exposes `generatedImpostorMeshesRelativeFolder`, matching the branch prototype shell-folder override pattern so impostor meshes can be written into a caller-selected project folder.
 - Editor preview, authoring validation, and summary accounting consume the leaf frontier of the hierarchy; impostor generation now voxelizes the original assembled tree meshes directly.
@@ -64,10 +66,11 @@ Status note:
 - `2026-03-30`: real branch validation exposed incorrect shell output from the first hierarchical baker; the production bake path now uses `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder.cs` and `MeshVoxelizerHierarchyNode.cs`, with `MeshVoxelizerHierarchyDemo.cs` retained as the manual validation tool.
 
 ### Phase B Follow-up: MeshVoxelizer Rewrite Investigation
-- [x] Add an experimental MeshVoxelizer-based hierarchy sample using `16/12/8` voxel levels
+- [x] Add an experimental MeshVoxelizer-based hierarchy sample for the canopy shell levels
 - [x] Replace the production `CanopyShellGenerator` bake path with the MeshVoxelizer-based hierarchy once the split strategy is validated on real branches
 - [x] Cut over the production impostor baker to the `VoxelizerV2` CPU volume + surface backend
-- [x] Document the follow-up recommendation to move the canopy rewrite to the CPU volume backend
+- [x] Cut over the production canopy hierarchy builder internals to the `VoxelizerV2` CPU volume backend
+- [x] Document the follow-up recommendation to remove or archive the obsolete ray-traced voxelizer path
 - [ ] Run the full Unity EditMode test suite on the rebuilt Phase B bake path
 
 ### Phase C: Editor Preview

@@ -19,17 +19,20 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         /// </summary>
         public static void BakeCanopyShells(BranchPrototypeSO prototype, ShellBakeSettings? settings = null)
         {
-            // Range: requires readable foliage and wood meshes plus valid shell budgets. Condition: MeshVoxelizer generates 16/12/8 shell meshes and L0 surface voxels drive the hierarchy split. Output: the prototype receives shellNodes plus refreshed simplified wood attachments.
+            // Range: requires readable foliage and wood meshes plus valid shell budgets. Condition: the hierarchy builder generates 80/16/6 shell meshes from the CPU voxel volume backend and L0 surface voxels drive the hierarchy split. Output: the prototype receives shellNodes plus refreshed simplified wood attachments.
             if (prototype == null)
             {
                 throw new ArgumentNullException(nameof(prototype));
             }
 
-            Mesh foliageMesh = prototype.FoliageMesh ?? throw new InvalidOperationException($"{prototype.name} is missing foliageMesh.");
-            Mesh woodMesh = prototype.WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing woodMesh.");
+            Mesh foliageMesh = prototype.FoliageMesh ??
+                               throw new InvalidOperationException($"{prototype.name} is missing foliageMesh.");
+            Mesh woodMesh = prototype.WoodMesh ??
+                            throw new InvalidOperationException($"{prototype.name} is missing woodMesh.");
             if (!foliageMesh.isReadable)
             {
-                throw new InvalidOperationException($"{prototype.name} foliageMesh must be readable before shell baking.");
+                throw new InvalidOperationException(
+                    $"{prototype.name} foliageMesh must be readable before shell baking.");
             }
 
             if (!woodMesh.isReadable)
@@ -37,7 +40,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 throw new InvalidOperationException($"{prototype.name} woodMesh must be readable before shell baking.");
             }
 
-            ShellBakeSettings activeSettings = settings ?? new ShellBakeSettings();
+            ShellBakeSettings activeSettings = settings ?? prototype.ShellBakeSettings;
             MeshVoxelizerHierarchyNode[] hierarchyNodes = MeshVoxelizerHierarchyBuilder.BuildHierarchy(
                 foliageMesh,
                 activeSettings.VoxelResolutionL0,
@@ -76,7 +79,8 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             EditorUtility.SetDirty(prototype);
         }
 
-        private static BranchShellNode[] PersistShellNodes(BranchPrototypeSO prototype, MeshVoxelizerHierarchyNode[] hierarchyNodes, string nodeMeshPrefix)
+        private static BranchShellNode[] PersistShellNodes(BranchPrototypeSO prototype,
+            MeshVoxelizerHierarchyNode[] hierarchyNodes, string nodeMeshPrefix)
         {
             BranchShellNode[] persistedNodes = new BranchShellNode[hierarchyNodes.Length];
             for (int i = 0; i < hierarchyNodes.Length; i++)

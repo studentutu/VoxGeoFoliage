@@ -26,6 +26,7 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         [SerializeField] [Min(1)] private int triangleBudgetShellL0 = 2000;
         [SerializeField] [Min(1)] private int triangleBudgetShellL1 = 500;
         [SerializeField] [Min(1)] private int triangleBudgetShellL2 = 150;
+        [SerializeField] private ShellBakeSettings? shellBakeSettings;
 
         public Mesh? WoodMesh => woodMesh;
 
@@ -34,6 +35,7 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         public Mesh? FoliageMesh => foliageMesh;
 
         public Material? FoliageMaterial => foliageMaterial;
+        public ShellBakeSettings ShellBakeSettings => shellBakeSettings?? new ShellBakeSettings();
 
         public Color LeafColorTint => leafColorTint;
 

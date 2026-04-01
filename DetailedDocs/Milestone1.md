@@ -201,7 +201,7 @@ Driven from the custom inspector and the dedicated editor window. The utility st
 - Implemented `ShellBakeSettings` and `ImpostorBakeSettings` under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
 - Implemented `BranchShellNode`, `BranchShellNodeUtility`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, `ImpostorMeshGenerator`, and the shared `Runtime/MeshVoxelizerV1/` hierarchy builder under the package runtime/editor folders.
 - Replaced the MVP single-branch shell chain with hierarchical `BranchPrototypeSO.shellNodes`.
-- `CanopyShellGenerator` now bakes `L0/L1/L2` shell meshes on every occupied shell node via `MeshVoxelizerHierarchyBuilder` and still bakes branch-level `shellL1WoodMesh` and `shellL2WoodMesh`.
+- `CanopyShellGenerator` now bakes `L0/L1/L2` shell meshes on every occupied shell node via `MeshVoxelizerHierarchyBuilder`, which now uses the `VoxelizerV2` CPU volume backend internally, and still bakes branch-level `shellL1WoodMesh` and `shellL2WoodMesh`.
 - `ImpostorMeshGenerator` now merges `trunkMesh` plus transformed source branch `woodMesh` and `foliageMesh` instances in tree local space, voxelizes that aggregate at coarse size `4` through the `VoxelizerV2` CPU volume + surface path, and writes `impostorMesh` onto `TreeBlueprintSO`.
 - Generated shell and impostor meshes are persisted as explicit `.mesh` assets under owner-local `GeneratedMeshes/` folders in `Assets/` so they survive editor restarts and stay compatible with public package installs.
 - Rewrote EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs`, `AuthoringValidationTests.cs`, and `VegetationEditorAuthoringTests.cs` for the hierarchy model, then trimmed the directly affected bake tests to keep the suite smaller.
@@ -217,15 +217,15 @@ Output: `shellNodes`, `shellL1WoodMesh`, `shellL2WoodMesh`
 `woodMesh` is explicitly excluded from canopy voxelization. `L0` preview reconstruction reuses the source `woodMesh`, while `L1/L2` bake simplified branch wood attachments alongside the hierarchical canopy shells. `shellNodes` are the authoritative branch reconstruction data: preview and runtime full-tree assembly both start from the branch hierarchy root and only derive the active per-level frontier after parent-node culling.
 Generated outputs are saved as standalone `.mesh` assets beside the owning authoring asset under `GeneratedMeshes/` when that asset lives in `Assets/`. Package-root assets fall back to `Assets/VoxGeoFol.Generated/Vegetation/Meshes/`. `BranchPrototypeSO.generatedCanopyShellsRelativeFolder` and `TreeBlueprintSO.generatedImpostorMeshesRelativeFolder` can override those default locations with explicit project-relative folders.
 
-### 3.2 Algorithm: MeshVoxelizer-Based Hierarchical Shell Extraction
+### 3.2 Algorithm: CPU Voxel-Based Hierarchical Shell Extraction
 
 ```
 1. READ all vertices + triangles from `foliageMesh`
 2. COMPUTE the source local AABB from `foliageMesh.bounds`
-3. BUILD three MeshVoxelizer occupancy levels for the same source mesh:
-   - `L0 = 16`
-   - `L1 = 12`
-   - `L2 = 8`
+3. BUILD three CPU voxel occupancy levels for the same source mesh:
+   - `L0 = 80`
+   - `L1 = 16`
+   - `L2 = 6`
 4. COUNT `L0` surface voxels inside the current node bounds
 5. SPLIT the node into octants only when:
    - `depth < maxOctreeDepth`
@@ -266,7 +266,7 @@ Full-assembly rule:
 - The visible `L0/L1/L2` node frontier is therefore a per-frame derived result of hierarchy traversal, not a separate stored representation!
 
 Follow-up note (`2026-03-30` / `2026-03-31`):
-- The production editor baker now uses `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder` for hierarchical canopy shells, while impostor baking uses the `Runtime/VoxelizerV2` CPU volume + surface path.
+- The production editor baker now uses `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder` as the compatibility hierarchy API, but its occupancy generation is now backed by `Runtime/VoxelizerV2` CPU volumes; impostor baking also uses the `Runtime/VoxelizerV2` CPU volume + surface path.
 - `MeshVoxelizerHierarchyDemo` remains the manual validation tool for inspecting the hierarchy split on real branches.
 - `DetailedDocs/VoxelizerBackendInvestigation.md` records the current recommendation to move the next canopy rewrite to the CPU volume backend instead of optimizing `MeshRayTracer` first.
 
@@ -291,9 +291,9 @@ static void BakeImpostorMesh(TreeBlueprintSO blueprint, ImpostorBakeSettings set
 ```
 ShellBakeSettings:
   - int maxOctreeDepth = 4
-  - int voxelResolutionL0 = 16
-  - int voxelResolutionL1 = 12
-  - int voxelResolutionL2 = 8
+  - int voxelResolutionL0 = 80
+  - int voxelResolutionL1 = 16
+  - int voxelResolutionL2 = 6
   - int minimumSurfaceVoxelCountToSplit = 4
 
 ImpostorBakeSettings:

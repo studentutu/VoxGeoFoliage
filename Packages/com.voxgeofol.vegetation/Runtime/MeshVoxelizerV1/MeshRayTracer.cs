@@ -91,6 +91,7 @@ namespace MeshVoxelizerProject
 
         }
 
+        // TODO: This is the perfomance bottleneck!
         public MeshRay TraceRay(Vector3 start, Vector3 dir)
         {
             MeshRay ray = new MeshRay();

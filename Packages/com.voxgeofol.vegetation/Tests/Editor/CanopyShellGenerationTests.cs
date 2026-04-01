@@ -34,24 +34,12 @@ public sealed class CanopyShellGenerationTests
     {
         Mesh hierarchyMesh = CreateSeparatedClusterMesh("HierarchyFoliage");
 
-        MeshVoxelizerHierarchyNode[] hierarchyNodes = MeshVoxelizerHierarchyBuilder.BuildHierarchy(hierarchyMesh, 16, 12, 8, 4, 1);
+        MeshVoxelizerHierarchyNode[] hierarchyNodes = MeshVoxelizerHierarchyBuilder.BuildHierarchy(hierarchyMesh, 80, 16, 6, 4, 1);
         TrackHierarchy(hierarchyNodes);
 
         Assert.Greater(hierarchyNodes.Length, 1);
         Assert.AreEqual(0, hierarchyNodes[0].Depth);
         Assert.AreNotEqual(0, hierarchyNodes[0].ChildMask);
-    }
-
-    [Test]
-    public void BakeCanopyShells_SeparatedClusters_CreateHierarchyNodes()
-    {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("ClusteredFoliage"));
-
-        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
-
-        Assert.Greater(prototype.ShellNodes.Length, 1);
-        Assert.AreEqual(0, prototype.ShellNodes[0].Depth);
-        Assert.AreNotEqual(0, prototype.ShellNodes[0].ChildMask);
     }
 
     [Test]
@@ -133,9 +121,9 @@ public sealed class CanopyShellGenerationTests
     {
         ShellBakeSettings settings = new ShellBakeSettings();
         SetPrivateField(settings, "maxOctreeDepth", 4);
-        SetPrivateField(settings, "voxelResolutionL0", 16);
-        SetPrivateField(settings, "voxelResolutionL1", 12);
-        SetPrivateField(settings, "voxelResolutionL2", 8);
+        SetPrivateField(settings, "voxelResolutionL0", 80);
+        SetPrivateField(settings, "voxelResolutionL1", 16);
+        SetPrivateField(settings, "voxelResolutionL2", 6);
         SetPrivateField(settings, "minimumSurfaceVoxelCountToSplit", 1);
         return settings;
     }

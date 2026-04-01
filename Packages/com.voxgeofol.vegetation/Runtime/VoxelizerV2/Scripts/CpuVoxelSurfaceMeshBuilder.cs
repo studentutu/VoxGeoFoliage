@@ -17,7 +17,15 @@ namespace VoxelSystem
         /// </summary>
         public static Mesh BuildSurfaceMesh(CpuVoxelVolume volume, string meshName = "CpuVoxelSurface")
         {
-            // Range: volume must be non-null and already contain the final filled occupancy. Condition: only boundary faces touching empty or out-of-range neighbors are emitted. Output: one mesh covering the exposed voxel surface.
+            return BuildSurfaceMesh(volume, null, meshName);
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Converts the owned subset of a filled CPU voxel volume into a surface-only mesh.
+        /// </summary>
+        public static Mesh BuildSurfaceMesh(CpuVoxelVolume volume, Bounds? ownedBounds, string meshName = "CpuVoxelSurface")
+        {
+            // Range: volume must be non-null and already contain the final filled occupancy. Condition: only owned boundary voxels touching empty or out-of-range neighbors are emitted. Output: one mesh covering the exposed voxel surface for the requested ownership region.
             if (volume == null)
             {
                 throw new ArgumentNullException(nameof(volume));
@@ -33,7 +41,7 @@ namespace VoxelSystem
                 {
                     for (int z = 0; z < volume.Depth; z++)
                     {
-                        if (!volume.IsFilled(x, y, z))
+                        if (!volume.IsFilled(x, y, z) || !IsVoxelOwnedByBounds(volume, x, y, z, ownedBounds))
                         {
                             continue;
                         }
@@ -91,6 +99,24 @@ namespace VoxelSystem
         private static bool ShouldEmitFace(CpuVoxelVolume volume, int x, int y, int z)
         {
             return !volume.ContainsIndex(x, y, z) || !volume.IsFilled(x, y, z);
+        }
+
+        private static bool IsVoxelOwnedByBounds(CpuVoxelVolume volume, int x, int y, int z, Bounds? ownedBounds)
+        {
+            if (!ownedBounds.HasValue)
+            {
+                return true;
+            }
+
+            Vector3 cellCenter = volume.GetCellCenter(x, y, z);
+            Vector3 min = ownedBounds.Value.min;
+            Vector3 max = ownedBounds.Value.max;
+            return cellCenter.x >= min.x &&
+                   cellCenter.x < max.x &&
+                   cellCenter.y >= min.y &&
+                   cellCenter.y < max.y &&
+                   cellCenter.z >= min.z &&
+                   cellCenter.z < max.z;
         }
 
         private static void AddRightQuad(List<Vector3> verts, List<int> indices, Vector3 scale, Vector3 pos)

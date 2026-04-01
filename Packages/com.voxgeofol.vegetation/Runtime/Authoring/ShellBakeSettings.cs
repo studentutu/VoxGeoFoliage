@@ -12,10 +12,13 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
     public sealed class ShellBakeSettings
     {
         [SerializeField] [Min(1)] private int maxOctreeDepth = 4;
-        [SerializeField] [Min(4)] private int voxelResolutionL0 = 16;
-        [SerializeField] [Min(4)] private int voxelResolutionL1 = 12;
-        [SerializeField] [Min(4)] private int voxelResolutionL2 = 8;
-        [SerializeField] [Min(1)] private int minimumSurfaceVoxelCountToSplit = 4;
+        [Tooltip("Highest detail shell resolution. Defaults to the verified 80 subdivision level.")]
+        [SerializeField] [Min(4)] private int voxelResolutionL0 = 80;
+        [Tooltip("Mid detail shell resolution. Defaults to the verified 16 subdivision level.")]
+        [SerializeField] [Min(4)] private int voxelResolutionL1 = 16;
+        [Tooltip("Lowest detail shell resolution. Defaults to the verified 10 subdivision level.")]
+        [SerializeField] [Min(4)] private int voxelResolutionL2 = 10;
+        [SerializeField] [Min(1)] private int minimumSurfaceVoxelCountToSplit = 8;
 
         public int MaxOctreeDepth => maxOctreeDepth;
 

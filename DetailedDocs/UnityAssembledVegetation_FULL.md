@@ -192,7 +192,7 @@ Each occupied node stores its own `L0/L1/L2` shell chain. Parent and child shell
 
 Current production authoring path (`2026-03-30`):
 
-1. Voxelize the readable branch foliage mesh at `16/12/8`
+1. Voxelize the readable branch foliage mesh at `80/16/6`
 2. Use `L0` surface occupancy to split the branch bounds into octant shell nodes
 3. Emit one `L0/L1/L2` mesh triplet per occupied node
 4. Persist the node hierarchy on `BranchPrototypeSO.shellNodes`
