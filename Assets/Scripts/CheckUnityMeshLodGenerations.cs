@@ -1,5 +1,4 @@
-﻿using System;
-using JetBrains.Annotations;
+﻿using JetBrains.Annotations;
 using UnityEngine;
 
 #if UNITY_EDITOR
@@ -32,12 +31,14 @@ namespace DefaultNamespace
 
         private void GeneratedMesh()
         {
+#if UNITY_EDITOR
             _generatedMesh = Instantiate(sourceMesh);
             _generatedMesh.name = sourceMesh.name + "_MeshLOD";
             
             MeshLodUtility.GenerateMeshLods(_generatedMesh, MeshLodUtility.LodGenerationFlags.DiscardOddLevels, meshLodLimit);
             
             _meshFilter.sharedMesh = _generatedMesh;
+#endif
         }
     }
 }

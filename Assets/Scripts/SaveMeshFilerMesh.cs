@@ -10,6 +10,9 @@ using UnityEditor;
 
 namespace DefaultNamespace
 {
+    /// <summary>
+    ///     Test save utility 
+    /// </summary>
     public class SaveMeshFilerMesh : MonoBehaviour
     {
         [SerializeField] private MeshFilter _meshFilter;
@@ -29,17 +32,18 @@ namespace DefaultNamespace
         private void SaveMeshToFolder()
         {
             var mesh = _meshFilter.sharedMesh;
-
+#if UNITY_EDITOR
             SaveMeshAsCopyTo(mesh.name, mesh, fullrelativeFolder);
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
+
+#endif
         }
-        
+
         /// <summary>
         /// [INTEGRATION] Simple save mesh utility.
         /// </summary>
         public static Mesh SaveMeshAsCopyTo(string meshName, Mesh generatedMesh, string relativeFolderToSave)
         {
+#if UNITY_EDITOR
             if (generatedMesh == null)
             {
                 throw new ArgumentNullException(nameof(generatedMesh));
@@ -57,12 +61,15 @@ namespace DefaultNamespace
             {
                 AssetDatabase.CreateAsset(generatedMesh, meshAssetPath);
                 EditorUtility.SetDirty(generatedMesh);
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh();
+
                 return generatedMesh;
             }
-
+#endif
             throw new InvalidOperationException($"Mesh {meshAssetPath} already exists! Remove it and try again.");
         }
-        
+
         private static string ResolveExplicitFolderPath(string? relativeFolderToSave)
         {
             if (string.IsNullOrWhiteSpace(relativeFolderToSave))
@@ -85,7 +92,7 @@ namespace DefaultNamespace
 
             return $"Assets/{cleaned.TrimStart('/')}";
         }
-        
+
         private static string SanitizeFileName(string fileName)
         {
             char[] invalidCharacters = Path.GetInvalidFileNameChars();
@@ -100,9 +107,10 @@ namespace DefaultNamespace
 
             return new string(sanitizedCharacters);
         }
-        
+
         private static void EnsureFolderPath(string folderPath)
         {
+#if UNITY_EDITOR  
             string normalizedFolderPath = NormalizeAssetPath(folderPath);
             string[] segments = normalizedFolderPath.Split('/');
             string currentPath = segments[0];
@@ -116,8 +124,9 @@ namespace DefaultNamespace
 
                 currentPath = nextPath;
             }
+#endif
         }
-        
+
         private static string NormalizeAssetPath(string assetPath)
         {
             return assetPath.Replace('\\', '/').TrimEnd('/');
