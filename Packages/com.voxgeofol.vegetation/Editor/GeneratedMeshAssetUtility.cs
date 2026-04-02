@@ -68,6 +68,35 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             EditorUtility.SetDirty(ownerAsset);
             return existingMesh;
         }
+        
+        /// <summary>
+        /// [INTEGRATION] Simple save mesh utility.
+        /// </summary>
+        public static Mesh SaveMeshAsCopyTo(string meshName, Mesh generatedMesh, string relativeFolderToSave)
+        {
+            if (generatedMesh == null)
+            {
+                throw new ArgumentNullException(nameof(generatedMesh));
+            }
+
+            generatedMesh.name = meshName;
+
+            string meshFolderPath = ResolveExplicitFolderPath(relativeFolderToSave);
+            EnsureFolderPath(meshFolderPath);
+            string sanitizedName = SanitizeFileName($"{meshName}");
+            string meshAssetPath = $"{meshFolderPath}/{sanitizedName}.mesh";
+            Mesh? existingMesh = AssetDatabase.LoadAssetAtPath<Mesh>(meshAssetPath);
+            if (existingMesh == null)
+            {
+                AssetDatabase.CreateAsset(generatedMesh, meshAssetPath);
+                EditorUtility.SetDirty(generatedMesh);
+                return generatedMesh;
+            }
+
+            CopyMeshData(generatedMesh, existingMesh);
+            EditorUtility.SetDirty(existingMesh);
+            return existingMesh;
+        }
 
         private static string ResolveWritableMeshFolderPath(string ownerAssetPath, string? relativeFolderToSave)
         {

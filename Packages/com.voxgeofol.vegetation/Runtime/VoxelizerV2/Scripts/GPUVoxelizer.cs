@@ -32,11 +32,18 @@ namespace VoxelSystem {
             return (int)Mathf.Pow(2, k);
         }
 
+        /// <summary>
+        ///     Voxelize based on the alpha supported texture in Compute shader
+        /// </summary>
 		public static GPUVoxelData Voxelize(ComputeShader voxelizer, Mesh mesh, int resolution = 32, bool volume = true, bool pow2 = false) {
 			mesh.RecalculateBounds();
             return Voxelize(voxelizer, mesh, mesh.bounds, resolution, volume, pow2);
 		}
 
+        
+        /// <summary>
+        ///    Underlying GPU based voxelizer based on the alpha supported texture in Compute shader
+        /// </summary>
         public static GPUVoxelData Voxelize(ComputeShader voxelizer, Mesh mesh, Bounds bounds, int resolution = 32, bool volume = true, bool pow2 = false)
         {
 			var vertices = mesh.vertices;
