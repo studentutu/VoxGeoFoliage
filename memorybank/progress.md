@@ -19,7 +19,7 @@ Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
 - [ ] Missing mesh simplification utility (find a suitablabe drop-in replacement from Unity asset store or github or create one)
     - simplification can use the same voxelizer just with single depth and different resolution (resolution should be provided, example 10 for CPUVoxelizer gives decent simplified result for L1 mesh, 50 for L0 mesh, branches R1 with 50, R2 with 20, imposter with 10), those settings should be moved to branch scriptable object and for imposter to tree scriptable object in order to be updated from editor. 
     - should only wield vertices and minimize number of triangles on voxel faces
-    - should not change geometry
+    - should not change voxel geometry (ideally just wield vertices on the same plane)
     - optionally trim backfaces (needed for imposter)
 - [ ] Missing mesh simplification for R1/R2 branches
     - when simplifying ensure references Scriptable objects are updated with new simplified mesh.
