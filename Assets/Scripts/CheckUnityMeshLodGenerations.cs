@@ -37,7 +37,7 @@ namespace DefaultNamespace
             
             MeshLodUtility.GenerateMeshLods(_generatedMesh, MeshLodUtility.LodGenerationFlags.DiscardOddLevels, meshLodLimit);
             
-            _meshFilter.sharedMesh = _generatedMesh;
+            _meshFilter.sharedMesh = _generatedMesh;// generated mesh now has Lod0,1,2,3,4,5,6 submeshes(discared 1,3,5)
 #endif
         }
     }
