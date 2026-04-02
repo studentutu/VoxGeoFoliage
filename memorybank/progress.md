@@ -24,7 +24,7 @@ Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
 - [ ] Missing mesh simplification for R1/R2 branches
     - when simplifying ensure references Scriptable objects are updated with new simplified mesh.
 - [ ] Missing mesh simplification on each of the node of the canopy shell
-    - we have validations, but no simplification right now
+    - we have validations, but no simplification. See validations in `VegetationTreeAuthoringEditorPanel`
     - we need to make simplification on each node while it is still being generated (to minimize number of triangles as much as possible, wield vertices)
 - [ ] Missing mesh simplification for imposter mesh (should only be front facing mesh, no backside)
     - when simplifying ensure references Scriptable objects are updated with new simplified mesh.
