@@ -28,7 +28,7 @@ Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
     - we need to make simplification on each node while it is still being generated (to minimize number of triangles as much as possible, wield vertices)
 - [ ] Missing mesh simplification for imposter mesh (should only be front facing mesh, no backside)
     - when simplifying ensure references Scriptable objects are updated with new simplified mesh.
-- [ ] Support voxelization by Texture (by an alpha-cutout masked texture). See usage of GPUVoxelizer in GPUTextureDemo (Voxelizer.compute)
+- [ ] Support voxelization by Texture (by an alpha-cutout masked texture). See usage of `GPUVoxelizer` in `GPUTextureDemo` (uses `Voxelizer.compute`)
 - [ ] Run manual in-Editor visual verification for preview tiers and bake flows.
 - [ ] Ask developer to compare L1/L2/L3 shells to the `branch_leaves_quadcards` version.
 
