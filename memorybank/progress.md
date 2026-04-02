@@ -21,8 +21,6 @@ Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
 - [x] Compile check + run tests
 
 Status note:
-- Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-28`.
-- Unity EditMode tests passed on `2026-03-28` (`runParsetests.sh`).
 - `2026-03-31`: removed the obsolete prefab-to-blueprint sync utility from the public package; current authoring keeps branch placements/bounds directly on the ScriptableObjects and only regenerates shell/impostor meshes.
 - `VegetationTreeAuthoring` clean scene binding and retains the assigned branch root used by the extracted Phase C editor preview tooling.
 - `Assets/Tree/VoxFoliage/TreeBlueprint_branch_leaves_fullgeo.asset` now contains 52 authored branch placements plus a linked `LODProfileSO`.
@@ -39,7 +37,7 @@ Status note:
 - [x] Rewrite shell generation EditMode tests around the hierarchy builder and new bake path
 - [x] Remove obsolete editor voxel generation code and legacy tests
 - [x] Compile check
-- [ ] Run tests
+- [x] Run tests
 
 Status note:
 - Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-30` after removing the legacy editor voxel pipeline and rebuilding the Phase B bake path around `MeshVoxelizerHierarchyBuilder`.
@@ -71,7 +69,7 @@ Status note:
 - [x] Cut over the production impostor baker to the `VoxelizerV2` CPU volume + surface backend
 - [x] Cut over the production canopy hierarchy builder internals to the `VoxelizerV2` CPU volume backend
 - [x] Document the follow-up recommendation to remove or archive the obsolete ray-traced voxelizer path
-- [ ] Run the full Unity EditMode test suite on the rebuilt Phase B bake path
+- [x] Run the full Unity EditMode test suite on the rebuilt Phase B bake path
 
 ### Phase C: Editor Preview
 - [x] Extract preview and bake entry points out of `VegetationTreeAuthoring` into editor-only utilities
@@ -100,7 +98,6 @@ Status note:
 - the vegetation feature became an embedded public package rooted at `Packages/com.voxgeofol.vegetation`.
 - Vegetation EditMode coverage moved from `Assets/EditorTests/Vegetation` to `Packages/com.voxgeofol.vegetation/Tests/Editor`.
 - Public package consumers now rely on authoring ScriptableObjects plus generated mesh assets; no demo-only prefab sync remains in the package.
-- Full Unity compile (`Fully Compile by Unity`) passed on `2026-03-29` after the package migration.
 
 ### Phase D: Spatial Grid + CPU Classification
 - [ ] Implement `VegetationSpatialGrid`

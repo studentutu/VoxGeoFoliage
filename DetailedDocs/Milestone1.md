@@ -92,7 +92,7 @@ This system does not use Unity's built-in `LODGroup`. LOD selection is fully own
   - BranchPrototypeSO prototype
   - Vector3 localPosition
   - Quaternion localRotation
-  - float scale             // constrained to 0.25 steps for MVP
+  - float scale             // constrained to 0.25 steps for MVP, no negatives!
 - string generatedImpostorMeshesRelativeFolder // optional explicit project-relative folder for persisted impostor meshes
 - Mesh impostorMesh         // generated far-LOD opaque mesh
 - Material impostorMaterial // billboard-like opaque material
