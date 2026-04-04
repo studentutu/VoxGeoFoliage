@@ -229,6 +229,8 @@ MonoBehaviour:
   lodProfile: {fileID: 11400000, guid: 4107cf5d573903340aab43e949eebccd, type: 2}
   ImposterBakeSettings:
     voxelResolution: 16
+    skipReduction: 0
+    skipSimplifyFallback: 0
   treeBounds:
     m_Center: {x: 0.08718228, y: 0.05807948, z: 3.7017925}
     m_Extent: {x: 2.1281805, y: 2.0680065, z: 4.100898}
