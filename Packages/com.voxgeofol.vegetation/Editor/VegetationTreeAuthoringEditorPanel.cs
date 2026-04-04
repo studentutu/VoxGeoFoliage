@@ -13,6 +13,11 @@ namespace VoxGeoFol.Features.Vegetation.Editor
     /// </summary>
     public static class VegetationTreeAuthoringEditorPanel
     {
+        private const string ValidationFoldoutStateKey =
+            "VoxGeoFol.Features.Vegetation.Editor.VegetationTreeAuthoringEditorPanel.ValidationExpanded";
+
+        private static bool s_validationExpanded = SessionState.GetBool(ValidationFoldoutStateKey, false);
+
         public static void Draw(SerializedObject serializedAuthoring, VegetationTreeAuthoring authoring)
         {
             if (serializedAuthoring == null)
@@ -56,78 +61,105 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 }
             }
 
+            TryValidateForPreview(authoring, out VegetationValidationResult? validationResult, out string? validationExceptionMessage);
+
             EditorGUILayout.Space();
-            DrawSummary(authoring);
+            DrawSummary(authoring, validationResult, validationExceptionMessage);
             EditorGUILayout.Space();
-            DrawValidation(authoring);
+            DrawValidation(validationResult, validationExceptionMessage);
             EditorGUILayout.Space();
             DrawPreviewControls(authoring);
             EditorGUILayout.Space();
             DrawBakeControls(authoring);
         }
 
-        private static void DrawSummary(VegetationTreeAuthoring authoring)
+        private static void DrawSummary(
+            VegetationTreeAuthoring authoring,
+            VegetationValidationResult? validationResult,
+            string? validationExceptionMessage)
         {
             EditorGUILayout.LabelField("Summary", EditorStyles.boldLabel);
 
             if (authoring.Blueprint == null)
             {
                 EditorGUILayout.HelpBox("Assign a TreeBlueprintSO to view authoring summary data.", MessageType.Info);
+            }
+            else
+            {
+
+                try
+                {
+                    VegetationAuthoringSummary summary = VegetationTreeAuthoringEditorUtility.BuildSummary(authoring);
+                    EditorGUILayout.LabelField("Branch Count", summary.BranchCount.ToString());
+                    EditorGUILayout.LabelField("Tree Bounds Center", summary.TreeBounds.center.ToString("F3"));
+                    EditorGUILayout.LabelField("Tree Bounds Size", summary.TreeBounds.size.ToString("F3"));
+                    DrawTriangleLabel("R0 Full", summary.R0Triangles);
+                    DrawTriangleLabel("R1 ShellL1", summary.R1Triangles);
+                    DrawTriangleLabel("R2 ShellL2", summary.R2Triangles);
+                    DrawTriangleLabel("R3 Impostor", summary.R3Triangles);
+                    DrawTriangleLabel("ShellL0 Only", summary.ShellL0OnlyTriangles);
+                    DrawTriangleLabel("ShellL1 Only", summary.ShellL1OnlyTriangles);
+                    DrawTriangleLabel("ShellL2 Only", summary.ShellL2OnlyTriangles);
+                }
+                catch (Exception exception)
+                {
+                    EditorGUILayout.HelpBox(exception.Message, MessageType.Warning);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(validationExceptionMessage))
+            {
+                EditorGUILayout.LabelField("Validation Status", "Unavailable");
+                EditorGUILayout.HelpBox(validationExceptionMessage, MessageType.Warning);
                 return;
             }
 
-            try
-            {
-                VegetationAuthoringSummary summary = VegetationTreeAuthoringEditorUtility.BuildSummary(authoring);
-                EditorGUILayout.LabelField("Branch Count", summary.BranchCount.ToString());
-                EditorGUILayout.LabelField("Tree Bounds Center", summary.TreeBounds.center.ToString("F3"));
-                EditorGUILayout.LabelField("Tree Bounds Size", summary.TreeBounds.size.ToString("F3"));
-                DrawTriangleLabel("R0 Full", summary.R0Triangles);
-                DrawTriangleLabel("R1 ShellL1", summary.R1Triangles);
-                DrawTriangleLabel("R2 ShellL2", summary.R2Triangles);
-                DrawTriangleLabel("R3 Impostor", summary.R3Triangles);
-                DrawTriangleLabel("ShellL0 Only", summary.ShellL0OnlyTriangles);
-                DrawTriangleLabel("ShellL1 Only", summary.ShellL1OnlyTriangles);
-                DrawTriangleLabel("ShellL2 Only", summary.ShellL2OnlyTriangles);
-            }
-            catch (Exception exception)
-            {
-                EditorGUILayout.HelpBox(exception.Message, MessageType.Warning);
-            }
+            EditorGUILayout.LabelField(
+                "Validation Errors",
+                GetIssueCount(validationResult, VegetationValidationSeverity.Error).ToString());
+            EditorGUILayout.LabelField(
+                "Validation Warnings",
+                GetIssueCount(validationResult, VegetationValidationSeverity.Warning).ToString());
         }
 
-        private static void DrawValidation(VegetationTreeAuthoring authoring)
+        private static void DrawValidation(
+            VegetationValidationResult? validationResult,
+            string? validationExceptionMessage)
         {
-            EditorGUILayout.LabelField("Validation", EditorStyles.boldLabel);
-
-            VegetationValidationResult result;
-            try
+            bool expanded = EditorGUILayout.BeginFoldoutHeaderGroup(s_validationExpanded, "Validation");
+            if (expanded != s_validationExpanded)
             {
-                result = VegetationTreeAuthoringEditorUtility.ValidateForEditor(authoring);
-            }
-            catch (Exception exception)
-            {
-                EditorGUILayout.HelpBox(exception.Message, MessageType.Error);
-                return;
+                s_validationExpanded = expanded;
+                SessionState.SetBool(ValidationFoldoutStateKey, s_validationExpanded);
             }
 
-            if (!result.HasErrors && !result.HasWarnings)
+            if (s_validationExpanded)
             {
-                EditorGUILayout.HelpBox("No validation issues.", MessageType.Info);
-                return;
+                if (!string.IsNullOrEmpty(validationExceptionMessage))
+                {
+                    EditorGUILayout.HelpBox(validationExceptionMessage, MessageType.Error);
+                }
+                else if (validationResult == null || !validationResult.HasErrors && !validationResult.HasWarnings)
+                {
+                    EditorGUILayout.HelpBox("No validation issues.", MessageType.Info);
+                }
+                else
+                {
+                    string errorMessages = BuildIssueBlock(validationResult, VegetationValidationSeverity.Error);
+                    if (!string.IsNullOrEmpty(errorMessages))
+                    {
+                        EditorGUILayout.HelpBox(errorMessages, MessageType.Error);
+                    }
+
+                    string warningMessages = BuildIssueBlock(validationResult, VegetationValidationSeverity.Warning);
+                    if (!string.IsNullOrEmpty(warningMessages))
+                    {
+                        EditorGUILayout.HelpBox(warningMessages, MessageType.Warning);
+                    }
+                }
             }
 
-            string errorMessages = BuildIssueBlock(result, VegetationValidationSeverity.Error);
-            if (!string.IsNullOrEmpty(errorMessages))
-            {
-                EditorGUILayout.HelpBox(errorMessages, MessageType.Error);
-            }
-
-            string warningMessages = BuildIssueBlock(result, VegetationValidationSeverity.Warning);
-            if (!string.IsNullOrEmpty(warningMessages))
-            {
-                EditorGUILayout.HelpBox(warningMessages, MessageType.Warning);
-            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
         }
 
         private static void DrawPreviewControls(VegetationTreeAuthoring authoring)
@@ -235,6 +267,44 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             return builder.ToString();
+        }
+
+        private static int GetIssueCount(
+            VegetationValidationResult? result,
+            VegetationValidationSeverity severity)
+        {
+            if (result == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            for (int i = 0; i < result.Issues.Count; i++)
+            {
+                if (result.Issues[i].Severity == severity)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static void TryValidateForPreview(
+            VegetationTreeAuthoring authoring,
+            out VegetationValidationResult? validationResult,
+            out string? validationExceptionMessage)
+        {
+            try
+            {
+                validationResult = VegetationTreeAuthoringEditorUtility.ValidateForEditor(authoring);
+                validationExceptionMessage = null;
+            }
+            catch (Exception exception)
+            {
+                validationResult = null;
+                validationExceptionMessage = exception.Message;
+            }
         }
 
         private static void TryRun(string operationLabel, Action operation)
