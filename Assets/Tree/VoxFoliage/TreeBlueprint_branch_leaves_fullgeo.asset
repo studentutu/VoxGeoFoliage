@@ -228,7 +228,7 @@ MonoBehaviour:
   impostorMaterial: {fileID: 2100000, guid: 13afca846240643419bc7f56951c14ca, type: 2}
   lodProfile: {fileID: 11400000, guid: 4107cf5d573903340aab43e949eebccd, type: 2}
   ImposterBakeSettings:
-    voxelResolution: 16
+    voxelResolution: 18
     skipReduction: 0
     skipSimplifyFallback: 0
   treeBounds:
