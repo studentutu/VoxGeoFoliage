@@ -196,7 +196,7 @@ Driven from the custom inspector and the dedicated editor window. The utility st
 
 ## Task 3: Canopy Shell Generator
 
-### Implementation Status (`2026-03-30`)
+### Implementation Status (`2026-04-03`)
 
 - Implemented `ShellBakeSettings` and `ImpostorBakeSettings` under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
 - Implemented `BranchShellNode`, `BranchShellNodeUtility`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, `ImpostorMeshGenerator`, and the shared `Runtime/MeshVoxelizerV1/` hierarchy builder under the package runtime/editor folders.
@@ -208,6 +208,9 @@ Driven from the custom inspector and the dedicated editor window. The utility st
 - Removed the obsolete editor-only `Voxelizer`, `VoxelGrid`, and `MarchingTetrahedraMesher` files after the rewrite landed.
 - Verified with `Fully Compile by Unity` on `2026-03-30`, then with `Compile by Rider MSBuild` on `2026-03-31` after simplifying the impostor path to single-surface extraction; Unity EditMode tests were rewritten but not rerun in this pass.
 - Verified again with `Fully Compile by Unity` on `2026-04-01` after switching the production impostor bake to the `VoxelizerV2` CPU volume + surface backend.
+- Phase C follow-up simplification landed on `2026-04-03`: shell node generation now supports optional coplanar-face reduction, `L0` reduction is separately switchable, generated wood attachments now come from voxelized meshes instead of source clones, impostor generation uses the same non-blocking reduction/fallback path, and direct `Debug.LogError` reporting replaces blocking bake failures when budgets are still missed.
+- Existing automated bake tests now opt out of reduction/fallback through `ShellBakeSettings` / `ImpostorBakeSettings` so the suite continues to exercise the fast raw-generation path.
+- Verified with `Fully Compile by Unity` on `2026-04-03` after the simplification/fallback pass was integrated.
 
 ### 3.1 Pipeline Overview
 
@@ -233,8 +236,9 @@ Generated outputs are saved as standalone `.mesh` assets beside the owning autho
    - at least two child octants contain owned `L0` surface voxels
 6. For each occupied node:
    - emit `shellL0Mesh`, `shellL1Mesh`, and `shellL2Mesh` from the owned occupied voxels at that level
+   - when enabled by settings, merge adjacent coplanar voxel faces and remove redundant triangles without changing voxel silhouette or bounds
    - persist those meshes into owner-local `GeneratedMeshes/`
-7. CLONE source branch wood into `shellL1WoodMesh` and `shellL2WoodMesh` so shell preview tiers keep wood attached while the hierarchy rewrite is stabilized
+7. BUILD voxelized branch wood attachments for `shellL1WoodMesh` and `shellL2WoodMesh`, then run the same optional reduction/fallback path before persisting them
 ```
 
 ### 3.3 Shell Quality Constraints
@@ -268,7 +272,12 @@ Full-assembly rule:
 Follow-up note (`2026-03-30` / `2026-03-31`):
 - The production editor baker now uses `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder` as the compatibility hierarchy API, but its occupancy generation is now backed by `Runtime/VoxelizerV2` CPU volumes; impostor baking also uses the `Runtime/VoxelizerV2` CPU volume + surface path.
 - `MeshVoxelizerHierarchyDemo` remains the manual validation tool for inspecting the hierarchy split on real branches.
-- `DetailedDocs/VoxelizerBackendInvestigation.md` records the current recommendation to move the next canopy rewrite to the CPU volume backend instead of optimizing `MeshRayTracer` first.
+
+Follow-up note (`2026-04-03`):
+- `CpuVoxelSurfaceMeshBuilder` now supports an optional coplanar-face merge path so shell nodes, generated wood, and impostors can reduce triangles without changing their voxel silhouette.
+- `ShellBakeSettings.skipReduction`, `ShellBakeSettings.skipL0Reduction`, and `ShellBakeSettings.skipSimplifyFallback` were added so developers can inspect raw node output and disable the non-blocking fallback path during manual verification.
+- `ImpostorBakeSettings.skipReduction` and `ImpostorBakeSettings.skipSimplifyFallback` were added for the same reason on the impostor path.
+- Over-budget bake results are now persisted anyway and reported through direct `Debug.LogError` calls instead of throwing and aborting the rest of the bake.
 
 ### 3.6 API
 
@@ -294,10 +303,17 @@ ShellBakeSettings:
   - int voxelResolutionL0 = 80
   - int voxelResolutionL1 = 16
   - int voxelResolutionL2 = 6
+  - int woodVoxelResolutionL1 = 50
+  - int woodVoxelResolutionL2 = 20
   - int minimumSurfaceVoxelCountToSplit = 4
+  - bool skipReduction = false
+  - bool skipL0Reduction = false
+  - bool skipSimplifyFallback = false
 
 ImpostorBakeSettings:
   - int voxelResolution = 4
+  - bool skipReduction = false
+  - bool skipSimplifyFallback = false
 ```
 
 ---

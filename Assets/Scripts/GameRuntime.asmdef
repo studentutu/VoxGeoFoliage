@@ -1,7 +1,9 @@
 {
     "name": "GameRuntime",
     "rootNamespace": "",
-    "references": [],
+    "references": [
+        "Vegetation"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

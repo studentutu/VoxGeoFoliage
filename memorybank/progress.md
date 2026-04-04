@@ -11,26 +11,17 @@ Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
 - Phase A foundation is complete: the vegetation package folder structure, authoring ScriptableObjects, validation logic, demo source assets, `VegetationTreeAuthoring`, and authoring EditMode tests are in place. Authoring now keeps placements and bounds directly on the ScriptableObjects; only generated shell and impostor meshes are regenerated.
 - Phase B shell and impostor baking is complete: hierarchical `BranchPrototypeSO.shellNodes`, the `VoxelizerV2` CPU volume backend cutover, direct original-tree impostor extraction, generated mesh persistence into owner-local `GeneratedMeshes/`, and updated EditMode coverage all landed. Latest compile validations for this phase passed on `2026-04-01`.
 - Phase C editor tooling is implemented: preview and bake entry points were moved into the editor assembly, the custom inspector and dedicated window are wired, and preview-related EditMode coverage is in place. Compile passed on `2026-03-29`.
+- Phase C mesh-simplification follow-up is implemented: shell-node generation now supports topology-preserving coplanar face reduction, `L0` reduction is separately switchable, generated `shellL1WoodMesh` / `shellL2WoodMesh` now come from voxelized meshes instead of source clones, impostor generation uses the same reduction/fallback pipeline, and over-budget generation now logs `Debug.LogError` without aborting the bake. Existing automated bake tests explicitly skip simplification/fallback so they remain fast. Full Unity compile passed on `2026-04-03`.
+- Repo-local simplification inspection tooling is now in place: `Assets/Scripts/CheckVoxelMeshSimplification.cs` can compare an existing source mesh against raw voxel output, reduced voxel output, and Unity `MeshLodUtility` output from the same inspector-driven demo component. Full Unity compile passed on `2026-04-03`.
 - Public package preparation is complete: the vegetation feature now lives in `Packages/com.voxgeofol.vegetation`, distributable demo content ships from `Samples~/Vegetation Demo`, the repo-local mirror remains under `Assets/Tree`, and generated meshes stay in writable `Assets/` space.
 
 ## Open Tasks
 
 ### Phase C Follow-up Mesh simplification, hard poly count reduction.
-- [ ] Missing mesh simplification utility (find a suitablabe drop-in replacement from Unity asset store or github or create one)
-    - simplification can use the same voxelizer just with single depth and different resolution (resolution should be provided, example 10 for CPUVoxelizer gives decent simplified result for L1 mesh, 50 for L0 mesh, branches R1 with 50, R2 with 20, imposter with 10), those settings should be moved to branch scriptable object and for imposter to tree scriptable object in order to be updated from editor. 
-    - should only wield vertices and minimize number of triangles on voxel faces
-    - should not change voxel geometry (ideally just wield vertices on the same plane)
-    - optionally trim backfaces (needed for imposter)
-- [ ] Missing mesh simplification for R1/R2 branches
-    - when simplifying ensure references Scriptable objects are updated with new simplified mesh.
-- [ ] Missing mesh simplification on each of the node of the canopy shell
-    - we have validations, but no simplification. See validations in `VegetationTreeAuthoringEditorPanel`
-    - we need to make simplification on each node while it is still being generated (to minimize number of triangles as much as possible, wield vertices)
-- [ ] Missing mesh simplification for imposter mesh (should only be front facing mesh, no backside)
-    - when simplifying ensure references Scriptable objects are updated with new simplified mesh.
-
 - [ ] Run manual in-Editor visual verification for preview tiers and bake flows.
+- [ ] Use `CheckVoxelMeshSimplification` on one or more real foliage/branch meshes to compare raw voxel, reduced voxel, and Unity LOD triangle counts and shape preservation before further tuning.
 - [ ] Ask developer to compare L1/L2/L3 shells to the `branch_leaves_quadcards` version.
+- [ ] Tune real sample-asset bake settings until the generated meshes satisfy validation budgets without relying on last-resort `MeshLodUtility` fallback.
 
 #### **Phase C Implementation plan**
 
@@ -92,7 +83,7 @@ Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
   - shell tests use `skipReduction = true`, `skipL0Reduction = true`, `skipSimplifyFallback = true`,
   - impostor-related tests use `skipReduction = true`, `skipSimplifyFallback = true`.
 - Keep existing assertions focused on hierarchy generation, persistence, validation, and editor wiring; tests continue using the fast raw-generation path.
-- Run `Fully Compile by Unity` after implementation.
+- `Fully Compile by Unity` passed on `2026-04-03`.
 - Manual editor verification remains required for `R0`, `R1`, `R2`, `ShellL0`, `ShellL1`, `ShellL2`, and `R3`.
 
 ##### **Assumptions**

@@ -285,6 +285,7 @@ public sealed class VegetationEditorAuthoringTests
         TreeBlueprintSO blueprint = CreateAsset<TreeBlueprintSO>("BakeEntryBlueprint.asset");
         SetPrivateField(blueprint, "trunkMesh", trunkMesh);
         SetPrivateField(blueprint, "branches", new[] { placement });
+        SetPrivateField(blueprint, "ImposterBakeSettings", CreateFastImpostorBakeSettings());
 
         GameObject authoringObject = CreateTransientGameObject("Authoring");
         VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
@@ -328,6 +329,7 @@ public sealed class VegetationEditorAuthoringTests
         SetPrivateField(blueprint, "trunkMesh", trunkMesh);
         SetPrivateField(blueprint, "branches", new[] { placement });
         SetPrivateField(blueprint, "generatedImpostorMeshesRelativeFolder", ExplicitImpostorMeshAssetRoot);
+        SetPrivateField(blueprint, "ImposterBakeSettings", CreateFastImpostorBakeSettings());
 
         GameObject authoringObject = CreateTransientGameObject("Authoring");
         VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
@@ -488,6 +490,14 @@ public sealed class VegetationEditorAuthoringTests
     private BranchShellNode CreateShellNode(Mesh l0Mesh, Mesh l1Mesh, Mesh l2Mesh)
     {
         return new BranchShellNode(new Bounds(Vector3.zero, Vector3.one), 0, -1, 0, l0Mesh, l1Mesh, l2Mesh);
+    }
+
+    private ImpostorBakeSettings CreateFastImpostorBakeSettings()
+    {
+        ImpostorBakeSettings settings = new ImpostorBakeSettings();
+        SetPrivateField(settings, "skipReduction", true);
+        SetPrivateField(settings, "skipSimplifyFallback", true);
+        return settings;
     }
 
     private static BranchPlacement CreateBranchPlacement(

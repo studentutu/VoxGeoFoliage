@@ -124,7 +124,12 @@ public sealed class CanopyShellGenerationTests
         SetPrivateField(settings, "voxelResolutionL0", 80);
         SetPrivateField(settings, "voxelResolutionL1", 16);
         SetPrivateField(settings, "voxelResolutionL2", 6);
+        SetPrivateField(settings, "woodVoxelResolutionL1", 12);
+        SetPrivateField(settings, "woodVoxelResolutionL2", 6);
         SetPrivateField(settings, "minimumSurfaceVoxelCountToSplit", 1);
+        SetPrivateField(settings, "skipReduction", true);
+        SetPrivateField(settings, "skipL0Reduction", true);
+        SetPrivateField(settings, "skipSimplifyFallback", true);
         return settings;
     }
 
@@ -132,6 +137,8 @@ public sealed class CanopyShellGenerationTests
     {
         ImpostorBakeSettings settings = new ImpostorBakeSettings();
         SetPrivateField(settings, "voxelResolution", voxelResolution);
+        SetPrivateField(settings, "skipReduction", true);
+        SetPrivateField(settings, "skipSimplifyFallback", true);
         return settings;
     }
 

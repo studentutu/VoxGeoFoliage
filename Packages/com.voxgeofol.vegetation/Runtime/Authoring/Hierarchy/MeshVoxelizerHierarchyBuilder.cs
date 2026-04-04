@@ -25,6 +25,32 @@ namespace MeshVoxelizerProject
             int maxDepth = 2,
             int minimumSurfaceVoxelCountToSplit = 4)
         {
+            return BuildHierarchy(
+                sourceMesh,
+                voxelResolutionL0,
+                voxelResolutionL1,
+                voxelResolutionL2,
+                CpuVoxelSurfaceBuildOptions.Reduced,
+                CpuVoxelSurfaceBuildOptions.Reduced,
+                CpuVoxelSurfaceBuildOptions.Reduced,
+                maxDepth,
+                minimumSurfaceVoxelCountToSplit);
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Builds a preorder hierarchy where each node owns CPU-voxel meshes for L0/L1/L2.
+        /// </summary>
+        public static MeshVoxelizerHierarchyNode[] BuildHierarchy(
+            Mesh sourceMesh,
+            int voxelResolutionL0,
+            int voxelResolutionL1,
+            int voxelResolutionL2,
+            CpuVoxelSurfaceBuildOptions l0BuildOptions,
+            CpuVoxelSurfaceBuildOptions l1BuildOptions,
+            CpuVoxelSurfaceBuildOptions l2BuildOptions,
+            int maxDepth = 2,
+            int minimumSurfaceVoxelCountToSplit = 4)
+        {
             Generating = true;
             try
             {
@@ -66,6 +92,9 @@ namespace MeshVoxelizerProject
                     l0,
                     l1,
                     l2,
+                    l0BuildOptions,
+                    l1BuildOptions,
+                    l2BuildOptions,
                     sourceBounds,
                     -1,
                     0,
@@ -178,6 +207,9 @@ namespace MeshVoxelizerProject
             VoxelLevelData l0,
             VoxelLevelData l1,
             VoxelLevelData l2,
+            CpuVoxelSurfaceBuildOptions l0BuildOptions,
+            CpuVoxelSurfaceBuildOptions l1BuildOptions,
+            CpuVoxelSurfaceBuildOptions l2BuildOptions,
             Bounds nodeBounds,
             int parentIndex,
             int depth,
@@ -195,9 +227,21 @@ namespace MeshVoxelizerProject
                 nodeBounds,
                 depth,
                 parentIndex,
-                BuildNodeMesh(l0, nodeBounds, $"{meshName}_Node{nodeIndex:D3}_D{depth}_L0_{l0.Resolution}"),
-                BuildNodeMesh(l1, nodeBounds, $"{meshName}_Node{nodeIndex:D3}_D{depth}_L1_{l1.Resolution}"),
-                BuildNodeMesh(l2, nodeBounds, $"{meshName}_Node{nodeIndex:D3}_D{depth}_L2_{l2.Resolution}"));
+                    BuildNodeMesh(
+                        l0,
+                        nodeBounds,
+                        $"{meshName}_Node{nodeIndex:D3}_D{depth}_L0_{l0.Resolution}",
+                        l0BuildOptions),
+                    BuildNodeMesh(
+                        l1,
+                        nodeBounds,
+                        $"{meshName}_Node{nodeIndex:D3}_D{depth}_L1_{l1.Resolution}",
+                        l1BuildOptions),
+                    BuildNodeMesh(
+                        l2,
+                        nodeBounds,
+                        $"{meshName}_Node{nodeIndex:D3}_D{depth}_L2_{l2.Resolution}",
+                        l2BuildOptions));
             nodeRecords.Add(nodeRecord);
 
             if (depth >= maxDepth || surfaceVoxelCount < minimumSurfaceVoxelCountToSplit)
@@ -237,6 +281,9 @@ namespace MeshVoxelizerProject
                     l0,
                     l1,
                     l2,
+                    l0BuildOptions,
+                    l1BuildOptions,
+                    l2BuildOptions,
                     childBounds[octant],
                     nodeIndex,
                     depth + 1,
@@ -289,9 +336,13 @@ namespace MeshVoxelizerProject
             return count;
         }
 
-        private static Mesh BuildNodeMesh(VoxelLevelData level, Bounds nodeBounds, string meshName)
+        private static Mesh BuildNodeMesh(
+            VoxelLevelData level,
+            Bounds nodeBounds,
+            string meshName,
+            CpuVoxelSurfaceBuildOptions buildOptions)
         {
-            return CpuVoxelSurfaceMeshBuilder.BuildSurfaceMesh(level.Volume, nodeBounds, meshName);
+            return CpuVoxelSurfaceMeshBuilder.BuildSurfaceMesh(level.Volume, nodeBounds, meshName, buildOptions);
         }
 
         private static bool ShouldEmitFace(VoxelLevelData level, int x, int y, int z)

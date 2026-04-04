@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
-using VoxelSystem;
 using VoxGeoFol.Features.Vegetation.Authoring;
 
 namespace VoxGeoFol.Features.Vegetation.Editor
@@ -15,6 +14,9 @@ namespace VoxGeoFol.Features.Vegetation.Editor
     /// </summary>
     public static class ImpostorMeshGenerator
     {
+        private const int ImpostorTriangleBudget = 200;
+        private const int ImpostorResolutionFallbackStep = 2;
+
         /// <summary>
         /// [INTEGRATION] Called from editor tooling to populate the far-LOD impostor mesh on one tree blueprint.
         /// </summary>
@@ -27,16 +29,29 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             Mesh combinedTreeMesh = CreateCombinedTreeSpaceMesh(blueprint);
-            ImpostorBakeSettings activeSettings = settings ?? new ImpostorBakeSettings();
-            int voxelResolution = Mathf.Max(2, activeSettings.VoxelResolution);
-
-            CpuVoxelVolume voxelVolume = CPUVoxelizer.VoxelizeToVolume(combinedTreeMesh, voxelResolution);
-            Mesh surfaceMesh = CpuVoxelSurfaceMeshBuilder.BuildSurfaceMesh(voxelVolume, $"{blueprint.name}_ImpostorSurface");
-            if (surfaceMesh.triangles.Length == 0)
+            ImpostorBakeSettings activeSettings = settings ?? blueprint.ImposterSettings;
+            GeneratedMeshSimplificationUtility.GeneratedMeshCandidate impostorCandidate =
+                GeneratedMeshSimplificationUtility.SelectBestVoxelMeshCandidate(
+                    combinedTreeMesh,
+                    Mathf.Max(2, activeSettings.VoxelResolution),
+                    2,
+                    ImpostorResolutionFallbackStep,
+                    ImpostorTriangleBudget,
+                    activeSettings.SkipReduction,
+                    activeSettings.SkipSimplifyFallback,
+                    $"{blueprint.name}_ImpostorSurface");
+            if (impostorCandidate.Mesh.triangles.Length == 0)
             {
-                UnityEngine.Object.DestroyImmediate(surfaceMesh);
+                GeneratedMeshSimplificationUtility.DestroyTemporaryMesh(impostorCandidate.Mesh);
                 UnityEngine.Object.DestroyImmediate(combinedTreeMesh);
                 throw new InvalidOperationException($"{blueprint.name} did not produce a valid impostor surface mesh.");
+            }
+
+            if (impostorCandidate.TriangleCount > ImpostorTriangleBudget)
+            {
+                string fallbackState = activeSettings.SkipSimplifyFallback ? "skipped" : "exhausted";
+                Debug.LogError(
+                    $"{blueprint.name} impostor triangle count {impostorCandidate.TriangleCount} exceeds budget {ImpostorTriangleBudget}. Final source: {impostorCandidate.SourceDescription}. Simplify fallback {fallbackState}.");
             }
 
             UnityEngine.Object.DestroyImmediate(combinedTreeMesh);
@@ -46,10 +61,12 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 GeneratedMeshAssetUtility.PersistGeneratedMesh(
                     blueprint,
                     $"{blueprint.name}_Impostor",
-                    surfaceMesh,
+                    impostorCandidate.Mesh,
                     blueprint.GeneratedImpostorMeshesRelativeFolder);
             serializedBlueprint.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(blueprint);
+
+            GeneratedMeshSimplificationUtility.DestroyTemporaryMesh(impostorCandidate.Mesh);
         }
 
         private static Mesh CreateCombinedTreeSpaceMesh(TreeBlueprintSO blueprint)
