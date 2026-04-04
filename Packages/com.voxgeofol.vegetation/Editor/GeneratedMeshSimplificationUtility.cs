@@ -124,12 +124,26 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 throw new ArgumentNullException(nameof(sourceMesh));
             }
 
-            Mesh lodMesh = UnityEngine.Object.Instantiate(sourceMesh);
-            lodMesh.name = $"{meshName}_MeshLod{meshLodLimit}";
-            MeshLodUtility.GenerateMeshLods(
-                lodMesh,
-                MeshLodUtility.LodGenerationFlags.DiscardOddLevels,
-                meshLodLimit);
+            if (!CanGenerateMeshLod(sourceMesh))
+            {
+                return null;
+            }
+
+            Mesh lodMesh = CreateMeshLodInputMesh(sourceMesh, $"{meshName}_MeshLod{meshLodLimit}");
+            try
+            {
+                MeshLodUtility.GenerateMeshLods(
+                    lodMesh,
+                    MeshLodUtility.LodGenerationFlags.DiscardOddLevels,
+                    meshLodLimit);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    $"Skipping MeshLodUtility fallback for {sourceMesh.name}: {exception.Message}");
+                UnityEngine.Object.DestroyImmediate(lodMesh);
+                return null;
+            }
 
             int selectedSubMesh = GetLastNonEmptySubMeshIndex(lodMesh);
             if (selectedSubMesh < 0)
@@ -145,7 +159,36 @@ namespace VoxGeoFol.Features.Vegetation.Editor
 
         public static int GetTriangleCount(Mesh? mesh)
         {
-            return mesh == null ? 0 : checked((int)(mesh.GetIndexCount(0) / 3L));
+            if (mesh == null || mesh.subMeshCount <= 0)
+            {
+                return 0;
+            }
+
+            int triangleCount = 0;
+            for (int subMeshIndex = 0; subMeshIndex < mesh.subMeshCount; subMeshIndex++)
+            {
+                triangleCount = checked(triangleCount + (int)(mesh.GetIndexCount(subMeshIndex) / 3L));
+            }
+
+            return triangleCount;
+        }
+
+        public static bool CanGenerateMeshLod(Mesh? mesh)
+        {
+            if (mesh == null || !mesh.isReadable || mesh.vertexCount <= 0 || mesh.subMeshCount <= 0)
+            {
+                return false;
+            }
+
+            for (int subMeshIndex = 0; subMeshIndex < mesh.subMeshCount; subMeshIndex++)
+            {
+                if (mesh.GetIndexCount(subMeshIndex) > 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public static void DestroyTemporaryMesh(Mesh? mesh)
@@ -207,6 +250,30 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             return -1;
         }
 
+        private static Mesh CreateMeshLodInputMesh(Mesh sourceMesh, string meshName)
+        {
+            Mesh lodInputMesh = new Mesh
+            {
+                name = meshName,
+                indexFormat = sourceMesh.indexFormat
+            };
+
+            CopyMeshAttributes(sourceMesh, lodInputMesh);
+            lodInputMesh.subMeshCount = sourceMesh.subMeshCount;
+            for (int subMeshIndex = 0; subMeshIndex < sourceMesh.subMeshCount; subMeshIndex++)
+            {
+                lodInputMesh.SetTriangles(sourceMesh.GetTriangles(subMeshIndex), subMeshIndex, true);
+            }
+
+            lodInputMesh.RecalculateBounds();
+            if (CanGenerateMeshLod(lodInputMesh) && lodInputMesh.normals.Length != lodInputMesh.vertexCount)
+            {
+                lodInputMesh.RecalculateNormals();
+            }
+
+            return lodInputMesh;
+        }
+
         private static Mesh ExtractSubMesh(Mesh sourceMesh, int subMeshIndex, string meshName)
         {
             Mesh extractedMesh = new Mesh
@@ -215,32 +282,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 indexFormat = sourceMesh.indexFormat
             };
 
-            extractedMesh.vertices = sourceMesh.vertices;
-
-            Vector3[] normals = sourceMesh.normals;
-            if (normals.Length == sourceMesh.vertexCount)
-            {
-                extractedMesh.normals = normals;
-            }
-
-            Vector2[] uv = sourceMesh.uv;
-            if (uv.Length == sourceMesh.vertexCount)
-            {
-                extractedMesh.uv = uv;
-            }
-
-            Vector2[] uv2 = sourceMesh.uv2;
-            if (uv2.Length == sourceMesh.vertexCount)
-            {
-                extractedMesh.uv2 = uv2;
-            }
-
-            Color[] colors = sourceMesh.colors;
-            if (colors.Length == sourceMesh.vertexCount)
-            {
-                extractedMesh.colors = colors;
-            }
-
+            CopyMeshAttributes(sourceMesh, extractedMesh);
             extractedMesh.SetTriangles(sourceMesh.GetTriangles(subMeshIndex), 0, true);
             extractedMesh.RecalculateBounds();
             if (extractedMesh.GetIndexCount(0) > 0 && extractedMesh.normals.Length != extractedMesh.vertexCount)
@@ -249,6 +291,59 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             return extractedMesh;
+        }
+
+        private static void CopyMeshAttributes(Mesh sourceMesh, Mesh targetMesh)
+        {
+            targetMesh.vertices = sourceMesh.vertices;
+
+            Vector3[] normals = sourceMesh.normals;
+            if (normals.Length == sourceMesh.vertexCount)
+            {
+                targetMesh.normals = normals;
+            }
+
+            Vector4[] tangents = sourceMesh.tangents;
+            if (tangents.Length == sourceMesh.vertexCount)
+            {
+                targetMesh.tangents = tangents;
+            }
+
+            Vector2[] uv = sourceMesh.uv;
+            if (uv.Length == sourceMesh.vertexCount)
+            {
+                targetMesh.uv = uv;
+            }
+
+            Vector2[] uv2 = sourceMesh.uv2;
+            if (uv2.Length == sourceMesh.vertexCount)
+            {
+                targetMesh.uv2 = uv2;
+            }
+
+            Vector2[] uv3 = sourceMesh.uv3;
+            if (uv3.Length == sourceMesh.vertexCount)
+            {
+                targetMesh.uv3 = uv3;
+            }
+
+            Vector2[] uv4 = sourceMesh.uv4;
+            if (uv4.Length == sourceMesh.vertexCount)
+            {
+                targetMesh.uv4 = uv4;
+            }
+
+            Color[] colors = sourceMesh.colors;
+            if (colors.Length == sourceMesh.vertexCount)
+            {
+                targetMesh.colors = colors;
+            }
+
+            Color32[] colors32 = sourceMesh.colors32;
+            if (colors32.Length == sourceMesh.vertexCount)
+            {
+                targetMesh.colors32 = colors32;
+            }
         }
     }
 }

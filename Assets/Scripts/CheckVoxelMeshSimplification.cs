@@ -166,18 +166,42 @@ namespace DefaultNamespace
 
         private static int GetTriangleCount(Mesh? mesh)
         {
-            return mesh == null ? 0 : checked((int)(mesh.GetIndexCount(0) / 3L));
+            if (mesh == null || mesh.subMeshCount <= 0)
+            {
+                return 0;
+            }
+
+            int triangleCount = 0;
+            for (int subMeshIndex = 0; subMeshIndex < mesh.subMeshCount; subMeshIndex++)
+            {
+                triangleCount = checked(triangleCount + (int)(mesh.GetIndexCount(subMeshIndex) / 3L));
+            }
+
+            return triangleCount;
         }
 
 #if UNITY_EDITOR
         private static Mesh? BuildUnityMeshLodMesh(Mesh sourceMesh, string meshName, int meshLodLimit)
         {
-            Mesh lodMesh = Instantiate(sourceMesh);
-            lodMesh.name = $"{meshName}_MeshLod{meshLodLimit}";
-            MeshLodUtility.GenerateMeshLods(
-                lodMesh,
-                MeshLodUtility.LodGenerationFlags.DiscardOddLevels,
-                meshLodLimit);
+            if (!CanGenerateMeshLod(sourceMesh))
+            {
+                return null;
+            }
+
+            Mesh lodMesh = CreateMeshLodInputMesh(sourceMesh, $"{meshName}_MeshLod{meshLodLimit}");
+            try
+            {
+                MeshLodUtility.GenerateMeshLods(
+                    lodMesh,
+                    MeshLodUtility.LodGenerationFlags.DiscardOddLevels,
+                    meshLodLimit);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"Skipping MeshLodUtility demo output for {sourceMesh.name}: {exception.Message}");
+                DestroyImmediate(lodMesh);
+                return null;
+            }
 
             int subMeshIndex = GetLastNonEmptySubMeshIndex(lodMesh);
             if (subMeshIndex < 0)
@@ -189,6 +213,61 @@ namespace DefaultNamespace
             Mesh extractedMesh = ExtractSubMesh(lodMesh, subMeshIndex, meshName);
             DestroyImmediate(lodMesh);
             return extractedMesh;
+        }
+
+        private static Mesh CreateMeshLodInputMesh(Mesh sourceMesh, string meshName)
+        {
+            Mesh lodInputMesh = new Mesh
+            {
+                name = meshName,
+                indexFormat = sourceMesh.indexFormat,
+                subMeshCount = sourceMesh.subMeshCount
+            };
+
+            lodInputMesh.vertices = sourceMesh.vertices;
+
+            Vector3[] normals = sourceMesh.normals;
+            if (normals.Length == sourceMesh.vertexCount)
+            {
+                lodInputMesh.normals = normals;
+            }
+
+            Vector4[] tangents = sourceMesh.tangents;
+            if (tangents.Length == sourceMesh.vertexCount)
+            {
+                lodInputMesh.tangents = tangents;
+            }
+
+            Vector2[] uv = sourceMesh.uv;
+            if (uv.Length == sourceMesh.vertexCount)
+            {
+                lodInputMesh.uv = uv;
+            }
+
+            Vector2[] uv2 = sourceMesh.uv2;
+            if (uv2.Length == sourceMesh.vertexCount)
+            {
+                lodInputMesh.uv2 = uv2;
+            }
+
+            Color[] colors = sourceMesh.colors;
+            if (colors.Length == sourceMesh.vertexCount)
+            {
+                lodInputMesh.colors = colors;
+            }
+
+            for (int subMeshIndex = 0; subMeshIndex < sourceMesh.subMeshCount; subMeshIndex++)
+            {
+                lodInputMesh.SetTriangles(sourceMesh.GetTriangles(subMeshIndex), subMeshIndex, true);
+            }
+
+            lodInputMesh.RecalculateBounds();
+            if (lodInputMesh.normals.Length != lodInputMesh.vertexCount)
+            {
+                lodInputMesh.RecalculateNormals();
+            }
+
+            return lodInputMesh;
         }
 
         private static int GetLastNonEmptySubMeshIndex(Mesh mesh)
@@ -246,6 +325,24 @@ namespace DefaultNamespace
             }
 
             return extractedMesh;
+        }
+
+        private static bool CanGenerateMeshLod(Mesh mesh)
+        {
+            if (mesh == null || !mesh.isReadable || mesh.vertexCount <= 0 || mesh.subMeshCount <= 0)
+            {
+                return false;
+            }
+
+            for (int subMeshIndex = 0; subMeshIndex < mesh.subMeshCount; subMeshIndex++)
+            {
+                if (mesh.GetIndexCount(subMeshIndex) > 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 #endif
     }

@@ -341,7 +341,13 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     sourceMesh,
                     $"{sourceMesh.name}_L{shellLevel}_LOD{lodLimit}",
                     lodLimit);
-                lodMeshes[i] = lodMesh ?? sourceMesh;
+                if (lodMesh == null)
+                {
+                    lodMesh = UnityEngine.Object.Instantiate(sourceMesh);
+                    lodMesh.name = $"{sourceMesh.name}_L{shellLevel}_LOD{lodLimit}_SourceClone";
+                }
+
+                lodMeshes[i] = lodMesh;
             }
 
             return lodMeshes;
