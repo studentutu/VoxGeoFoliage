@@ -20,8 +20,8 @@ Hard constraints:
 - no Unity `LODGroup`
 - no `MaterialPropertyBlock`
 - latest generated meshes always persist, even when validation marks them invalid
-- Impostors are not billboards or cards, very simple mesh
-- Far-distance fallback is a simplified plain opaque mesh (front facing only)
+- `Impostor` is one baked tree-space mesh only. Runtime never draws `impostorMesh + trunkL3Mesh` together.
+- `impostorMesh` combines the source trunk plus all placed source branch `woodMesh` and `foliageMesh`, and bake may optionally simplify it further down to a front-side-only surface
 - Wind is hierarchical and representation-dependent
 
 The runtime backend is `Graphics.RenderMeshIndirect` driven from a URP renderer feature. This does not mean one literal draw call for the whole vegetation system. It means one vegetation submission path built from multiple indirect calls, each bound to one exact mesh/material slot.
@@ -32,17 +32,18 @@ The runtime backend is `Graphics.RenderMeshIndirect` driven from a URP renderer 
 
 ## 1.1 High-Level Pipeline
 
-Authoring -> Bake -> CPU/GPU cell visibility (prefer GPU for MVP when feasible) -> GPU tree classification -> GPU branch and hierarchy survival evaluation -> CPU/GPU survivor decode (prefer GPU for MVP when feasible, otherwise use non-blocking CPU fallback) -> CPU upload of indirect args and visible instance data -> optional URP indirect depth pass -> URP indirect color pass
+Editor Authoring -> Editor Bake -> Runtime Registration/Flattening -> GPU-primary cell visibility -> GPU tree classification -> GPU branch and hierarchy survival evaluation -> GPU-primary survivor decode -> CPU upload of indirect args and visible instance data -> optional URP indirect depth pass -> URP indirect color pass
+
+Key  target principle: minimum draw-calls with minimum geometry.
 
 ## 1.2 MVP Runtime Decode Model
 
-Milestone 1 uses a temporary hybrid decode path:
-- GPU applies coarse visibility, LOD rules, and hierarchy survival decisions.
-- GPU-side frontier decode is preferred for MVP when it can be kept simple and stable.
-- CPU fallback reads back compact survival records only through completed non-blocking async results.
-- CPU fallback decodes the persisted BFS hierarchy into exact visible mesh-part draws.
-- CPU uploads final per-draw-slot instance lists and indirect args.
-- URP renders those lists via `RenderMeshIndirect`.
+Milestone 1 uses a temporary hybrid decode path with one strict default:
+- GPU is the primary owner of coarse visibility, LOD rules, hierarchy survival decisions, and frontier decode.
+- CPU fallback exists only as a temporary MVP backup path.
+- CPU fallback may only consume compact decision buffers through completed non-blocking async readback results.
+- CPU fallback decodes the persisted BFS hierarchy into exact visible mesh-part draws only when the GPU decode path is unavailable or explicitly disabled for validation/debugging.
+- URP renders the final per-draw-slot instance lists via `RenderMeshIndirect`.
 
 This is an MVP compromise. After MVP, the intended direction is to move from BFS plus simple hybrid decode to DFS preorder plus subtree spans and push the final decode fully onto the GPU.
 
@@ -55,9 +56,93 @@ This is an MVP compromise. After MVP, the intended direction is to move from BFS
   - runtime `L1` -> authored `shellNodesL0`
   - runtime `L2` -> authored `shellNodesL1`
   - runtime `L3` -> authored `shellNodesL2`
-- Far trees render one coarse opaque far mesh (`impostorMesh`), no separate trunk (one mesh combines all branches/trunk/leaves into a somewhat true-shape bounded geometry imposter).
-- Trunk stays full for runtime `L0` and `L1`, then switches to simplified `trunkL3Mesh` for runtime `L2`, `L3`, and the far mesh path.
+- Far trees render one coarse opaque far mesh (`impostorMesh`) only. No separate trunk draw is allowed in runtime `Impostor` mode.
+- `trunkL3Mesh` is used only by expanded trees whose surviving branch placements are all `L2` or `L3`.
 - Runtime uses the latest baked meshes even if validation marks them invalid. Invalid state is diagnostic, not a rollback trigger.
+
+---
+
+## 1.4 Ownership Split
+
+This section is the ownership authority for editor authoring, editor bake, and runtime consume code.
+
+### Editor Authoring
+
+Editor authoring is the user-edited source of truth.
+
+Allowed responsibilities:
+- assign source meshes, materials, placements, authored bounds, authored distance bands, budgets, and bake settings
+- run validation and preview
+- persist generated bake outputs back onto the authoring assets
+
+Forbidden responsibilities:
+- runtime frame logic
+- per-frame visibility or decode state
+- indirect args or visible-instance list ownership
+
+### Editor Bake
+
+Editor bake is the only stage allowed to generate or replace derived geometry.
+
+Allowed responsibilities:
+- voxelize source foliage and branch geometry
+- build canonical `shellNodesL0` and compact `shellNodesL1` / `shellNodesL2`
+- build `shellL1WoodMesh`, `shellL2WoodMesh`, `trunkL3Mesh`, and `impostorMesh`
+- persist generated meshes into writable project `Assets/` folders
+- filled bounding volume of per-mesh node AABB per level of detail for the runtime phase.
+- mark authoring assets invalid when generated outputs violate budgets or bounds (mesh still exists, additional warning/errors are available in the editor window panel)
+
+Forbidden responsibilities:
+- runtime scene registration
+- per-frame culling, classification, decode, or draw submission
+
+### Runtime Consume Path
+
+Runtime is allowed to read the runtime-facing subset of authored ScriptableObject data directly. Optional caching or flattening is allowed for performance, but it is an implementation detail, not a separate source of truth.
+
+Allowed responsibilities:
+- read authored runtime data such as placements, meshes, materials, hierarchy topology, bounds, and LOD thresholds directly from `TreeBlueprintSO`, `BranchPrototypeSO`, `LODProfileSO`, `BranchPlacement`, and `BranchShellNode`
+- derive runtime coarse bounds such as tree spheres and per-placement branch spheres in actual world space
+- build optional runtime caches, draw-slot registries, and GPU buffers from that data
+- update coarse cell visibility
+- classify trees and branch tiers
+- evaluate shell-node survival decisions
+- decode visible frontiers
+- build visible-instance lists, indirect args, and per-slot `worldBounds`
+- submit indirect draws
+
+Forbidden responsibilities:
+- calling editor bake
+- reading bake settings, triangle budgets, generated-folder overrides, validation UI state, or preview state
+- mutating authoring assets or generated meshes
+- any `AssetDatabase` usage
+- any editor bake, preview, validation, or generated-mesh persistence work
+
+---
+
+## 1.5 ScriptableObject Usage Summary
+
+This summary is intentionally short. The fields listed under "runtime-facing" are allowed runtime inputs as-is. Runtime may read them directly from the ScriptableObjects, or cache/flatten them for performance.
+
+### Runtime-facing data
+
+- `BranchPrototypeSO`: `woodMesh`, `woodMaterial`, `foliageMesh`, `foliageMaterial`, `leafColorTint`, `shellNodesL0`, `shellNodesL1`, `shellNodesL2`, `shellL1WoodMesh`, `shellL2WoodMesh`, `shellMaterial`, `localBounds`
+- `TreeBlueprintSO`: `trunkMesh`, `trunkL3Mesh`, `trunkMaterial`, `branches`, `impostorMesh`, `impostorMaterial`, `lodProfile`, `treeBounds`
+- `LODProfileSO`: `l0Distance`, `l1Distance`, `l2Distance`, `impostorDistance`, `absoluteCullDistance`
+- `BranchPlacement`: `prototype`, `localPosition`, `localRotation`, `scale`
+- `BranchShellNode`: `localBounds`, `firstChildIndex`, `childMask`, `shellL0Mesh`, `shellL1Mesh`, `shellL2Mesh`
+- `BranchShellNode.depth`: optional validation/debug field; runtime may ignore it unless a debug path needs it
+
+### Editor-only data
+
+- `BranchPrototypeSO`: `generatedCanopyShellsRelativeFolder`, `triangleBudgetWood`, `triangleBudgetFoliage`, `triangleBudgetShellL0`, `triangleBudgetShellL1`, `triangleBudgetShellL2`, `shellBakeSettings`
+- `TreeBlueprintSO`: `generatedImpostorMeshesRelativeFolder`, `ImpostorBakeSettings`
+- editor preview state, validation state, and any `AssetDatabase` persistence helpers
+
+### Legacy compatibility data
+
+- `LODProfileSO.l3Distance` remains serialized in the current asset schema but is dead data for Milestone 1.
+- Milestone 1 runtime classification, preview labeling, validation rules, and new code must ignore `l3Distance`.
 
 ---
 
@@ -86,6 +171,9 @@ Notes:
 - `L0` is branch-placement granularity because the source asset contract stores one reusable source branch, not source geometry split by shell node.
 - `L1/L2/L3` use hierarchy-frontier granularity, so only surviving node meshes are emitted.
 - `Impostor` is tree-level only. It does not expand into branch parts.
+- Expanded-tree trunk draw is selected once per tree after branch classification:
+- if any surviving branch placement is `L0` or `L1`, draw full `trunkMesh`
+- otherwise draw `trunkL3Mesh`
 
 ## 2.3 `LODProfileSO` Authority
 
@@ -95,15 +183,27 @@ Expected authored thresholds:
 - `l0Distance`
 - `l1Distance`
 - `l2Distance`
-- `l3Distance`
 - `impostorDistance`
 - `absoluteCullDistance`
 
+Legacy compatibility field:
+- `l3Distance` exists in the current serialized asset layout but is ignored by Milestone 1 runtime logic
+
 Rules:
-- distance bands are monotonically increasing
-- `l0Distance < l1Distance < l2Distance < l3Distance < impostorDistance < absoluteCullDistance`
-- `l0Distance` is the very-near source-geometry band and is typically under 5 meters for that species
-- part-distance tests use the nearest point on the authoritative branch or node bounds
+- the active Milestone 1 authored thresholds must satisfy `0 < l0Distance < l1Distance < l2Distance < impostorDistance < absoluteCullDistance`
+- classification distance is sphere-surface distance:
+  - `distance = max(0, length(cameraWorldPosition - sphereCenterWorld) - sphereRadiusWorld)`
+- tree-mode classification uses the tree sphere derived from `treeBounds`:
+  - `distance >= absoluteCullDistance` -> `Culled`
+  - `impostorDistance <= distance < absoluteCullDistance` -> `Impostor`
+  - `distance < impostorDistance` -> `Expanded`
+- branch-tier classification uses one per-placement sphere derived from transformed prototype `localBounds` and applies only to `Expanded` trees:
+  - `0 <= distance < l0Distance` -> `L0`
+  - `l0Distance <= distance < l1Distance` -> `L1`
+  - `l1Distance <= distance < l2Distance` -> `L2`
+  - `l2Distance <= distance` -> `L3`
+- editor preview and bake keep using authoritative branch and node bounds, not runtime spheres
+- runtime shell-node survival uses persisted node bounds from the selected shell hierarchy
 
 ## 2.4 Tree Composition and Branch Reconstruction
 
@@ -137,7 +237,7 @@ Required invariants:
 - child bounds always stay inside parent bounds
 - node `localBounds` always contain the emitted mesh bounds for that node
 
-This is enough for MVP survivor decode, including the GPU-preferred path and the CPU fallback.
+This is enough for MVP survivor decode, including the GPU-primary path and the temporary CPU fallback.
 
 It is not enough for efficient subtree skipping at scale. After MVP, switch to DFS preorder plus subtree spans.
 
@@ -145,7 +245,7 @@ It is not enough for efficient subtree skipping at scale. After MVP, switch to D
 
 - Unity 6 URP Forward+
 - compute shaders for tree classification, branch decisions, and hierarchy survival decisions
-- hybrid CPU/GPU survivor decode for MVP with GPU preferred and non-blocking CPU fallback
+- GPU-primary survivor decode for MVP with a temporary non-blocking CPU fallback path
 - `Graphics.RenderMeshIndirect`
 - per-draw-slot indirect args and visible instance buffers
 - URP renderer feature for depth and color pass integration
@@ -172,14 +272,17 @@ BranchPrototypeSO
 Each `BranchShellNode` stores:
 - local bounds
 - hierarchy topology (`firstChildIndex`, `childMask`)
-- one emitted mesh for that authored tier
+- three tier-specific mesh slots in the serialized class, with one strict authored-array rule:
+  - in `shellNodesL0`, only `shellL0Mesh` may be non-null
+  - in `shellNodesL1`, only `shellL1Mesh` may be non-null
+  - in `shellNodesL2`, only `shellL2Mesh` may be non-null
 
 Authored mapping to runtime:
 - authored `shellNodesL0` -> runtime `L1`
 - authored `shellNodesL1` -> runtime `L2`
 - authored `shellNodesL2` -> runtime `L3`
 
-## 3.3 Current Hierarchical Bake Pipeline
+## 3.3 Per-BranchPrototype Bake Pipeline
 
 Per branch prototype:
 1. Read the source foliage mesh.
@@ -189,9 +292,17 @@ Per branch prototype:
 5. Re-voxelize owned authored `L0` occupancy into coarse node-local volumes for authored `L1` and authored `L2`.
 6. Persist `shellNodesL0`, `shellNodesL1`, and `shellNodesL2`.
 7. Bake `shellL1WoodMesh` and `shellL2WoodMesh`.
-8. Bake one coarse far mesh from the full assembled tree.
 
-## 3.4 Runtime Use of the Shell Hierarchy
+## 3.4 Per-TreeBlueprint Bake Pipeline
+
+Per tree blueprint:
+1. Read the source `trunkMesh` plus all placed source branch `woodMesh` and `foliageMesh` in tree space.
+2. Bake bounded `trunkL3Mesh` from the source `trunkMesh`.
+3. Bake one bounded `impostorMesh` from the combined tree-space source geometry.
+4. Optionally simplify `impostorMesh` further down to a front-side-only surface when that still preserves the intended far silhouette.
+5. Persist `trunkL3Mesh` and `impostorMesh`.
+
+## 3.5 Runtime Use of the Shell Hierarchy
 
 At runtime:
 - tree classification decides whether the tree stays `Impostor` or expands
@@ -199,11 +310,11 @@ At runtime:
 - each branch work item chooses runtime `L0`, `L1`, `L2`, or `L3`
 - shell-mode branches evaluate the chosen hierarchy
 - GPU writes compact survival decisions
-- survivor decode reconstructs the visible frontier from those decisions, preferably on GPU and otherwise through the non-blocking CPU fallback, then emits exact visible frontier meshes by draw slot
+- survivor decode reconstructs the visible frontier from those decisions on GPU by default and otherwise only through the temporary non-blocking CPU fallback path, then emits exact visible frontier meshes by draw slot
 
 This is the core reason the hierarchy exists: exact visible parts can be emitted independently, instead of forcing one mesh choice for the whole branch.
 
-## 3.5 Invalid Output Policy
+## 3.6 Invalid Output Policy
 
 Generated meshes are not discarded when they miss budgets.
 
@@ -244,6 +355,13 @@ Required baked outputs:
 - `trunkL3Mesh`
 - far mesh (`impostorMesh`)
 
+These outputs are editor-baked products.
+
+Rules:
+- runtime never regenerates them
+- runtime may consume them directly from the authored assets
+- runtime may cache or flatten them for performance, but that does not change the ownership contract
+
 ## 4.3 Simplified Trunk for `L3`
 
 Runtime `L3` requires a separate simplified trunk mesh.
@@ -252,7 +370,7 @@ Rules:
 - generate `trunkL3Mesh` from `trunkMesh`
 - use the same bounded reduction policy used elsewhere
 - keep it inside authoritative trunk bounds
-- make it materially cheaper than the full `trunkMesh`
+- triangle count must be strictly lower than the source `trunkMesh`
 
 ## 4.4 Far Mesh Baking
 
@@ -265,25 +383,40 @@ Rules:
 - no cards
 - no billboards
 - no alpha-based impostor
-- preserve gross crown silhouette
-- preserve trunk anchor when visible
-- minimize triangles aggressively
+- runtime `Impostor` mode draws `impostorMesh` only
+- source inputs are the source `trunkMesh` plus all placed source branch `woodMesh` and `foliageMesh`
+- bake may additionally reduce the final mesh to a front-side-only surface
 
 ---
 
 # 5. Runtime System
+
+## 5.0 Runtime Entry Contract
+
+Runtime may consume the runtime-facing data listed in `1.5` directly from the authored ScriptableObjects.
+
+Runtime may also build optional cached data from those fields during scene registration, for example:
+- draw-slot registries
+- tree coarse bounds
+- per-placement branch bounds center plus bounding sphere radius
+- flattened BFS shell-node payloads per authored shell tier
+
+Runtime per-frame may use authored asset references directly and/or these cached runtime structures, depending on which path is simpler and faster.
+
+Runtime must never read the editor-only fields listed in `1.5`, and it must never invoke editor bake, preview, validation, or generated-mesh persistence logic.
 
 ## 5.1 Runtime Work Units
 
 The runtime must not treat "one tree thread does everything" as the final model.
 
 Required staged work:
-1. tree-level coarse visibility (`CPU` or `GPU`, prefer `GPU` when feasible)
+1. GPU-primary tree-level coarse visibility
 2. tree-level mode selection (`Culled`, `Expanded`, `Impostor`)
 3. branch-level tier selection (`L0/L1/L2/L3`)
 4. hierarchy survival decisions for shell tiers
-5. survivor decode (`GPU` preferred, `CPU` non-blocking fallback)
-6. per-draw-slot indirect submission
+5. GPU-primary survivor decode
+6. CPU fallback bridge only when the GPU decode path is unavailable or explicitly disabled
+7. per-draw-slot indirect submission
 
 ## 5.2 Exact Runtime Node and Survival Payloads
 
@@ -347,14 +480,15 @@ After MVP, migrate to DFS preorder with subtree spans.
 ## 6.1 Frame Stages
 
 Per frame:
-1. CPU or GPU updates coarse cell visibility, with GPU preferred when feasible
+1. GPU updates coarse cell visibility
 2. GPU clears counters and staging buffers
 3. GPU classifies trees into `Culled`, `Expanded`, or `Impostor`
 4. GPU emits one far-mesh instance record for `Impostor` trees
 5. GPU emits one `BranchDecisionGPU` record for each surviving expanded branch placement
 6. GPU emits `NodeDecisionGPU` records for shell-tier branches
-7. GPU decodes the surviving frontier directly when feasible; otherwise CPU consumes the latest completed non-blocking readback of compact decision buffers
-8. CPU uploads per-draw-slot instance data and indirect args from GPU-decoded lists or from the CPU fallback decode result
+7. GPU decodes the surviving frontier directly
+8. CPU fallback consumes the latest completed non-blocking readback of compact decision buffers only when the GPU decode path is unavailable or explicitly disabled
+9. CPU uploads per-draw-slot instance data and indirect args from GPU-decoded lists or from the CPU fallback decode result
 10. URP renders indirect depth and color passes
 
 ## 6.2 Example Tree Classification Pseudocode
@@ -369,8 +503,8 @@ void ClassifyTrees(uint id : SV_DispatchThreadID)
     if (!CellVisible(tree.cellIndex))
         return;
 
-    float treeDistance = DistanceToTreeBounds(tree, _CameraPosition);
-    if (treeDistance > lod.absoluteCullDistance)
+    float treeDistance = DistanceToTreeSphere(tree, _CameraPosition);
+    if (treeDistance >= lod.absoluteCullDistance)
         return;
 
     if (treeDistance >= lod.impostorDistance)
@@ -395,7 +529,7 @@ void ClassifyBranches(uint id : SV_DispatchThreadID)
 
     for each branch placement in blueprint
     {
-        float branchDistance = DistanceToBranchBounds(expanded, branchPlacement, _CameraPosition);
+        float branchDistance = DistanceToBranchSphere(expanded, branchPlacement, _CameraPosition);
 
         if (branchDistance < lod.l0Distance)
         {
@@ -467,11 +601,13 @@ Preferred MVP path:
 - decode the visible frontier on GPU and append final per-draw-slot visible instance data directly
 
 CPU fallback path:
-- read back compact decision buffers through completed non-blocking async results
+- read back compact decision buffers through completed non-blocking async results only when the GPU decode path is unavailable or explicitly disabled
 - decode the visible frontier on CPU from the same BFS contract
 
 After survivor decode:
-- emit full or simplified trunk draw for the tree
+- select one trunk draw for each expanded tree:
+  - if any surviving branch decision is `L0` or `L1`, emit `trunkMesh`
+  - otherwise emit `trunkL3Mesh`
 - group all visible instances by exact mesh/material draw slot
 - upload instance transforms and indirect args
 - render one indirect call per draw slot
@@ -481,6 +617,8 @@ After survivor decode:
 # 7. GPU Buffer Layout
 
 ## 7.1 Static Buffers
+
+These buffers are optional runtime-side caches built from the runtime-facing authored data. They are not rebuilt by editor bake code during play.
 
 - `TreeInstances`
 - `TreeBlueprints`
@@ -596,14 +734,14 @@ This system targets large-scale vegetation in Unity by combining:
 - reusable authored branches
 - bounded baked shell hierarchies
 - GPU visibility and hierarchy survival decisions
-- hybrid CPU/GPU BFS decode for MVP with GPU preferred
+- GPU-primary BFS decode for MVP with a temporary CPU fallback
 - exact per-draw-slot indirect submission
 
 The runtime authority is now:
 - runtime `L0/L1/L2/L3 + Impostor`
 - authored shell arrays shifted into runtime `L1/L2/L3`
 - BFS hierarchy flattening for MVP
-- hybrid survivor decode before indirect submission, with GPU preferred and non-blocking CPU fallback
+- GPU-primary survivor decode before indirect submission, with a temporary non-blocking CPU fallback
 - multiple indirect calls grouped by exact mesh/material slots, not one literal draw call
 
 ---

@@ -37,27 +37,27 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 5. All editor-baked voxel artifacts must stay inside authoritative source occupancy; this strict-bound rule applies to canopy shell hierarchies, voxelized branch wood attachments, simplified `L2/L3` trunk-mesh `trunkL3Mesh`, and far-mesh `impostorMesh`, and persisted bounds come from emitted mesh bounds.
 6. Generated shell, trunk, and far meshes prefer topology-preserving simplification first: merge adjacent coplanar voxel faces when possible, keep voxel silhouette/bounds, and only then enter bounded fallback when authored settings still miss budgets.
 7. Shell, trunk, and far-mesh simplification must remain optional through authoring settings so developers can inspect raw voxel output in the editor and tests can stay on the fast path.
-8. `impostorMesh` is a coarse opaque far mesh, not a billboard and not a textured card. Should only include front side mesh.
-9. GPU runtime work is staged: `CPU/GPU` cell visibility, tree classification, branch tier selection, hierarchy survival decisions, survivor decode with GPU preferred and non-blocking CPU fallback when used, and indirect draw submission. The old single-dispatch-does-everything model is not the authority.
+8. `impostorMesh` is a coarse opaque far mesh, not a billboard and not a textured card. Runtime `Impostor` mode submits that one mesh only, and bake may optionally reduce it to a front-side-only surface. Separate material for imposter exists to make sure it always rotated to the viewer (so backside geometry can be culled in baking)
+9. GPU runtime work is staged: GPU-primary cell visibility, tree classification, branch tier selection, hierarchy survival decisions, GPU-primary survivor decode, and indirect draw submission. CPU fallback is a temporary MVP backup path only through non-blocking completed readback when needed.
 10. `Graphics.RenderMeshIndirect` via the vegetation renderer feature is the rendering backend; no `BatchRendererGroup` and no MaterialPropertyBlock usage. The system does not promise one literal global draw call; it submits multiple indirect calls grouped by exact mesh/material draw slots. After MVP - try disable manual `Graphics.RenderMeshIndirect` and use experimental unity package `virtualmesh` (https://github.com/Unity-Technologies/com.unity.virtualmesh).
 11. Per-instance color variation via `RSUV` only (packed uint) - no MaterialPropertyBlock, no DOTS-instanced properties for color. Single variation mechanism preserving SRP batching.
 12. Branch scale is in steps of 0.25 (e.g. 0.25, 0.5, 0.75, 1.0, 1.25...); no scale quantization optimization yet.
-13. Spatial partitioning via uniform grid; cell visibility can start on `CPU` or `GPU` in MVP, with GPU preferred when feasible and CPU frustum test plus optional `CullingGroup` as fallback (only if no GPU alternative solution is found).
+13. Spatial partitioning via uniform grid; GPU is the primary MVP visibility path. CPU frustum test plus optional `CullingGroup` is temporary fallback only when the GPU path is unavailable or explicitly disabled.
 14. Authoring data lives in ScriptableObjects; runtime data lives in GPU buffers; no runtime data on MonoBehaviours.
 15. Editor preview is transient child GameObjects with `HideFlags.DontSave | HideFlags.NotEditable` - never serialized.
 16. Shell generation, trunk-L3 generation, and far-mesh baking are editor-only operations.
 17. Generated shell, trunk, and far geometry must be persisted as standalone `.mesh` assets under a writable project folder: prefer an owner-local `GeneratedMeshes/` folder under `Assets/`, otherwise fall back to `Assets/VoxGeoFol.Generated/Vegetation/Meshes/`. Do not rely on transient meshes or sub-assets that can be lost.
 18. All vegetation code lives under `Packages/com.voxgeofol.vegetation/` with `Runtime/Authoring`, `Editor`, `Runtime/Shaders`, `Runtime/Rendering`, `Tests/Editor`, and `Samples~/` subfolders as needed.
-19. No Unity `LODGroup` - LOD selection is fully owned by authored distance bands plus GPU classification/expansion. `LODGroup` is incompatible with BRG or indirect hierarchy-driven rendering.
+19. No Unity `LODGroup` - LOD selection is fully owned by authored distance bands `l0Distance/l1Distance/l2Distance/impostorDistance/absoluteCullDistance` plus GPU classification/expansion. Legacy `l3Distance` is dead data for Milestone 1. `LODGroup` is incompatible with BRG or indirect hierarchy-driven rendering.
 20. Canopy and far-mesh shaders are minimal vertex-lit: no albedo texture for shell output, no normal map, no emission, no specular, no bump maps. Trunk shader uses albedo texture but no normal map.
-21. Trunk stays full for runtime `L0` and `L1`; runtime `L2`, `L3`, and far trees use simplified `trunkL3Mesh` or `impostorMesh` according to the current milestone contract.
+21. Trunk stays full for runtime `L0` and `L1`; runtime `L2` and `L3` use simplified `trunkL3Mesh`; far trees use `impostorMesh` only.
 22. MVP runtime hierarchy flattening is BFS with contiguous immediate-child blocks defined by `firstChildIndex + childMask`; after MVP switch to DFS preorder with subtree spans.
 23. Generated meshes that miss budgets still persist and remain wired, but validation marks the owning asset invalid.
 
 ## Wiring Hubs
 
 - `VegetationRuntimeManager` - runtime orchestrator: gathers authoring instances, builds spatial grid, creates GPU buffers, and drives per-frame hybrid visibility, tree classification, branch tier selection, and survivor decode hand-off
-- `VegetationRendererFeature` - URP integration: schedules vegetation compute passes, GPU-preferred decode, optional non-blocking CPU fallback bridge, and indirect depth/color passes
+- `VegetationRendererFeature` - URP integration: schedules vegetation compute passes, GPU-primary decode, optional non-blocking CPU fallback bridge, and indirect depth/color passes
 - `VegetationIndirectRenderer` - indirect rendering authority: draw-slot registry, visible instance buffers, indirect args, and `RenderMeshIndirect` submission
 - `VegetationAuthoringValidator` - Task 1 authoring contract authority: explicit validation for readability, opacity, budgets, bounds, scale, and LOD ordering
 - `CanopyShellGenerator` - editor-side branch-shell authority: bakes canonical `shellNodesL0`, derives compact `shellNodesL1` / `shellNodesL2` from owned `L0` occupancy, applies optional reduction and mesh-only fallback, and refreshes bounded voxelized `shellL1WoodMesh` / `shellL2WoodMesh`

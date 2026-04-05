@@ -7,11 +7,15 @@ Deliver a working end-to-end vegetation pipeline (similar to Unreal 5.7 new foli
 - auto-generates shell hierarchies and far mesh output (editor only)
 - preserves full source detail only in the very-near `L0` band
 - simplifies the rest of the visible tree through runtime `L1`, `L2`, and `L3`
-- evaluates visibility and hierarchy survival on GPU
-- decodes surviving hierarchy parts on CPU for MVP
+- evaluates visibility, hierarchy survival, and primary frontier decode on GPU
+- keeps a non-blocking CPU fallback decode path only as a temporary MVP backup
 - submits final exact mesh-part draws through URP plus `Graphics.RenderMeshIndirect`
 
 **Authority**: [UnityAssembledVegetation_FULL.md](UnityAssembledVegetation_FULL.md)
+
+Ownership note:
+- strict field/property/sub-object ownership for editor authoring, editor bake, runtime registration/flattening, and runtime per-frame use lives only in `UnityAssembledVegetation_FULL.md`
+- this milestone tracks milestone scope, sequencing, and done criteria; it must not redefine per-field ownership separately
 
 Package note (`2026-03-29`):
 - Public package root: `Packages/com.voxgeofol.vegetation`
@@ -29,14 +33,27 @@ The authoritative Milestone 1 runtime contract is now:
   - authored `shellNodesL0` -> runtime `L1`
   - authored `shellNodesL1` -> runtime `L2`
   - authored `shellNodesL2` -> runtime `L3`
-- GPU applies tree visibility, branch tier selection, and shell-node survival rules
-- survivor decode is hybrid `CPU/GPU`, with GPU preferred when feasible and non-blocking CPU fallback otherwise
+- GPU owns tree visibility, branch tier selection, shell-node survival rules, and the primary MVP frontier decode path
+- CPU fallback exists only as a temporary MVP backup path and may only consume completed non-blocking async GPU readback results
 - rendering uses multiple indirect calls grouped by exact mesh/material slots, not one literal global draw call
-- `LODProfileSO` should move to authored distance bands per species
-- trunk stays full for runtime `L0` and `L1`, then switches to `trunkL3Mesh` for runtime `L2`, `L3`, and the `Impostor` path
+- `LODProfileSO` now uses authored distance bands `l0Distance`, `l1Distance`, `l2Distance`, `impostorDistance`, and `absoluteCullDistance`; legacy `l3Distance` is dead data for Milestone 1 and must be ignored
+- `Impostor` is one baked `impostorMesh` only; it combines the trunk plus all placed source branch `woodMesh` and `foliageMesh`, and bake may optionally reduce it to a front-side-only surface
+- trunk selection for expanded trees is strict:
+  - if any surviving branch placement is `L0` or `L1`, draw full `trunkMesh`
+  - otherwise draw `trunkL3Mesh`
 - generated meshes persist even when they miss budgets; validation still marks the asset invalid
+- `trunkL3Mesh` is mandatory before runtime MVP work starts; runtime `L2/L3` and editor `L2/L3` are not optional side paths
+- editor bake/preview authority continues to use per-placement AABB from authored `localBounds` plus per-node `localBounds`
+- runtime branch tier classification uses one per-placement bounding sphere with exact sphere-surface distance:
+  - `distance = max(0, length(cameraWorldPosition - sphereCenterWorld) - sphereRadiusWorld)`
+- runtime shell-node visibility still uses authored node bounds
+- indirect submission uses scene-wide per exact draw slot and must rebuild `RenderMeshIndirect` `worldBounds` from visible data; fixed whole-scene bounds are forbidden in Milestone 1
 
 Any older BRG wording or tree-wide `R0/R1/R2/R3` runtime wording is obsolete.
+
+Specific ownership authority:
+- use `UnityAssembledVegetation_FULL.md` sections `1.4`, `1.5`, `4.2`, and `5.0` as the single ownership source of truth
+- runtime implementation must follow that authority when deciding which ScriptableObject fields are editor-only and which baked outputs are allowed into runtime registration
 
 ---
 
@@ -84,6 +101,9 @@ Authoritative rule:
 - `L0` is source branch geometry and is branch-placement granularity.
 - `L1/L2/L3` are hierarchy-frontier granularity.
 - `Impostor` is tree-level only.
+- expanded-tree trunk draw is selected once per tree:
+  - if any surviving branch placement is `L0` or `L1`, use `trunkMesh`
+  - otherwise use `trunkL3Mesh`
 
 ### No Unity `LODGroup`
 
@@ -92,7 +112,7 @@ This system does not use Unity `LODGroup`. LOD selection is owned by:
 - GPU tree classification
 - GPU branch tier selection
 - GPU shell-node survival decisions
-- hybrid CPU/GPU BFS survivor decode for MVP, with GPU preferred
+- GPU-primary BFS survivor decode for MVP, with a temporary CPU fallback
 
 ---
 
@@ -102,10 +122,14 @@ This system does not use Unity `LODGroup`. LOD selection is owned by:
 
 - Base authoring assets, validation, and branch/tree authoring are implemented under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
 - `LODProfileSO` now uses authored distance bands, `TreeBlueprintSO` now exposes `trunkL3Mesh`, and editor preview/summary naming is aligned to `L0/L1/L2/L3/Impostor`.
-- Remaining authoring follow-up is generation/persistence of `trunkL3Mesh`; remaining runtime follow-up is the hybrid decode path with GPU-preferred visibility and decode.
+- Remaining authoring follow-up is generation/persistence of `trunkL3Mesh`; remaining runtime follow-up is the GPU-primary decode path with the temporary CPU fallback bridge.
 - The data contract below is authoritative for follow-up work.
 
 ### 1.1 ScriptableObjects
+
+Field inventory only:
+- the lists below describe the current authored shape
+- field-by-field ownership and where each field may be used is defined only in `UnityAssembledVegetation_FULL.md`
 
 **`BranchPrototypeSO`**
 
@@ -156,7 +180,7 @@ This system does not use Unity `LODGroup`. LOD selection is owned by:
 - float l0Distance
 - float l1Distance
 - float l2Distance
-- float l3Distance
+- float l3Distance               // legacy serialized compatibility field; ignored by Milestone 1 runtime logic
 - float impostorDistance
 - float absoluteCullDistance
 ```
@@ -171,7 +195,8 @@ This system does not use Unity `LODGroup`. LOD selection is owned by:
 - `treeBounds` must fully contain trunk + all placed branches.
 - `shellL1WoodMesh`, `shellL2WoodMesh`, `trunkL3Mesh`, and `impostorMesh` must stay inside their authoritative source bounds.
 - Branch scale must be exactly in steps of `0.25`.
-- LOD distances must be monotonically increasing: `l0 < l1 < l2 < l3 < impostor < absoluteCull`.
+- Milestone 1 active LOD distances must be monotonically increasing: `l0 < l1 < l2 < impostor < absoluteCull`.
+- Legacy `l3Distance` must not affect runtime classification, preview labeling, or new validation logic.
 - Over-budget generated meshes must persist, but validation must still fail and mark the authoring asset invalid.
 
 ---
@@ -258,7 +283,7 @@ BranchShellNodeRuntimeBfs
 
 ### 4.3 Why BFS Is Only Temporary
 
-BFS is acceptable for Milestone 1 because CPU does the final decode. It is not the desired long-term format for fully GPU-driven traversal. After MVP, move to DFS preorder plus subtree spans.
+BFS is acceptable for Milestone 1 because both the GPU-primary path and the temporary CPU fallback only need immediate-child traversal. It is not the desired long-term format for fully GPU-driven traversal. After MVP, move to DFS preorder plus subtree spans.
 
 ---
 
@@ -298,7 +323,12 @@ Output buffers:
 6. ELSE:
    - emit one Expanded tree record
 7. FOR each Expanded tree:
-   - classify each branch placement into runtime L0 / L1 / L2 / L3
+   - compute branchDistance = max(0, length(cameraWorldPosition - branchSphereCenterWorld) - branchSphereRadiusWorld)
+   - if branchDistance < l0Distance -> `L0`
+   - else if branchDistance < l1Distance -> `L1`
+   - else if branchDistance < l2Distance -> `L2`
+   - else -> `L3`
+   - ignore legacy `l3Distance`
 8. FOR each shell-tier branch:
    - evaluate the selected authored BFS hierarchy
    - emit `NodeDecisionGPU` records with `Reject`, `EmitSelf`, or `ExpandChildren`
@@ -327,6 +357,8 @@ BranchPlacementGPU
   - float uniformScale
   - float4 localRotation
   - uint prototypeIndex
+  - float3 localBoundsCenter
+  - float boundingSphereRadius
 
 BranchPrototypeGPU
   - uint woodDrawSlotL0
@@ -355,6 +387,9 @@ NodeDecisionGPU
   - uint decision
 ```
 
+Branch classification ownership:
+- use the single-source ownership contract from `UnityAssembledVegetation_FULL.md`; this milestone does not redefine field usage separately here
+
 ---
 
 ## Task 6: Hybrid Survivor Decode and Indirect Submission
@@ -374,11 +409,14 @@ For each `NodeDecisionGPU`:
 
 ### 6.2 Final Submission Rule
 
-GPU decode is preferred when feasible. If that is not ready for MVP, CPU groups decoded visible instances by exact draw slot from completed non-blocking async results and uploads:
+GPU decode is the required primary MVP path. CPU fallback remains only as a temporary backup path. When CPU fallback is used, it groups decoded visible instances by exact draw slot from completed non-blocking async results and uploads:
 - per-slot visible instance data
 - per-slot indirect args
 
-URP then renders multiple indirect calls, one per exact mesh/material slot. Milestone 1 does not claim one literal global draw call.
+Submission ownership:
+- use the single-source runtime submission contract from `UnityAssembledVegetation_FULL.md`; this milestone only tracks that the implementation must follow it
+
+Milestone 1 does not claim one literal global draw call.
 
 ---
 
@@ -398,7 +436,7 @@ Required stages:
 - dispatch shell-node survival decision passes
 
 **Pass 3: Hybrid Decode Bridge**
-- decode the visible frontier on GPU when feasible
+- decode the visible frontier on GPU by default
 - otherwise read back compact GPU decision buffers through completed non-blocking async results
 - keep the CPU fallback decode path available until GPU decode is stable
 - upload final per-slot instance data and indirect args
@@ -423,7 +461,26 @@ Required verification:
 - compare one captured GPU-decoded frontier against the CPU fallback decode on the same inputs
 - verify `L0` only appears inside the very-near band
 - verify `Impostor` only appears once the tree reaches the impostor band
+- verify `Impostor` draws `impostorMesh` only and never submits a separate trunk draw
 - verify invalid generated meshes still render while tooling marks the asset invalid
+
+---
+
+## Phase C.5: Runtime Readiness Gate
+
+This gate is mandatory. Do not start Phase D or Phase E until every item below is closed.
+
+Required gate checklist:
+- `trunkL3Mesh` generation and persistence are implemented and exposed through the editor bake flow
+- `Packages/com.voxgeofol.vegetation/Samples~/Vegetation Demo/VoxFoliage/TreeBlueprint_branch_leaves_fullgeo.asset` is rebaked with assigned `trunkL3Mesh`
+- `Assets/Tree/VoxFoliage/TreeBlueprint_branch_leaves_fullgeo.asset` is rebaked with assigned `trunkL3Mesh`
+- manual in-Editor visual verification is completed on both exact tree-blueprint assets for `L0`, `L1`, `L2`, `L3`, shell-only `L1`, shell-only `L2`, shell-only `L3`, and `Impostor`
+- baked `L1/L2` compact hierarchies are compared against `Assets/Tree/Raw/branch_leaves_quadcards.obj` as the current silhouette reference input
+- `ShellBakeSettings` and `ImpostorBakeSettings` on both exact tree-blueprint assets pass validation without depending on last-resort `MeshLodUtility` fallback
+- validator/tests verify BFS child ordering against ascending octant-bit order, not only contiguous child blocks, depth, and bounds
+- runtime flattening contract is frozen: branch placement runtime data must carry authored bounds center plus bounding sphere radius, runtime branch classification uses per-placement sphere-surface distance, shell-node visibility keeps authored node bounds, and legacy `l3Distance` is ignored
+- runtime submission contract is frozen: use scene-wide per exact draw slot with per-slot bounds rebuilt from visible data; fixed whole-scene bounds are forbidden
+- compile validation is rerun and the Unity EditMode vegetation suite is rerun once the long Unity path is available
 
 ---
 
@@ -446,18 +503,28 @@ Required verification:
 2. Keep shell-only inspection views
 3. Manual visual verification
 
-### Phase D: Spatial Grid + MVP Visibility/Decode Mirror
-1. Implement `VegetationSpatialGrid`
-2. Implement the MVP visibility and decode mirror with GPU-preferred design and CPU fallback
-3. Compile check + manual verification
+### Phase C.5: Runtime Readiness Gate
+1. Close every item in the mandatory runtime readiness checklist above
+2. Reconcile real sample assets with the current validator and preview contract
+3. Freeze the runtime bounds and submission contracts before runtime implementation starts
 
-### Phase E: Hybrid Decode Runtime Pipeline
-1. Implement compute tree classification
-2. Implement compute branch tier selection
-3. Implement compute node decision emission
-4. Implement GPU survivor decode when feasible, with a non-blocking `AsyncGPUReadback` CPU fallback bridge
-5. Implement indirect renderer and renderer feature integration
-6. End-to-end manual verification in a demo scene
+### Phase D: Spatial Grid + Runtime Data Gather/Decode Path
+Blocked until Phase C.5 is closed.
+
+1. Implement `VegetationSpatialGrid`
+2. Implement runtime registration/flattening for tree spheres, per-placement branch spheres, draw-slot registries, and BFS shell-node payloads
+3. Implement the GPU-primary visibility, classification, node-decision, and frontier-decode data path with the temporary non-blocking CPU fallback bridge
+4. Emit the per-slot visible-instance data, indirect-args inputs, and visible-data bounds that Phase E will consume
+5. Compile check + manual verification
+
+### Phase E: Hybrid Decode Rendering Pipeline
+Blocked until Phase C.5 is closed and Phase D emits the required runtime data.
+
+1. Implement shaders for canopy, trunk, far-mesh, and depth-only rendering
+2. Implement indirect renderer consumption of the Phase D outputs
+3. Implement renderer feature and render pass integration
+4. End-to-end manual verification in a demo scene
+5. Compile check + manual verification
 
 ---
 
@@ -468,11 +535,12 @@ Required verification:
 - Authored shell `L0/L1/L2` are auto-generated from branch foliage geometry
 - `trunkL3Mesh` is auto-generated and bounded
 - `impostorMesh` is auto-generated from the original assembled tree
+- The Phase C.5 runtime readiness gate is closed before runtime MVP implementation proceeds
 - Editor preview shows runtime `L0/L1/L2/L3/Impostor` correctly
 - Runtime tree classification selects `Expanded` or `Impostor` correctly
 - GPU emits branch tier and node survival records
-- Survivor decode reconstructs final visible draw-slot lists correctly, either on GPU or through the non-blocking CPU fallback
-- Indirect rendering draws trunk, branch wood, branch foliage, shell tiers, and far mesh correctly
+- GPU-primary survivor decode reconstructs final visible draw-slot lists correctly, with the non-blocking CPU fallback preserved only as a temporary backup path
+- Indirect rendering draws trunk, branch wood, branch foliage, shell tiers, and far mesh correctly, and `Impostor` mode draws `impostorMesh` only
 - Generated outputs remain persisted even when validation marks them invalid
 
 ---

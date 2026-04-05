@@ -2,37 +2,39 @@
 
 Purpose: track immediate tasks and current milestone status.
 
-## Current Milestone: Milestone 1 - MVP Assembled Vegetation
+## Current Milestone
 
-Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
+- Milestone: `Milestone 1 - MVP Assembled Vegetation`
+- Scope authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
+- Runtime/data authority: [UnityAssembledVegetation_FULL.md](../DetailedDocs/UnityAssembledVegetation_FULL.md)
+- Active phase: `Phase C.5 - Runtime MVP Preparation Gate`
+- Blocked phases: `Phase D` and `Phase E` remain blocked until every `C5-*` item is closed
 
-## Completed Summary
+## Status Snapshot
 
-- Phase A foundation is complete: the vegetation package folder structure, authoring ScriptableObjects, validation logic, demo source assets, `VegetationTreeAuthoring`, and authoring EditMode tests are in place. Authoring now keeps placements and bounds directly on the ScriptableObjects; only generated shell and impostor meshes are regenerated.
-- Phase B shell and impostor baking is complete: hierarchical branch-shell authoring, the `VoxelizerV2` CPU volume backend cutover, direct original-tree impostor extraction, generated mesh persistence into owner-local `GeneratedMeshes/`, and updated EditMode coverage all landed. Latest compile validations for this phase passed on `2026-04-01`.
-- Phase C editor tooling is implemented: preview and bake entry points were moved into the editor assembly, the custom inspector and dedicated window are wired, and preview-related EditMode coverage is in place. Compile passed on `2026-03-29`.
-- The authoring panel validation UI is now less noisy: warning/error counts are surfaced in the summary block, and the full validation issue list is collapsible in the shared inspector/window panel. Rider MSBuild compile passed on `2026-04-04`.
-- Phase C shell-boundary and compact-hierarchy follow-up is implemented: canonical `shellNodesL0` now drives ownership and split decisions, compact `shellNodesL1` / `shellNodesL2` are rebuilt from owned `L0` occupancy at their authored resolutions, generated shell/wood/impostor meshes are clipped back to authoritative source bounds, shell fallback stays mesh-only after voxel generation, and over-budget generation still logs `Debug.LogError` without aborting the bake.
-- Unity `MeshLodUtility` fallback root-cause handling is now in place: vegetation fallback and local demo scripts rebuild the LOD input mesh with explicit `SetTriangles` index buffers before calling `MeshLodUtility`, still skip unsupported meshes cleanly when needed, and log warnings instead of surfacing Unity errors. Rider MSBuild compile passed on `2026-04-04`.
-- Repo-local simplification inspection tooling is now in place: `Assets/Scripts/CheckVoxelMeshSimplification.cs` can compare an existing source mesh against raw voxel output, reduced voxel output, and Unity `MeshLodUtility` output from the same inspector-driven demo component. Full Unity compile passed on `2026-04-03`.
-- Public package preparation is complete: the vegetation feature now lives in `Packages/com.voxgeofol.vegetation`, distributable demo content ships from `Samples~/Vegetation Demo`, the repo-local mirror remains under `Assets/Tree`, and generated meshes stay in writable `Assets/` space.
-- Architecture authority was reconciled on `2026-04-05`: Milestone 1 now targets URP plus `Graphics.RenderMeshIndirect`, runtime `L0/L1/L2/L3 + Impostor`, hybrid `CPU/GPU` cell visibility and survivor decode with GPU preferred, non-blocking CPU fallback when used, and persisted-invalid generated meshes.
-- Authoring contract alignment landed on `2026-04-05`: `LODProfileSO` now uses authored distance bands, `TreeBlueprintSO` now exposes `trunkL3Mesh`, validator bounds checks now cover simplified wood/trunk/impostor meshes, and preview/summary naming now matches runtime `L0/L1/L2/L3/Impostor`.
+- `Phase A` is complete: package layout, authoring ScriptableObjects, validation, demo source assets, and authoring EditMode tests are in place.
+- `Phase B` core bake path is complete: hierarchical shell authoring, bounded generated outputs, impostor extraction, generated mesh persistence, and simplification/fallback handling are landed. `trunkL3Mesh` generation is still pending.
+- `Phase C` editor tooling is complete: editor-side bake entry points, inspector/window preview flow, preview naming alignment, and validation UI cleanup are landed.
+- Contract/doc sync was completed on `2026-04-05`: `UnityAssembledVegetation_FULL.md` is the single runtime/data authority, `Milestone1.md` owns scope/gates/done criteria, `Impostor` is one baked mesh only, and legacy `l3Distance` is dead data for Milestone 1.
 
-## Open Tasks
+## Active Gate
 
-### Phase B / C Alignment Follow-up
-- [ ] Add `trunkL3Mesh` generation and persistence so the authored outputs fully match the current runtime contract.
+### Phase C.5 - Runtime MVP Preparation Gate
 
-### Phase C Follow-up Verification and Tuning
-- [ ] Run manual in-Editor visual verification for runtime `L0`, `L1`, `L2`, `L3`, shell-only views, and `Impostor` on the real demo assets.
-- [ ] Compare baked `L1/L2` compact hierarchies against the `branch_leaves_quadcards` reference assets to judge silhouette retention and canopy mass.
-- [ ] Tune `ShellBakeSettings` and `ImpostorBakeSettings` on the sample assets until validation budgets pass without depending on last-resort `MeshLodUtility` fallback.
-- [ ] Decide whether the compact-tier merge/prune heuristic needs tighter equivalence checks after manual review identifies weak merges.
-- [ ] Rerun the Unity EditMode vegetation suite once the Unity Editor can be closed for the long runner path.
+- [ ] `C5-01` Add `trunkL3Mesh` generation and persistence and expose it through the editor bake flow. Legacy `l3Distance` is ignored by Milestone 1 runtime logic and should be removed.
+- [ ] `C5-02` Re-bake `Packages/com.voxgeofol.vegetation/Samples~/Vegetation Demo/VoxFoliage/TreeBlueprint_branch_leaves_fullgeo.asset` and confirm assigned `trunkL3Mesh`.
+- [ ] `C5-03` Re-bake `Assets/Tree/VoxFoliage/TreeBlueprint_branch_leaves_fullgeo.asset` and confirm assigned `trunkL3Mesh`.
+- [ ] `C5-04` Run manual in-Editor visual verification on both exact tree-blueprint assets for `L0`, `L1`, `L2`, `L3`, shell-only `L1`, shell-only `L2`, shell-only `L3`, and `Impostor`.
+- [ ] `C5-05` Compare baked `L1/L2` compact hierarchies against `Assets/Tree/Raw/branch_leaves_quadcards.obj` as the current silhouette reference input.
+- [ ] `C5-06` Tune `ShellBakeSettings` and `ImpostorBakeSettings` on both exact tree-blueprint assets until validation passes without `MeshLodUtility` fallback.
+- [ ] `C5-07` Add validator/test coverage for BFS child ordering in ascending octant-bit order.
+- [ ] `C5-08` Rerun compile validation and the Unity EditMode vegetation suite once the Unity Editor can be closed for the long runner path.
 
-Current follow-up focus is verification plus runtime-alignment follow-up. The authoring implementation now exposes the runtime naming contract directly, uses authored distance bands, and validates strict authoritative bounds across shell, wood, simplified trunk, and impostor meshes; the remaining mismatch is `trunkL3Mesh` generation/persistence and the hybrid runtime path with GPU-preferred visibility/decode plus CPU fallback.
+## Current Blockers
 
+- `trunkL3Mesh` bake/persistence is not landed yet, so the shipped sample and repo-local mirror cannot satisfy the current runtime contract.
+- Exact-asset rebake and manual verification are still missing on the two authoritative demo tree-blueprint assets.
+- BFS child-order coverage and refreshed long-path validation evidence are still missing.
 
 
 ### Phase D: Spatial Grid + MVP Visibility/Decode Mirror
