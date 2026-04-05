@@ -1368,6 +1368,7 @@ MonoBehaviour:
   _meshFilter: {fileID: 1784349931}
   sourceMesh: {fileID: 4300000, guid: 0ec25c9c135386e47acb43bac3294763, type: 2}
   meshLodLimit: -1
+  minimizelods: 0
   Regenerate: 0
 --- !u!114 &1009394508
 MonoBehaviour:

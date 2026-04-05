@@ -43,33 +43,49 @@ public sealed class CanopyShellGenerationTests
     }
 
     [Test]
-    public void BakeCanopyShells_PersistedChildRangesStayValid()
+    public void BakeCanopyShells_PersistedHierarchiesStayValidAndCompact()
     {
         BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("TopologyFoliage"));
 
         CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
         TrackGeneratedShells(prototype);
 
-        for (int i = 0; i < prototype.ShellNodes.Length; i++)
-        {
-            BranchShellNode node = prototype.ShellNodes[i];
-            if (node.ChildMask == 0)
-            {
-                Assert.Less(node.FirstChildIndex, 0);
-                continue;
-            }
+        Assert.Greater(prototype.ShellNodesL0.Length, 0);
+        Assert.Greater(prototype.ShellNodesL1.Length, 0);
+        Assert.Greater(prototype.ShellNodesL2.Length, 0);
+        Assert.LessOrEqual(prototype.ShellNodesL1.Length, prototype.ShellNodesL0.Length);
+        Assert.LessOrEqual(prototype.ShellNodesL2.Length, prototype.ShellNodesL1.Length);
 
-            int childCount = CountBits(node.ChildMask);
-            Assert.GreaterOrEqual(node.FirstChildIndex, 0);
-            Assert.Less(node.FirstChildIndex + childCount - 1, prototype.ShellNodes.Length);
+        AssertHierarchyValid(prototype.ShellNodesL0, 0);
+        AssertHierarchyValid(prototype.ShellNodesL1, 1);
+        AssertHierarchyValid(prototype.ShellNodesL2, 2);
+    }
 
-            for (int childOffset = 0; childOffset < childCount; childOffset++)
-            {
-                BranchShellNode child = prototype.ShellNodes[node.FirstChildIndex + childOffset];
-                Assert.AreEqual(node.Depth + 1, child.Depth);
-                Assert.IsTrue(ContainsBounds(node.LocalBounds, child.LocalBounds));
-            }
-        }
+    [Test]
+    public void BakeCanopyShells_TierMeshesDifferAndStayWithinSourceBounds()
+    {
+        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("DifferentTierFoliage"));
+
+        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
+        TrackGeneratedShells(prototype);
+
+        Assert.AreNotEqual(0, prototype.ShellNodesL0.Length);
+        Assert.AreNotEqual(0, prototype.ShellNodesL1.Length);
+        Assert.AreNotEqual(0, prototype.ShellNodesL2.Length);
+
+        int l0Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL0, 0);
+        int l1Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL1, 1);
+        int l2Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL2, 2);
+        Assert.Greater(l0Triangles, l1Triangles);
+        Assert.Greater(l1Triangles, l2Triangles);
+
+        Bounds foliageBounds = prototype.FoliageMesh!.bounds;
+        Bounds woodBounds = prototype.WoodMesh!.bounds;
+        AssertHierarchyBoundsInside(prototype.ShellNodesL0, 0, foliageBounds);
+        AssertHierarchyBoundsInside(prototype.ShellNodesL1, 1, foliageBounds);
+        AssertHierarchyBoundsInside(prototype.ShellNodesL2, 2, foliageBounds);
+        Assert.IsTrue(ContainsBounds(woodBounds, prototype.ShellL1WoodMesh!.bounds));
+        Assert.IsTrue(ContainsBounds(woodBounds, prototype.ShellL2WoodMesh!.bounds));
     }
 
     [Test]
@@ -88,6 +104,50 @@ public sealed class CanopyShellGenerationTests
         Bounds impostorBounds = blueprint.ImpostorMesh!.bounds;
         Assert.Less(impostorBounds.min.x, -1.5f);
         Assert.Greater(impostorBounds.max.x, 1.5f);
+
+        Mesh combinedSource = CreateCombinedTreeSourceMesh(blueprint);
+        TrackObject(combinedSource);
+        Assert.IsTrue(ContainsBounds(combinedSource.bounds, impostorBounds));
+    }
+
+    private void AssertHierarchyValid(BranchShellNode[] nodes, int shellLevel)
+    {
+        for (int i = 0; i < nodes.Length; i++)
+        {
+            BranchShellNode node = nodes[i];
+            if (node.ChildMask == 0)
+            {
+                Assert.Less(node.FirstChildIndex, 0);
+            }
+            else
+            {
+                int childCount = CountBits(node.ChildMask);
+                Assert.GreaterOrEqual(node.FirstChildIndex, 0);
+                Assert.Less(node.FirstChildIndex + childCount - 1, nodes.Length);
+
+                for (int childOffset = 0; childOffset < childCount; childOffset++)
+                {
+                    BranchShellNode child = nodes[node.FirstChildIndex + childOffset];
+                    Assert.AreEqual(node.Depth + 1, child.Depth);
+                    Assert.IsTrue(ContainsBounds(node.LocalBounds, child.LocalBounds));
+                }
+            }
+
+            Mesh? shellMesh = BranchShellNodeUtility.GetShellMesh(node, shellLevel);
+            Assert.NotNull(shellMesh);
+            Assert.IsTrue(ContainsBounds(node.LocalBounds, shellMesh!.bounds));
+        }
+    }
+
+    private void AssertHierarchyBoundsInside(BranchShellNode[] nodes, int shellLevel, Bounds expectedBounds)
+    {
+        for (int i = 0; i < nodes.Length; i++)
+        {
+            Mesh? shellMesh = BranchShellNodeUtility.GetShellMesh(nodes[i], shellLevel);
+            Assert.NotNull(shellMesh);
+            Assert.IsTrue(ContainsBounds(expectedBounds, shellMesh!.bounds));
+            Assert.IsTrue(ContainsBounds(expectedBounds, nodes[i].LocalBounds));
+        }
     }
 
     private BranchPrototypeSO CreatePrototypeForShellBake(Mesh foliageMesh)
@@ -154,11 +214,19 @@ public sealed class CanopyShellGenerationTests
 
     private void TrackGeneratedShells(BranchPrototypeSO prototype)
     {
-        for (int i = 0; i < prototype.ShellNodes.Length; i++)
+        for (int i = 0; i < prototype.ShellNodesL0.Length; i++)
         {
-            TrackObject(prototype.ShellNodes[i].ShellL0Mesh);
-            TrackObject(prototype.ShellNodes[i].ShellL1Mesh);
-            TrackObject(prototype.ShellNodes[i].ShellL2Mesh);
+            TrackObject(prototype.ShellNodesL0[i].ShellL0Mesh);
+        }
+
+        for (int i = 0; i < prototype.ShellNodesL1.Length; i++)
+        {
+            TrackObject(prototype.ShellNodesL1[i].ShellL1Mesh);
+        }
+
+        for (int i = 0; i < prototype.ShellNodesL2.Length; i++)
+        {
+            TrackObject(prototype.ShellNodesL2[i].ShellL2Mesh);
         }
 
         TrackObject(prototype.ShellL1WoodMesh);
@@ -302,6 +370,24 @@ public sealed class CanopyShellGenerationTests
         combinedMesh.RecalculateNormals();
         createdObjects.Add(combinedMesh);
         return combinedMesh;
+    }
+
+    private Mesh CreateCombinedTreeSourceMesh(TreeBlueprintSO blueprint)
+    {
+        List<CombineInstance> combineInstances = new List<CombineInstance>
+        {
+            CreateCombineInstance(blueprint.TrunkMesh!, Matrix4x4.identity)
+        };
+
+        for (int i = 0; i < blueprint.Branches.Length; i++)
+        {
+            BranchPlacement branch = blueprint.Branches[i];
+            Matrix4x4 branchMatrix = Matrix4x4.TRS(branch.LocalPosition, branch.LocalRotation, Vector3.one * branch.Scale);
+            combineInstances.Add(CreateCombineInstance(branch.Prototype!.WoodMesh!, branchMatrix));
+            combineInstances.Add(CreateCombineInstance(branch.Prototype!.FoliageMesh!, branchMatrix));
+        }
+
+        return CombineMeshes($"{blueprint.name}_CombinedSource", combineInstances.ToArray());
     }
 
     private CombineInstance CreateCombineInstance(Mesh mesh, Matrix4x4 matrix)

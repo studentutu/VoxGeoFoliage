@@ -17,7 +17,7 @@ namespace VoxelSystem
         /// </summary>
         public static Mesh BuildSurfaceMesh(CpuVoxelVolume volume, string meshName = "CpuVoxelSurface")
         {
-            return BuildSurfaceMesh(volume, null, meshName, CpuVoxelSurfaceBuildOptions.Reduced);
+            return BuildSurfaceMesh(volume, null, null, meshName, CpuVoxelSurfaceBuildOptions.Reduced);
         }
 
         /// <summary>
@@ -25,7 +25,19 @@ namespace VoxelSystem
         /// </summary>
         public static Mesh BuildSurfaceMesh(CpuVoxelVolume volume, Bounds? ownedBounds, string meshName = "CpuVoxelSurface")
         {
-            return BuildSurfaceMesh(volume, ownedBounds, meshName, CpuVoxelSurfaceBuildOptions.Reduced);
+            return BuildSurfaceMesh(volume, ownedBounds, ownedBounds, meshName, CpuVoxelSurfaceBuildOptions.Reduced);
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Converts the owned subset of a filled CPU voxel volume into a surface-only mesh and clips it to explicit bounds.
+        /// </summary>
+        public static Mesh BuildSurfaceMesh(
+            CpuVoxelVolume volume,
+            Bounds? ownedBounds,
+            Bounds? clipBounds,
+            string meshName = "CpuVoxelSurface")
+        {
+            return BuildSurfaceMesh(volume, ownedBounds, clipBounds, meshName, CpuVoxelSurfaceBuildOptions.Reduced);
         }
 
         /// <summary>
@@ -37,15 +49,34 @@ namespace VoxelSystem
             string meshName,
             CpuVoxelSurfaceBuildOptions options)
         {
-            // Range: volume must be non-null and already contain the final filled occupancy. Condition: only owned boundary voxels touching empty or out-of-range neighbors are emitted. Output: one mesh covering the exposed voxel surface for the requested ownership region.
+            return BuildSurfaceMesh(volume, ownedBounds, ownedBounds, meshName, options);
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Converts the owned subset of a filled CPU voxel volume into a surface-only mesh.
+        /// </summary>
+        public static Mesh BuildSurfaceMesh(
+            CpuVoxelVolume volume,
+            Bounds? ownedBounds,
+            Bounds? clipBounds,
+            string meshName,
+            CpuVoxelSurfaceBuildOptions options)
+        {
+            // Range: volume must be non-null and already contain the final filled occupancy. Condition: only owned boundary voxels touching empty or out-of-range neighbors are emitted, and optional clipBounds trims the emitted geometry back to the authoritative source bounds. Output: one mesh covering the exposed voxel surface for the requested ownership region.
             if (volume == null)
             {
                 throw new ArgumentNullException(nameof(volume));
             }
 
-            return options.ReduceCoplanarFaces
+            Mesh mesh = options.ReduceCoplanarFaces
                 ? BuildReducedSurfaceMesh(volume, ownedBounds, meshName)
                 : BuildRawSurfaceMesh(volume, ownedBounds, meshName);
+            if (clipBounds.HasValue)
+            {
+                ClipMeshToBounds(mesh, clipBounds.Value);
+            }
+
+            return mesh;
         }
 
         private static Mesh BuildRawSurfaceMesh(CpuVoxelVolume volume, Bounds? ownedBounds, string meshName)
@@ -543,6 +574,58 @@ namespace VoxelSystem
             indices.Add(count + 3);
             indices.Add(count + 4);
             indices.Add(count + 5);
+        }
+
+        private static void ClipMeshToBounds(Mesh mesh, Bounds clipBounds)
+        {
+            Vector3[] vertices = mesh.vertices;
+            int[] triangles = mesh.triangles;
+            if (vertices.Length == 0 || triangles.Length == 0)
+            {
+                mesh.bounds = new Bounds(clipBounds.center, Vector3.zero);
+                return;
+            }
+
+            Vector3 min = clipBounds.min;
+            Vector3 max = clipBounds.max;
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                Vector3 vertex = vertices[i];
+                vertex.x = Mathf.Clamp(vertex.x, min.x, max.x);
+                vertex.y = Mathf.Clamp(vertex.y, min.y, max.y);
+                vertex.z = Mathf.Clamp(vertex.z, min.z, max.z);
+                vertices[i] = vertex;
+            }
+
+            List<int> clippedTriangles = new List<int>(triangles.Length);
+            for (int i = 0; i < triangles.Length; i += 3)
+            {
+                Vector3 a = vertices[triangles[i]];
+                Vector3 b = vertices[triangles[i + 1]];
+                Vector3 c = vertices[triangles[i + 2]];
+                if ((b - a).sqrMagnitude <= Mathf.Epsilon ||
+                    (c - a).sqrMagnitude <= Mathf.Epsilon ||
+                    Vector3.Cross(b - a, c - a).sqrMagnitude <= Mathf.Epsilon)
+                {
+                    continue;
+                }
+
+                clippedTriangles.Add(triangles[i]);
+                clippedTriangles.Add(triangles[i + 1]);
+                clippedTriangles.Add(triangles[i + 2]);
+            }
+
+            mesh.vertices = vertices;
+            mesh.triangles = clippedTriangles.ToArray();
+            mesh.RecalculateBounds();
+            if (clippedTriangles.Count > 0)
+            {
+                mesh.RecalculateNormals();
+            }
+            else
+            {
+                mesh.bounds = new Bounds(clipBounds.center, Vector3.zero);
+            }
         }
     }
 }

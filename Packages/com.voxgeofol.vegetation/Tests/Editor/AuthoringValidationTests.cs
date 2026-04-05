@@ -96,13 +96,11 @@ public sealed class AuthoringValidationTests
     public void BranchPrototype_ShellHierarchyTriangleOrder_FailsValidation()
     {
         BranchPrototypeSO prototype = CreateValidBranchPrototype(includeShells: true);
-        SetPrivateField(
+        SetShellHierarchies(
             prototype,
-            "shellNodes",
-            new[]
-            {
-                CreateShellNode(0, -1, 0, 3, 5, 2, new Bounds(Vector3.zero, Vector3.one))
-            });
+            new[] { CreateShellNodeForLevel(0, -1, 0, 3, new Bounds(Vector3.zero, Vector3.one), 0) },
+            new[] { CreateShellNodeForLevel(0, -1, 0, 5, new Bounds(Vector3.zero, Vector3.one), 1) },
+            new[] { CreateShellNodeForLevel(0, -1, 0, 2, new Bounds(Vector3.zero, Vector3.one), 2) });
 
         VegetationValidationResult result = prototype.Validate();
 
@@ -113,14 +111,17 @@ public sealed class AuthoringValidationTests
     public void BranchPrototype_ShellHierarchyTopology_FailsValidation()
     {
         BranchPrototypeSO prototype = CreateValidBranchPrototype(includeShells: true);
-        SetPrivateField(
+        BranchShellNode invalidRootL0 = CreateShellNodeForLevel(0, 0, 1, 7, new Bounds(Vector3.zero, Vector3.one), 0);
+        BranchShellNode invalidChildL0 = CreateShellNodeForLevel(2, -1, 0, 4, new Bounds(Vector3.zero, Vector3.one * 0.5f), 0);
+        BranchShellNode invalidRootL1 = CreateShellNodeForLevel(0, 0, 1, 5, new Bounds(Vector3.zero, Vector3.one), 1);
+        BranchShellNode invalidChildL1 = CreateShellNodeForLevel(2, -1, 0, 3, new Bounds(Vector3.zero, Vector3.one * 0.5f), 1);
+        BranchShellNode invalidRootL2 = CreateShellNodeForLevel(0, 0, 1, 3, new Bounds(Vector3.zero, Vector3.one), 2);
+        BranchShellNode invalidChildL2 = CreateShellNodeForLevel(2, -1, 0, 2, new Bounds(Vector3.zero, Vector3.one * 0.5f), 2);
+        SetShellHierarchies(
             prototype,
-            "shellNodes",
-            new[]
-            {
-                CreateShellNode(0, 0, 1, 7, 5, 3, new Bounds(Vector3.zero, Vector3.one)),
-                CreateShellNode(2, -1, 0, 4, 3, 2, new Bounds(Vector3.zero, Vector3.one * 0.5f))
-            });
+            new[] { invalidRootL0, invalidChildL0 },
+            new[] { invalidRootL1, invalidChildL1 },
+            new[] { invalidRootL2, invalidChildL2 });
 
         VegetationValidationResult result = prototype.Validate();
 
@@ -249,13 +250,11 @@ public sealed class AuthoringValidationTests
 
         if (includeShells)
         {
-            SetPrivateField(
+            SetShellHierarchies(
                 prototype,
-                "shellNodes",
-                new[]
-                {
-                    CreateShellNode(0, -1, 0, 7, 5, 3, new Bounds(Vector3.zero, Vector3.one))
-                });
+                new[] { CreateShellNodeForLevel(0, -1, 0, 7, new Bounds(Vector3.zero, Vector3.one), 0) },
+                new[] { CreateShellNodeForLevel(0, -1, 0, 5, new Bounds(Vector3.zero, Vector3.one), 1) },
+                new[] { CreateShellNodeForLevel(0, -1, 0, 3, new Bounds(Vector3.zero, Vector3.one), 2) });
             SetPrivateField(prototype, "shellL1WoodMesh", CreateMesh("ShellL1Wood", 2, new Bounds(Vector3.zero, Vector3.one * 0.5f)));
             SetPrivateField(prototype, "shellL2WoodMesh", CreateMesh("ShellL2Wood", 1, new Bounds(Vector3.zero, Vector3.one * 0.3f)));
             SetPrivateField(prototype, "shellMaterial", CreateOpaqueMaterial("ShellMaterial"));
@@ -307,16 +306,45 @@ public sealed class AuthoringValidationTests
         return lodProfile;
     }
 
-    private BranchShellNode CreateShellNode(int depth, int firstChildIndex, byte childMask, int l0Triangles, int l1Triangles, int l2Triangles, Bounds bounds)
+    private BranchShellNode CreateShellNodeForLevel(int depth, int firstChildIndex, byte childMask, int triangleCount, Bounds bounds, int shellLevel)
     {
+        Mesh? shellL0Mesh = null;
+        Mesh? shellL1Mesh = null;
+        Mesh? shellL2Mesh = null;
+        switch (shellLevel)
+        {
+            case 0:
+                shellL0Mesh = CreateMesh($"ShellL0_{depth}", triangleCount, bounds);
+                break;
+            case 1:
+                shellL1Mesh = CreateMesh($"ShellL1_{depth}", triangleCount, bounds);
+                break;
+            case 2:
+                shellL2Mesh = CreateMesh($"ShellL2_{depth}", triangleCount, bounds);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(shellLevel), shellLevel, "Shell level must be 0, 1, or 2.");
+        }
+
         return new BranchShellNode(
             bounds,
             depth,
             firstChildIndex,
             childMask,
-            CreateMesh($"ShellL0_{depth}", l0Triangles, bounds),
-            CreateMesh($"ShellL1_{depth}", l1Triangles, bounds),
-            CreateMesh($"ShellL2_{depth}", l2Triangles, bounds));
+            shellL0Mesh,
+            shellL1Mesh,
+            shellL2Mesh);
+    }
+
+    private static void SetShellHierarchies(
+        BranchPrototypeSO prototype,
+        BranchShellNode[] shellNodesL0,
+        BranchShellNode[] shellNodesL1,
+        BranchShellNode[] shellNodesL2)
+    {
+        SetPrivateField(prototype, "shellNodesL0", shellNodesL0);
+        SetPrivateField(prototype, "shellNodesL1", shellNodesL1);
+        SetPrivateField(prototype, "shellNodesL2", shellNodesL2);
     }
 
     private T CreateScriptableObject<T>() where T : ScriptableObject

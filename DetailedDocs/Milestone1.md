@@ -67,10 +67,14 @@ This system does not use Unity's built-in `LODGroup`. LOD selection is fully own
 - Mesh foliageMesh          // leaf / needle geometry used in R0 and shell baking
 - Material foliageMaterial  // opaque foliage source material
 - Color leafColorTint       // prototype-authored canopy tint packed into RSUV
-- BranchShellNode[] shellNodes // generated adaptive shell hierarchy; each node stores shell L0/L1/L2
+- string generatedCanopyShellsRelativeFolder // optional explicit project-relative folder for persisted shell meshes
+- BranchShellNode[] shellNodesL0 // generated canonical ownership hierarchy for shell L0
+- BranchShellNode[] shellNodesL1 // generated compact hierarchy for shell L1
+- BranchShellNode[] shellNodesL2 // generated compact hierarchy for shell L2
 - Mesh shellL1WoodMesh      // generated simplified branch wood for shell L1
 - Mesh shellL2WoodMesh      // generated simplified branch wood for shell L2
 - Material shellMaterial    // opaque shell material
+- ShellBakeSettings shellBakeSettings // authored shell bake/resolution controls
 - Bounds localBounds        // local-space AABB containing woodMesh + foliageMesh
 - int triangleBudgetWood
 - int triangleBudgetFoliage
@@ -97,6 +101,7 @@ This system does not use Unity's built-in `LODGroup`. LOD selection is fully own
 - Mesh impostorMesh         // generated far-LOD opaque mesh
 - Material impostorMaterial // billboard-like opaque material
 - LODProfileSO lodProfile
+- ImpostorBakeSettings impostorBakeSettings
 - Bounds treeBounds         // local-space AABB for the assembled tree
 ```
 
@@ -128,10 +133,11 @@ No runtime data is stored on the MonoBehaviour. `leafColorTint` lives on `Branch
 - All materials must be opaque. No alpha clip. No transparency.
 - `woodMesh` triangle count must be within `triangleBudgetWood`.
 - `foliageMesh` triangle count must be within `triangleBudgetFoliage`.
-- Shell node meshes must monotonically reduce per node: `L0 >= L1 >= L2`.
 - Leaf-frontier shell totals must strictly reduce: `L0 > L1 > L2`.
 - `localBounds` must fully contain `woodMesh + foliageMesh`.
+- Each persisted shell node `localBounds` must fully contain its stored shell mesh bounds.
 - `treeBounds` must fully contain trunk + all placed branches.
+- `shellL1WoodMesh`, `shellL2WoodMesh`, and `impostorMesh` must stay inside their authoritative source bounds.
 - Branch scale must be exactly in steps of `0.25`.
 - LOD thresholds must be monotonically decreasing: `r0 > r1 > shellL0 > shellL1 > shellL2 > absoluteCull`.
 - Impostor mesh should stay under `160-200` triangles.
@@ -152,7 +158,7 @@ No runtime data is stored on the MonoBehaviour. `leafColorTint` lives on `Branch
 
 ### 2.1 `VegetationEditorPreview` Editor Utility
 
-Driven from the custom inspector and the dedicated editor window. The utility stores the last selected preview tier in editor session state and rebuilds the preview directly from `TreeBlueprintSO` plus the referenced branch prototypes. Each branch preview starts from `BranchPrototypeSO.shellNodes[0]` and traverses the canopy hierarchy so parent bounds can reject descendants before they are reconstructed.
+Driven from the custom inspector and the dedicated editor window. The utility stores the last selected preview tier in editor session state and rebuilds the preview directly from `TreeBlueprintSO` plus the referenced branch prototypes. Each branch preview picks the persisted tier-specific hierarchy (`shellNodesL0`, `shellNodesL1`, or `shellNodesL2`) that matches the selected view.
 
 **Behavior**
 - Spawns transient child GameObjects under the configured tree branch root for the selected representation tier.
@@ -200,8 +206,8 @@ Driven from the custom inspector and the dedicated editor window. The utility st
 
 - Implemented `ShellBakeSettings` and `ImpostorBakeSettings` under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
 - Implemented `BranchShellNode`, `BranchShellNodeUtility`, `GeneratedMeshAssetUtility`, `CanopyShellGenerator`, `ImpostorMeshGenerator`, and the shared `Runtime/MeshVoxelizerV1/` hierarchy builder under the package runtime/editor folders.
-- Replaced the MVP single-branch shell chain with hierarchical `BranchPrototypeSO.shellNodes`.
-- `CanopyShellGenerator` now bakes `L0/L1/L2` shell meshes on every occupied shell node via `MeshVoxelizerHierarchyBuilder`, which now uses the `VoxelizerV2` CPU volume backend internally, and still bakes branch-level `shellL1WoodMesh` and `shellL2WoodMesh`.
+- Replaced the MVP single-branch shell chain with hierarchical shell arrays on `BranchPrototypeSO`: canonical `shellNodesL0` plus compact `shellNodesL1` and `shellNodesL2`.
+- `CanopyShellGenerator` now bakes a canonical `L0` hierarchy via `MeshVoxelizerHierarchyBuilder`, derives compact `L1/L2` hierarchies from owned `L0` occupancy, and still bakes branch-level `shellL1WoodMesh` and `shellL2WoodMesh`.
 - `ImpostorMeshGenerator` now merges `trunkMesh` plus transformed source branch `woodMesh` and `foliageMesh` instances in tree local space, voxelizes that aggregate at coarse size `4` through the `VoxelizerV2` CPU volume + surface path, and writes `impostorMesh` onto `TreeBlueprintSO`.
 - Generated shell and impostor meshes are persisted as explicit `.mesh` assets under owner-local `GeneratedMeshes/` folders in `Assets/` so they survive editor restarts and stay compatible with public package installs.
 - Rewrote EditMode coverage in `Packages/com.voxgeofol.vegetation/Tests/Editor/CanopyShellGenerationTests.cs`, `AuthoringValidationTests.cs`, and `VegetationEditorAuthoringTests.cs` for the hierarchy model, then trimmed the directly affected bake tests to keep the suite smaller.
@@ -215,9 +221,9 @@ Driven from the custom inspector and the dedicated editor window. The utility st
 ### 3.1 Pipeline Overview
 
 Input: `BranchPrototypeSO.foliageMesh`  
-Output: `shellNodes`, `shellL1WoodMesh`, `shellL2WoodMesh`
+Output: `shellNodesL0`, `shellNodesL1`, `shellNodesL2`, `shellL1WoodMesh`, `shellL2WoodMesh`
 
-`woodMesh` is explicitly excluded from canopy voxelization. `L0` preview reconstruction reuses the source `woodMesh`, while `L1/L2` bake simplified branch wood attachments alongside the hierarchical canopy shells. `shellNodes` are the authoritative branch reconstruction data: preview and runtime full-tree assembly both start from the branch hierarchy root and only derive the active per-level frontier after parent-node culling.
+`woodMesh` is explicitly excluded from canopy voxelization. `L0` preview reconstruction reuses the source `woodMesh`, while `L1/L2` bake simplified branch wood attachments alongside compact tier-specific canopy hierarchies. `shellNodesL0` is the canonical ownership hierarchy. `shellNodesL1` and `shellNodesL2` are derived compact hierarchies built from owned `L0` occupancy for their respective tier resolutions.
 Generated outputs are saved as standalone `.mesh` assets beside the owning authoring asset under `GeneratedMeshes/` when that asset lives in `Assets/`. Package-root assets fall back to `Assets/VoxGeoFol.Generated/Vegetation/Meshes/`. `BranchPrototypeSO.generatedCanopyShellsRelativeFolder` and `TreeBlueprintSO.generatedImpostorMeshesRelativeFolder` can override those default locations with explicit project-relative folders.
 
 ### 3.2 Algorithm: CPU Voxel-Based Hierarchical Shell Extraction
@@ -225,28 +231,29 @@ Generated outputs are saved as standalone `.mesh` assets beside the owning autho
 ```
 1. READ all vertices + triangles from `foliageMesh`
 2. COMPUTE the source local AABB from `foliageMesh.bounds`
-3. BUILD three CPU voxel occupancy levels for the same source mesh:
-   - `L0 = 80`
-   - `L1 = 16`
-   - `L2 = 6`
-4. COUNT `L0` surface voxels inside the current node bounds
-5. SPLIT the node into octants only when:
+3. BUILD one canonical high-detail CPU voxel occupancy level from `L0`
+4. COUNT `L0` surface voxels inside the current node ownership bounds
+5. SPLIT the canonical `L0` node into octants only when:
    - `depth < maxOctreeDepth`
    - `surfaceVoxelCount >= minimumSurfaceVoxelCountToSplit`
    - at least two child octants contain owned `L0` surface voxels
-6. For each occupied node:
-   - emit `shellL0Mesh`, `shellL1Mesh`, and `shellL2Mesh` from the owned occupied voxels at that level
+6. For each canonical `L0` node:
+   - emit `shellL0Mesh` from the owned occupied voxels at that level
+   - persist node bounds from the emitted bounded mesh, not from voxel-center ownership tests
    - when enabled by settings, merge adjacent coplanar voxel faces and remove redundant triangles without changing voxel silhouette or bounds
-   - persist those meshes into owner-local `GeneratedMeshes/`
-7. BUILD voxelized branch wood attachments for `shellL1WoodMesh` and `shellL2WoodMesh`, then run the same optional reduction/fallback path before persisting them
+7. DERIVE compact `L1` and `L2` hierarchies from owned `L0` occupancy:
+   - re-voxelize each candidate subtree into a fresh node-local coarse volume at `voxelResolutionL1` or `voxelResolutionL2`
+   - prune deeper `L0` descendants when the compact parent mesh is cheaper than the descendant frontier and stays inside canonical `L0` render bounds
+8. BUILD voxelized branch wood attachments for `shellL1WoodMesh` and `shellL2WoodMesh`, then run the same optional reduction/fallback path before persisting them
 ```
 
 ### 3.3 Shell Quality Constraints
 
 - L0 preserves major canopy lobes and silhouette detail across the branch bounds.
-- L1 and L2 reduce triangle counts monotonically on the active frontier selected after hierarchy traversal.
+- L1 and L2 reduce triangle counts via separately persisted compact hierarchies derived from canonical `L0` occupancy.
 - Shell nodes must remain spatially valid: children stay inside the parent bounds and child ranges stay contiguous in the persisted node array.
 - All shells must have stable outward normals and no degenerate triangles.
+- All generated shell, branch-wood, and impostor meshes must stay inside their authoritative source occupancy bounds; persisted bounds come from emitted mesh bounds, not voxel-center tests alone.
 
 ### 3.4 Impostor Generation
 
@@ -256,18 +263,19 @@ Output: `TreeBlueprintSO.impostorMesh` in tree local space
 ```
 1. Assemble a temporary tree-space mesh from `trunkMesh` + all placed branch `woodMesh` + branch `foliageMesh`
 2. Run one coarse direct CPU voxel surface extraction at size `4`
-3. Do not require any baked canopy shells for this step
-4. Persist that generated surface mesh as the impostor mesh
+3. Apply the same optional reduction/fallback path used by generated shell and wood output
+4. Clip the final mesh back to authoritative combined tree bounds
+5. Persist that generated surface mesh as the impostor mesh without requiring baked canopy shells
 ```
 
 ### 3.5 Hierarchy Status
 
-Hierarchical sub-branch canopy shells are now implemented in the editor authoring path. `BranchPrototypeSO.shellNodes` is the authoritative canopy shell representation for preview, validation, triangle accounting, and branch reconstruction inside a full assembled tree. Impostor baking now bypasses shell data and voxelizes the original assembled tree meshes directly.
+Hierarchical sub-branch canopy shells are now implemented in the editor authoring path. `BranchPrototypeSO.shellNodesL0` is the canonical canopy ownership hierarchy, while `shellNodesL1` and `shellNodesL2` are separately persisted compact hierarchies for preview, validation, triangle accounting, and later runtime branch reconstruction. Impostor baking bypasses shell data and voxelizes the original assembled tree meshes directly.
 
 Full-assembly rule:
-- A full tree always keeps the full branch shell hierarchy for every placed branch. Assembly is already in the memory, contains branch with hierarchy, once for all trees.
-- Branch reconstruction and runtime classification start at each branch root and traverse down only when parent bounds survive culling.
-- The visible `L0/L1/L2` node frontier is therefore a per-frame derived result of hierarchy traversal, not a separate stored representation!
+- A full tree always keeps all three persisted branch shell hierarchies for every placed branch.
+- Branch reconstruction and runtime classification choose the tier-specific hierarchy that matches the selected representation, then traverse from the branch root downward only when parent bounds survive culling.
+- The visible node frontier is a per-frame derived result inside `shellNodesL0`, `shellNodesL1`, or `shellNodesL2`; the hierarchies themselves are separately stored authoring data.
 
 Follow-up note (`2026-03-30` / `2026-03-31`):
 - The production editor baker now uses `Runtime/MeshVoxelizerV1/MeshVoxelizerHierarchyBuilder` as the compatibility hierarchy API, but its occupancy generation is now backed by `Runtime/VoxelizerV2` CPU volumes; impostor baking also uses the `Runtime/VoxelizerV2` CPU volume + surface path.
@@ -279,13 +287,18 @@ Follow-up note (`2026-04-03`):
 - `ImpostorBakeSettings.skipReduction` and `ImpostorBakeSettings.skipSimplifyFallback` were added for the same reason on the impostor path.
 - Over-budget bake results are now persisted anyway and reported through direct `Debug.LogError` calls instead of throwing and aborting the rest of the bake.
 
+Follow-up note (`2026-04-04`):
+- Shared-volume `L1/L2` generation was removed because it produced identical geometry to `L0`.
+- `MeshVoxelizerHierarchyBuilder` now emits canonical `L0` nodes first, then derives compact `L1/L2` hierarchies from owned `L0` occupancy at their authored resolutions.
+- `CpuVoxelSurfaceMeshBuilder` now clips generated voxel surfaces to authoritative bounds so shells, generated wood, and impostors do not overflow their source occupancy.
+
 ### 3.6 API
 
 ```csharp
 /// Bakes canopy shells for a single branch prototype.
 /// [INTEGRATION] Called from editor tooling.
 /// Range: foliageMesh must be readable and non-null.
-/// Output: populates shellNodes plus branch-level shellL1WoodMesh/shellL2WoodMesh.
+/// Output: populates shellNodesL0/shellNodesL1/shellNodesL2 plus branch-level shellL1WoodMesh/shellL2WoodMesh.
 static void BakeCanopyShells(BranchPrototypeSO prototype, ShellBakeSettings settings)
 
 /// Bakes the far-LOD impostor mesh for a full tree blueprint.
@@ -301,11 +314,11 @@ static void BakeImpostorMesh(TreeBlueprintSO blueprint, ImpostorBakeSettings set
 ShellBakeSettings:
   - int maxOctreeDepth = 4
   - int voxelResolutionL0 = 80
-  - int voxelResolutionL1 = 16
-  - int voxelResolutionL2 = 6
+  - int voxelResolutionL1 = 30
+  - int voxelResolutionL2 = 20
   - int woodVoxelResolutionL1 = 50
   - int woodVoxelResolutionL2 = 20
-  - int minimumSurfaceVoxelCountToSplit = 4
+  - int minimumSurfaceVoxelCountToSplit = 8
   - bool skipReduction = false
   - bool skipL0Reduction = false
   - bool skipSimplifyFallback = false
@@ -326,9 +339,9 @@ Responsibilities
 - Create and own `BatchRendererGroup`.
 - Register mesh/material pairs for every draw slot:
   - trunk draw slot per tree blueprint
-  - branch wood draw slot per branch prototype
+  - branch wood draw slots per branch prototype for source wood, `shellL1WoodMesh`, and `shellL2WoodMesh`
   - branch foliage draw slot per branch prototype
-  - shell L0/L1/L2 draw slots per shell node mesh in the full branch hierarchy
+  - shell L0/L1/L2 draw slots per node mesh in the tier-specific shell hierarchies
   - impostor draw slot per tree blueprint
 - Own the draw-slot registry used by GPU classification.
 - Feed visible instance data from GPU classification results.
@@ -339,11 +352,13 @@ Responsibilities
 | Group | Mesh Source | Shader | Instance Data |
 |-------|-------------|--------|---------------|
 | Trunk | `TreeBlueprintSO.trunkMesh` | `VegetationTrunkLit` | transform only |
-| BranchWood | `BranchPrototypeSO.woodMesh` | `VegetationTrunkLit` | transform only |
+| BranchWoodL0 | `BranchPrototypeSO.woodMesh` | `VegetationTrunkLit` | transform only |
+| BranchWoodL1 | `BranchPrototypeSO.shellL1WoodMesh` | `VegetationTrunkLit` | transform only |
+| BranchWoodL2 | `BranchPrototypeSO.shellL2WoodMesh` | `VegetationTrunkLit` | transform only |
 | BranchFoliage | `BranchPrototypeSO.foliageMesh` | `VegetationCanopyLit` | transform + packed leaf tint |
-| ShellL0 | `BranchShellNode.shellL0Mesh` (full hierarchy, emitted from the surviving frontier after node culling) | `VegetationCanopyLit` | transform + packed leaf tint |
-| ShellL1 | `BranchShellNode.shellL1Mesh` (full hierarchy, emitted from the surviving frontier after node culling) | `VegetationCanopyLit` | transform + packed leaf tint |
-| ShellL2 | `BranchShellNode.shellL2Mesh` (full hierarchy, emitted from the surviving frontier after node culling) | `VegetationCanopyLit` | transform + packed leaf tint |
+| ShellL0 | `BranchPrototypeSO.shellNodesL0[*].shellL0Mesh` (frontier emitted from the traversed canonical `L0` hierarchy) | `VegetationCanopyLit` | transform + packed leaf tint |
+| ShellL1 | `BranchPrototypeSO.shellNodesL1[*].shellL1Mesh` (frontier emitted from the traversed compact `L1` hierarchy) | `VegetationCanopyLit` | transform + packed leaf tint |
+| ShellL2 | `BranchPrototypeSO.shellNodesL2[*].shellL2Mesh` (frontier emitted from the traversed compact `L2` hierarchy) | `VegetationCanopyLit` | transform + packed leaf tint |
 | Impostor | `TreeBlueprintSO.impostorMesh` | `VegetationImpostorLit` | transform only |
 
 ### 4.3 Shaders
@@ -402,7 +417,9 @@ Input buffers:
   - _TreeBlueprints      (StructuredBuffer<TreeBlueprintGPU>)
   - _BranchPlacements    (StructuredBuffer<BranchPlacementGPU>)
   - _BranchPrototypes    (StructuredBuffer<BranchPrototypeGPU>)
-  - _BranchShellNodes    (StructuredBuffer<BranchShellNodeGPU>)
+  - _BranchShellNodesL0  (StructuredBuffer<BranchShellNodeGPU>)
+  - _BranchShellNodesL1  (StructuredBuffer<BranchShellNodeGPU>)
+  - _BranchShellNodesL2  (StructuredBuffer<BranchShellNodeGPU>)
   - _LODProfiles         (StructuredBuffer<LODProfileGPU>)
   - _CellVisibility      (StructuredBuffer<uint>)
 
@@ -422,12 +439,13 @@ Output buffers:
 5. ABSOLUTE CULL
 6. BACKSIDE PENALTY
 7. LOD SELECTION (R0 / R1 / R2 / R3)
-8. EMIT tree-level VisibleVegetationRecord
-9. INCREMENT DRAW ARGS
-   - R0: trunk + each branch placement's wood + foliage + shellL0 node slots selected from the traversed branch hierarchy
-   - R1: trunk + each branch placement's shellL1 node slots selected from the traversed branch hierarchy
-   - R2: trunk + each branch placement's shellL2 node slots selected from the traversed branch hierarchy
-   - R3: impostor slot only
+8. SELECT the tier-specific shell hierarchy range/buffer for the chosen representation (`shellNodesL0`, `shellNodesL1`, or `shellNodesL2`)
+9. EMIT tree-level VisibleVegetationRecord
+10. INCREMENT DRAW ARGS
+    - R0: trunk + each branch placement's source wood + foliage + shell node slots selected from traversed `shellNodesL0`
+    - R1: trunk + each branch placement's `shellL1WoodMesh` + shell node slots selected from traversed `shellNodesL1`
+    - R2: trunk + each branch placement's `shellL2WoodMesh` + shell node slots selected from traversed `shellNodesL2`
+    - R3: impostor slot only
 ```
 
 ### 5.3 Runtime Data Structs
@@ -461,10 +479,16 @@ struct BranchPlacementGPU
 
 struct BranchPrototypeGPU
 {
-    uint woodDrawSlot;
+    uint woodDrawSlotL0;
+    uint woodDrawSlotL1;
+    uint woodDrawSlotL2;
     uint foliageDrawSlot;
-    uint shellNodeStartIndex;
-    uint shellNodeCount;
+    uint shellNodeStartIndexL0;
+    uint shellNodeCountL0;
+    uint shellNodeStartIndexL1;
+    uint shellNodeCountL1;
+    uint shellNodeStartIndexL2;
+    uint shellNodeCountL2;
     uint packedLeafTint;
 };
 
@@ -474,9 +498,7 @@ struct BranchShellNodeGPU
     float3 localExtents;
     uint   firstChildIndex;
     uint   childMask;
-    uint   shellL0DrawSlot;
-    uint   shellL1DrawSlot;
-    uint   shellL2DrawSlot;
+    uint   shellDrawSlot;
 };
 
 struct LODProfileGPU
@@ -583,7 +605,7 @@ URP Frame:
 Scene Load / Gather:
   1. Collect all VegetationTreeAuthoring instances
   2. Build VegetationSpatialGrid
-  3. Build TreeInstanceGPU / TreeBlueprintGPU / BranchPlacementGPU / BranchPrototypeGPU / BranchShellNodeGPU buffers
+  3. Build TreeInstanceGPU / TreeBlueprintGPU / BranchPlacementGPU / BranchPrototypeGPU / tier-specific `BranchShellNodeGPU` buffers for `L0`, `L1`, and `L2`
   4. Upload LOD profiles and static draw-slot data
   5. Register meshes and materials with BRG
 
@@ -654,15 +676,18 @@ AuthoringValidationTests:
   - BranchPrototype_NullFoliageMesh_FailsValidation
   - BranchPrototype_SourceMeshesMustBeReadable
   - BranchPrototype_TransparentMaterial_FailsValidation
-  - BranchPrototype_TriangleBudget_FailsValidation
   - BranchPrototype_LocalBoundsContainWoodAndFoliage
-  - BranchPrototype_ShellTriangleOrder_L0GreaterThanL1GreaterThanL2
+  - BranchPrototype_ShellHierarchyTriangleOrder_FailsValidation
+  - BranchPrototype_ShellHierarchyTopology_FailsValidation
+  - BranchPrototype_WoodTriangleOrder_SourceAndL1MustNotIncreaseTowardL2
+  - BranchPrototype_ValidHierarchy_PassesValidation
   - TreeBlueprint_NullTrunk_FailsValidation
   - TreeBlueprint_EmptyBranches_FailsValidation
   - TreeBlueprint_LODThresholds_MonotonicallyDecreasing
   - TreeBlueprint_BoundsContainAllBranches
   - TreeBlueprint_ImpostorTriangleBudget_Under200
   - TreeBlueprint_ScaleConstraint_OnlyAllowedValues
+  - TreeBlueprint_ValidBlueprint_PassesValidation
 
 VegetationEditorAuthoringTests:
   - ShowPreview_R0Full_RebuildsTransientHierarchyFromBlueprint
@@ -670,6 +695,7 @@ VegetationEditorAuthoringTests:
   - ShowPreview_ShellL1Only_RebuildsBranchHierarchyFromShellNodes
   - ShowPreview_R3Impostor_CreatesSingleImpostorObject
   - BakeImpostor_FromEditorUtility_UsesOriginalTreeMeshesWithoutBakingShells
+  - BakeImpostor_FromEditorUtility_StoresMeshInBlueprintSpecifiedFolder
 ```
 
 ### 10.2 Canopy Shell Generation Tests (`Packages/com.voxgeofol.vegetation/Tests/Editor/`)
@@ -677,8 +703,8 @@ VegetationEditorAuthoringTests:
 ```
 CanopyShellGenerationTests:
   - BuildHierarchy_SeparatedClusters_CreateHierarchyNodes
-  - BakeCanopyShells_SeparatedClusters_CreateHierarchyNodes
-  - BakeCanopyShells_PersistedChildRangesStayValid
+  - BakeCanopyShells_PersistedHierarchiesStayValidAndCompact
+  - BakeCanopyShells_TierMeshesDifferAndStayWithinSourceBounds
   - ImpostorGenerate_FromOriginalTreeMeshes_CreatesReadableCoarseMesh
 ```
 
@@ -724,12 +750,17 @@ Packages/com.voxgeofol.vegetation/
 |   |   |-- BranchPlacement.cs
 |   |   |-- ImpostorBakeSettings.cs
 |   |   |-- ShellBakeSettings.cs
-|   |   `-- VegetationAuthoringValidator.cs
+|   |   |-- VegetationAuthoringValidator.cs
+|   |   `-- Hierarchy/
+|   |       |-- MeshVoxelizerHierarchyBuilder.cs
+|   |       `-- MeshVoxelizerHierarchyDemo.cs
 |   |-- MeshVoxelizerV1/
-|   |   |-- Box3.cs
-|   |   |-- MeshRayTracer.cs
-|   |   |-- MeshVoxelizer.cs
-|   |   `-- VoxelizerDemo.cs
+|   |   `-- compatibility hierarchy api + legacy voxelizer reference code
+|   |-- VoxelizerV2/
+|   |   `-- Scripts/
+|   |       |-- CPUVoxelizer.cs
+|   |       |-- CpuVoxelSurfaceMeshBuilder.cs
+|   |       `-- shared voxel utilities
 |   |-- Shaders/
 |   |   `-- planned GPU pipeline assets
 |   |-- Rendering/
@@ -774,12 +805,14 @@ Packages/com.voxgeofol.vegetation/
 
 ### Phase B: Shell Generation (Tasks 3 + 10.2)
 1. Implement MeshVoxelizer-based hierarchy generation on foliage geometry
-2. Implement shell extraction by splitting L0 surface voxels into octant nodes
-3. Implement `CanopyShellGenerator`
-4. Implement `ImpostorMeshGenerator` from original tree meshes via coarse size-4 CPU voxel extraction
-5. Wire shell / impostor baking into SOs
-6. Write shell generation EditMode tests
-7. Compile check + run tests
+2. Implement shell extraction by splitting canonical `L0` surface voxels into octant nodes
+3. Derive compact `L1/L2` hierarchies from owned `L0` occupancy and keep all baked output inside authoritative source bounds
+4. Implement `CanopyShellGenerator`
+5. Implement `ImpostorMeshGenerator` from original tree meshes via coarse size-4 CPU voxel extraction
+6. Apply the same bounded reduction/fallback rules to generated shell, wood, and impostor output
+7. Wire shell / impostor baking into SOs
+8. Write shell generation EditMode tests
+9. Compile check + run tests
 
 ### Phase C: Editor Preview (Task 2)
 1. Implement `VegetationEditorPreview`

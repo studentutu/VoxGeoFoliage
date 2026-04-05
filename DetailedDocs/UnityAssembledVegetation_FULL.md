@@ -76,7 +76,8 @@ Authoritative form: `Tree = Trunk + Σ (BranchPlacement -> BranchPrototype -> Fu
 
 ### Branch Reconstruction Rule
 
-- `BranchPrototypeSO.shellNodes` is the authoritative canopy reconstruction source for a branch.
+- `BranchPrototypeSO.shellNodesL0` is the canonical canopy ownership hierarchy for a branch.
+- `BranchPrototypeSO.shellNodesL1` and `BranchPrototypeSO.shellNodesL2` are separately persisted compact hierarchies derived from owned `L0` occupancy.
 - Branch reconstruction always starts at the hierarchy root and traverses downward; it does not start from a pre-pruned leaf frontier.
 - Parent node bounds are tested first. If a parent node is rejected, its descendants are rejected without further work.
 - A full assembled tree always keeps the full branch hierarchy so branch-local canopy culling can happen early, before per-node mesh emission.
@@ -174,29 +175,30 @@ The implemented authoring path replaces the fixed branch-wide shell chain with a
 
 ```
 BranchPrototypeSO
-  -> BranchShellNode[]
+  -> BranchShellNode[] shellNodesL0
+  -> BranchShellNode[] shellNodesL1
+  -> BranchShellNode[] shellNodesL2
 
 BranchShellNode:
   - Bounds localBounds
   - int depth
   - int firstChildIndex
   - byte childMask
-  - Mesh shellL0Mesh
-  - Mesh shellL1Mesh
-  - Mesh shellL2Mesh
+  - Mesh shellLxMesh
 ```
 
-Each occupied node stores its own `L0/L1/L2` shell chain. Parent and child shell nodes are mutually exclusive at render time, but the full hierarchy is always retained. Preview and runtime reconstruction start at the root node and derive the active frontier only after parent-bound culling decides which descendants remain relevant.
+`shellNodesL0` is the canonical split/ownership tree. `shellNodesL1` and `shellNodesL2` are compact trees baked from owned `L0` occupancy at their authored resolutions. Parent and child shell nodes remain mutually exclusive at render time, but each tier now keeps its own persisted traversal tree.
 
 ### Hierarchical Bake Pipeline
 
 Current production authoring path (`2026-03-30`):
 
-1. Voxelize the readable branch foliage mesh at `80/16/6`
+1. Voxelize the readable branch foliage mesh at canonical `L0`
 2. Use `L0` surface occupancy to split the branch bounds into octant shell nodes
-3. Emit one `L0/L1/L2` mesh triplet per occupied node
-4. Persist the node hierarchy on `BranchPrototypeSO.shellNodes`
-5. Run one coarse CPU voxel surface extraction on the merged tree-space assembly for the far impostor
+3. Emit bounded `L0` meshes for the canonical ownership hierarchy
+4. Derive compact `L1` and `L2` hierarchies by re-voxelizing owned `L0` occupancy into coarse node-local volumes
+5. Persist the three hierarchies on `BranchPrototypeSO.shellNodesL0/shellNodesL1/shellNodesL2`
+6. Run one coarse CPU voxel surface extraction on the merged tree-space assembly for the far impostor
 
 ### Runtime / GPU Extension
 
@@ -204,26 +206,28 @@ The runtime-facing full version should flatten the same hierarchy:
 
 ```
 BranchPrototypeGPU:
-  - uint shellNodeCount
-  - uint shellNodeDataStartIndex
+  - uint shellNodeCountL0
+  - uint shellNodeDataStartIndexL0
+  - uint shellNodeCountL1
+  - uint shellNodeDataStartIndexL1
+  - uint shellNodeCountL2
+  - uint shellNodeDataStartIndexL2
 
 BranchShellNodeData:
   - float3 localCenter
   - float3 localExtents
   - uint firstChildIndex
   - uint childMask
-  - uint shellL0MeshIndex
-  - uint shellL1MeshIndex
-  - uint shellL2MeshIndex
+  - uint shellMeshIndex
 ```
 
-GPU classification then evaluates shell-node AABBs instead of one branch-wide shell AABB. Full-tree reconstruction keeps the full branch hierarchy alive for every branch instance, starts traversal at the branch root, and performs early culling on parent shell-node bounds before visiting children. The surviving nodes form the active frontier that emits `L0/L1/L2` shell meshes for that branch instance.
+GPU classification then evaluates shell-node AABBs instead of one branch-wide shell AABB. Full-tree reconstruction keeps all three persisted hierarchies alive for every branch instance, picks the hierarchy that matches the selected shell tier, and performs early culling on parent shell-node bounds before visiting children. The surviving nodes form the active frontier inside the chosen `L0`, `L1`, or `L2` hierarchy for that branch instance.
 
 ### Benefits
 
 - **Gradual detail reduction**: nearby crown lobes stay detailed while distant lobes simplify
 - **Better continuity**: `L0` comes from a solid canonical field instead of a fragile surface-only shell extraction
-- **Less blockiness**: `L1/L2` use smooth isosurface extraction rather than cube-face emission
+- **Less blockiness**: `L1/L2` are rebuilt from owned `L0` occupancy instead of reusing identical `L0` cells
 - **Reduced overdraw**: shell nodes can be culled or simplified independently
 
 ### Legacy MVP Simplification

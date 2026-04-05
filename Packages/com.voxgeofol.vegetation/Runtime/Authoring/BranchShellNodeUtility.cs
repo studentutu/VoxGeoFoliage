@@ -12,6 +12,25 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
     public static class BranchShellNodeUtility
     {
         /// <summary>
+        /// [INTEGRATION] Returns the persisted hierarchy array for one authored shell tier.
+        /// </summary>
+        public static BranchShellNode[] GetHierarchyForLevel(BranchPrototypeSO prototype, int shellLevel)
+        {
+            if (prototype == null)
+            {
+                throw new ArgumentNullException(nameof(prototype));
+            }
+
+            return shellLevel switch
+            {
+                0 => prototype.ShellNodesL0,
+                1 => prototype.ShellNodesL1,
+                2 => prototype.ShellNodesL2,
+                _ => throw new ArgumentOutOfRangeException(nameof(shellLevel), shellLevel, "Shell level must be 0, 1, or 2.")
+            };
+        }
+
+        /// <summary>
         /// [INTEGRATION] Enumerates the current leaf frontier for one branch shell hierarchy.
         /// </summary>
         public static List<BranchShellNode> CollectLeafNodes(BranchShellNode[]? shellNodes)

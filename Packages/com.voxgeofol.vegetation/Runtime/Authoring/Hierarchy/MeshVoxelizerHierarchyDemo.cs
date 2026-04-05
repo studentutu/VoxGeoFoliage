@@ -6,11 +6,11 @@ using VoxGeoFol.Features.Vegetation.Authoring;
 namespace MeshVoxelizerProject
 {
     /// <summary>
-    /// Sample component that visualizes the hierarchy builder with 80/16/6 voxel levels per node.
+    /// Sample component that visualizes canonical L0 plus compact L1/L2 shell hierarchies.
     /// </summary>
     public sealed class MeshVoxelizerHierarchyDemo : MonoBehaviour
     {
-        [SerializeField] private ShellBakeSettings settings;
+        [SerializeField] private ShellBakeSettings settings = new ShellBakeSettings();
         [SerializeField] private MeshFilter? fromMesh;
         [SerializeField] private Material? previewMaterial;
         [SerializeField] private bool showShellL0 = true;
@@ -20,7 +20,9 @@ namespace MeshVoxelizerProject
         [SerializeField] private bool clearGeneratedHierarchy;
 
         private const string GeneratedRootName = "VoxelHierarchy";
-        private MeshVoxelizerHierarchyNode[] generatedNodes = System.Array.Empty<MeshVoxelizerHierarchyNode>();
+        private MeshVoxelizerHierarchyNode[] generatedL0Nodes = System.Array.Empty<MeshVoxelizerHierarchyNode>();
+        private MeshVoxelizerHierarchyNode[] generatedL1Nodes = System.Array.Empty<MeshVoxelizerHierarchyNode>();
+        private MeshVoxelizerHierarchyNode[] generatedL2Nodes = System.Array.Empty<MeshVoxelizerHierarchyNode>();
 
         private void OnValidate()
         {
@@ -47,7 +49,7 @@ namespace MeshVoxelizerProject
         /// </summary>
         public void GenerateHierarchy()
         {
-            // Range: fromMesh or a child MeshFilter must exist. Condition: the hierarchy builder splits L0 surface voxels into octants and reuses the same node bounds for L1/L2. Output: a generated child hierarchy used for visual inspection.
+            // Range: fromMesh or a child MeshFilter must exist. Condition: canonical L0 drives ownership and compact L1/L2 are rebuilt from that occupancy into their own hierarchies. Output: a generated child hierarchy used for visual inspection.
             ClearHierarchy();
 
             MeshFilter? sourceFilter = ResolveSourceFilter();
@@ -57,23 +59,33 @@ namespace MeshVoxelizerProject
                 return;
             }
 
-            generatedNodes = MeshVoxelizerHierarchyBuilder.BuildHierarchy(
+            MeshVoxelizerHierarchyBuilder.BuildHierarchies(
                 sourceFilter.sharedMesh,
                 settings.VoxelResolutionL0,
                 settings.VoxelResolutionL1,
                 settings.VoxelResolutionL2,
                 settings.MaxOctreeDepth,
-                settings.MinimumSurfaceVoxelCountToSplit);
+                settings.MinimumSurfaceVoxelCountToSplit,
+                out generatedL0Nodes,
+                out generatedL1Nodes,
+                out generatedL2Nodes);
 
             GameObject root = new GameObject(GeneratedRootName);
             root.transform.SetParent(transform, false);
 
-            for (int i = 0; i < generatedNodes.Length; i++)
+            if (showShellL0)
             {
-                if (generatedNodes[i].ParentIndex == -1)
-                {
-                    CreateNodeRecursive(root.transform, generatedNodes, i);
-                }
+                CreateHierarchyTierRoot(root.transform, generatedL0Nodes, 0);
+            }
+
+            if (showShellL1)
+            {
+                CreateHierarchyTierRoot(root.transform, generatedL1Nodes, 1);
+            }
+
+            if (showShellL2)
+            {
+                CreateHierarchyTierRoot(root.transform, generatedL2Nodes, 2);
             }
         }
 
@@ -96,7 +108,29 @@ namespace MeshVoxelizerProject
             return GetComponent<MeshFilter>();
         }
 
-        private void CreateNodeRecursive(Transform parentTransform, MeshVoxelizerHierarchyNode[] nodes, int nodeIndex)
+        private void CreateHierarchyTierRoot(Transform parentTransform, MeshVoxelizerHierarchyNode[] nodes, int shellLevel)
+        {
+            if (nodes.Length == 0)
+            {
+                return;
+            }
+
+            GameObject tierRoot = new GameObject($"ShellL{shellLevel}_Hierarchy");
+            tierRoot.transform.SetParent(parentTransform, false);
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                if (nodes[i].ParentIndex == -1)
+                {
+                    CreateNodeRecursive(tierRoot.transform, nodes, shellLevel, i);
+                }
+            }
+        }
+
+        private void CreateNodeRecursive(
+            Transform parentTransform,
+            MeshVoxelizerHierarchyNode[] nodes,
+            int shellLevel,
+            int nodeIndex)
         {
             if (nodeIndex < 0 || nodeIndex >= nodes.Length)
             {
@@ -110,26 +144,30 @@ namespace MeshVoxelizerProject
             nodeObject.transform.localRotation = Quaternion.identity;
             nodeObject.transform.localScale = Vector3.one;
 
-            if (showShellL0 && node.ShellL0Mesh != null)
+            Mesh? shellMesh = shellLevel switch
             {
-                CreateMeshChild(nodeObject.transform, $"ShellL0_{settings.VoxelResolutionL0}", node.ShellL0Mesh);
-            }
-
-            if (showShellL1 && node.ShellL1Mesh != null)
+                0 => node.ShellL0Mesh,
+                1 => node.ShellL1Mesh,
+                2 => node.ShellL2Mesh,
+                _ => null
+            };
+            if (shellMesh != null)
             {
-                CreateMeshChild(nodeObject.transform, $"ShellL1_{settings.VoxelResolutionL1}", node.ShellL1Mesh);
-            }
-
-            if (showShellL2 && node.ShellL2Mesh != null)
-            {
-                CreateMeshChild(nodeObject.transform, $"ShellL2_{settings.VoxelResolutionL2}", node.ShellL2Mesh);
+                int resolution = shellLevel switch
+                {
+                    0 => settings.VoxelResolutionL0,
+                    1 => settings.VoxelResolutionL1,
+                    2 => settings.VoxelResolutionL2,
+                    _ => 0
+                };
+                CreateMeshChild(nodeObject.transform, $"ShellL{shellLevel}_{resolution}", shellMesh);
             }
 
             for (int childIndex = 0; childIndex < nodes.Length; childIndex++)
             {
                 if (nodes[childIndex].ParentIndex == nodeIndex)
                 {
-                    CreateNodeRecursive(nodeObject.transform, nodes, childIndex);
+                    CreateNodeRecursive(nodeObject.transform, nodes, shellLevel, childIndex);
                 }
             }
         }
@@ -154,16 +192,26 @@ namespace MeshVoxelizerProject
             }
 
             DestroyGeneratedMeshes();
-            generatedNodes = System.Array.Empty<MeshVoxelizerHierarchyNode>();
+            generatedL0Nodes = System.Array.Empty<MeshVoxelizerHierarchyNode>();
+            generatedL1Nodes = System.Array.Empty<MeshVoxelizerHierarchyNode>();
+            generatedL2Nodes = System.Array.Empty<MeshVoxelizerHierarchyNode>();
         }
 
         private void DestroyGeneratedMeshes()
         {
-            for (int i = 0; i < generatedNodes.Length; i++)
+            for (int i = 0; i < generatedL0Nodes.Length; i++)
             {
-                DestroyGeneratedMesh(generatedNodes[i].ShellL0Mesh);
-                DestroyGeneratedMesh(generatedNodes[i].ShellL1Mesh);
-                DestroyGeneratedMesh(generatedNodes[i].ShellL2Mesh);
+                DestroyGeneratedMesh(generatedL0Nodes[i].ShellL0Mesh);
+            }
+
+            for (int i = 0; i < generatedL1Nodes.Length; i++)
+            {
+                DestroyGeneratedMesh(generatedL1Nodes[i].ShellL1Mesh);
+            }
+
+            for (int i = 0; i < generatedL2Nodes.Length; i++)
+            {
+                DestroyGeneratedMesh(generatedL2Nodes[i].ShellL2Mesh);
             }
         }
 

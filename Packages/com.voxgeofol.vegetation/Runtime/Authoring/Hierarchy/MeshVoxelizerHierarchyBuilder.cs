@@ -8,14 +8,14 @@ using VoxelSystem;
 namespace MeshVoxelizerProject
 {
     /// <summary>
-    /// Builds a shell hierarchy by splitting CPU voxel surface ownership into octants.
+    /// Builds canonical L0 ownership hierarchy data and compact L1/L2 hierarchies from that owned occupancy.
     /// </summary>
     public static class MeshVoxelizerHierarchyBuilder
     {
         public static bool Generating = false;
 
         /// <summary>
-        /// [INTEGRATION] Builds a preorder hierarchy where each node owns CPU-voxel meshes for L0/L1/L2.
+        /// [INTEGRATION] Builds the canonical L0 hierarchy for compatibility/demo callers.
         /// </summary>
         public static MeshVoxelizerHierarchyNode[] BuildHierarchy(
             Mesh sourceMesh,
@@ -25,7 +25,7 @@ namespace MeshVoxelizerProject
             int maxDepth = 2,
             int minimumSurfaceVoxelCountToSplit = 4)
         {
-            return BuildHierarchy(
+            BuildHierarchies(
                 sourceMesh,
                 voxelResolutionL0,
                 voxelResolutionL1,
@@ -33,14 +33,47 @@ namespace MeshVoxelizerProject
                 CpuVoxelSurfaceBuildOptions.Reduced,
                 CpuVoxelSurfaceBuildOptions.Reduced,
                 CpuVoxelSurfaceBuildOptions.Reduced,
+                out MeshVoxelizerHierarchyNode[] hierarchyL0,
+                out _,
+                out _,
+                maxDepth,
+                minimumSurfaceVoxelCountToSplit);
+            return hierarchyL0;
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Builds canonical L0 plus compact L1/L2 hierarchies from owned L0 occupancy.
+        /// </summary>
+        public static void BuildHierarchies(
+            Mesh sourceMesh,
+            int voxelResolutionL0,
+            int voxelResolutionL1,
+            int voxelResolutionL2,
+            int maxDepth,
+            int minimumSurfaceVoxelCountToSplit,
+            out MeshVoxelizerHierarchyNode[] hierarchyL0,
+            out MeshVoxelizerHierarchyNode[] hierarchyL1,
+            out MeshVoxelizerHierarchyNode[] hierarchyL2)
+        {
+            BuildHierarchies(
+                sourceMesh,
+                voxelResolutionL0,
+                voxelResolutionL1,
+                voxelResolutionL2,
+                CpuVoxelSurfaceBuildOptions.Reduced,
+                CpuVoxelSurfaceBuildOptions.Reduced,
+                CpuVoxelSurfaceBuildOptions.Reduced,
+                out hierarchyL0,
+                out hierarchyL1,
+                out hierarchyL2,
                 maxDepth,
                 minimumSurfaceVoxelCountToSplit);
         }
 
         /// <summary>
-        /// [INTEGRATION] Builds a preorder hierarchy where each node owns CPU-voxel meshes for L0/L1/L2.
+        /// [INTEGRATION] Builds canonical L0 plus compact L1/L2 hierarchies from owned L0 occupancy.
         /// </summary>
-        public static MeshVoxelizerHierarchyNode[] BuildHierarchy(
+        public static void BuildHierarchies(
             Mesh sourceMesh,
             int voxelResolutionL0,
             int voxelResolutionL1,
@@ -48,13 +81,16 @@ namespace MeshVoxelizerProject
             CpuVoxelSurfaceBuildOptions l0BuildOptions,
             CpuVoxelSurfaceBuildOptions l1BuildOptions,
             CpuVoxelSurfaceBuildOptions l2BuildOptions,
+            out MeshVoxelizerHierarchyNode[] hierarchyL0,
+            out MeshVoxelizerHierarchyNode[] hierarchyL1,
+            out MeshVoxelizerHierarchyNode[] hierarchyL2,
             int maxDepth = 2,
             int minimumSurfaceVoxelCountToSplit = 4)
         {
             Generating = true;
             try
             {
-                // Range: sourceMesh must be readable and the resolutions must be >= 2. Condition: L0 drives node subdivision and L1/L2 reuse the same node bounds. Output: preorder node array with one L0/L1/L2 mesh triplet per node.
+                // Range: sourceMesh must be readable and the resolutions must be >= 2. Condition: L0 owns subdivision and bounds authority, while L1/L2 are rebuilt from that owned occupancy into their own compact hierarchies. Output: three persisted hierarchy arrays with tier-specific bounds and meshes.
                 if (sourceMesh == null)
                 {
                     throw new ArgumentNullException(nameof(sourceMesh));
@@ -73,6 +109,7 @@ namespace MeshVoxelizerProject
                     throw new ArgumentOutOfRangeException(nameof(maxDepth), maxDepth, "maxDepth must be zero or greater.");
                 }
 
+                sourceMesh.RecalculateBounds();
                 Bounds sourceBounds = sourceMesh.bounds;
                 if (sourceBounds.size.x <= Mathf.Epsilon ||
                     sourceBounds.size.y <= Mathf.Epsilon ||
@@ -82,31 +119,34 @@ namespace MeshVoxelizerProject
                 }
 
                 VoxelLevelData l0 = CreateVoxelLevel(sourceMesh, voxelResolutionL0);
-                VoxelLevelData l1 = CreateVoxelLevel(sourceMesh, voxelResolutionL1);
-                VoxelLevelData l2 = CreateVoxelLevel(sourceMesh, voxelResolutionL2);
-
-                List<NodeBuildRecord> nodeRecords = new List<NodeBuildRecord>();
-                AddNodeRecursive(
-                    nodeRecords,
+                HierarchyTreeNode canonicalRoot = BuildCanonicalNodeRecursive(
                     sourceMesh.name,
                     l0,
-                    l1,
-                    l2,
-                    l0BuildOptions,
-                    l1BuildOptions,
-                    l2BuildOptions,
                     sourceBounds,
-                    -1,
+                    l0BuildOptions,
                     0,
                     maxDepth,
-                    Mathf.Max(1, minimumSurfaceVoxelCountToSplit));
+                    Mathf.Max(1, minimumSurfaceVoxelCountToSplit)) ??
+                    throw new InvalidOperationException($"{sourceMesh.name} produced no canonical shell hierarchy.");
 
-                if (nodeRecords.Count == 0)
-                {
-                    throw new InvalidOperationException($"{sourceMesh.name} produced no surface hierarchy nodes.");
-                }
+                HierarchyTreeNode compactL1Root = BuildCompactNodeRecursive(
+                    sourceMesh.name,
+                    canonicalRoot,
+                    l0,
+                    voxelResolutionL1,
+                    l1BuildOptions,
+                    1);
+                HierarchyTreeNode compactL2Root = BuildCompactNodeRecursive(
+                    sourceMesh.name,
+                    canonicalRoot,
+                    l0,
+                    voxelResolutionL2,
+                    l2BuildOptions,
+                    2);
 
-                return NormalizeHierarchy(nodeRecords);
+                hierarchyL0 = FlattenHierarchy(canonicalRoot, 0);
+                hierarchyL1 = FlattenHierarchy(compactL1Root, 1);
+                hierarchyL2 = FlattenHierarchy(compactL2Root, 2);
             }
             finally
             {
@@ -114,78 +154,238 @@ namespace MeshVoxelizerProject
             }
         }
 
-        private static MeshVoxelizerHierarchyNode[] NormalizeHierarchy(List<NodeBuildRecord> nodeRecords)
+        private static HierarchyTreeNode? BuildCanonicalNodeRecursive(
+            string meshName,
+            VoxelLevelData l0,
+            Bounds ownershipBounds,
+            CpuVoxelSurfaceBuildOptions buildOptions,
+            int depth,
+            int maxDepth,
+            int minimumSurfaceVoxelCountToSplit)
         {
-            List<int>[] childrenByParent = new List<int>[nodeRecords.Count];
-            List<int> rootIndices = new List<int>();
-            for (int i = 0; i < nodeRecords.Count; i++)
+            int surfaceVoxelCount = CountSurfaceVoxels(l0, ownershipBounds);
+            if (surfaceVoxelCount == 0)
             {
-                int parentIndex = nodeRecords[i].ParentIndex;
-                if (parentIndex < 0)
+                return null;
+            }
+
+            Mesh shellMesh = BuildOwnedNodeMesh(
+                l0,
+                ownershipBounds,
+                ownershipBounds,
+                $"{meshName}_L0_D{depth}_{ownershipBounds.center.x:F3}_{ownershipBounds.center.y:F3}_{ownershipBounds.center.z:F3}",
+                buildOptions);
+            HierarchyTreeNode node = new HierarchyTreeNode(
+                ownershipBounds,
+                GetMeshBounds(shellMesh, ownershipBounds),
+                depth,
+                shellMesh);
+
+            if (depth >= maxDepth || surfaceVoxelCount < minimumSurfaceVoxelCountToSplit)
+            {
+                node.LeafTriangleCount = GetTriangleCount(shellMesh);
+                return node;
+            }
+
+            Bounds[] childBounds = SplitIntoOctants(ownershipBounds);
+            int occupiedChildCount = 0;
+            int[] childSurfaceCounts = new int[childBounds.Length];
+            for (int octant = 0; octant < childBounds.Length; octant++)
+            {
+                childSurfaceCounts[octant] = CountSurfaceVoxels(l0, childBounds[octant]);
+                if (childSurfaceCounts[octant] > 0)
                 {
-                    rootIndices.Add(i);
+                    occupiedChildCount++;
+                }
+            }
+
+            if (occupiedChildCount < 2)
+            {
+                node.LeafTriangleCount = GetTriangleCount(shellMesh);
+                return node;
+            }
+
+            int leafTriangleCount = 0;
+            for (int octant = 0; octant < childBounds.Length; octant++)
+            {
+                if (childSurfaceCounts[octant] == 0)
+                {
                     continue;
                 }
 
-                if (childrenByParent[parentIndex] == null)
+                HierarchyTreeNode? childNode = BuildCanonicalNodeRecursive(
+                    meshName,
+                    l0,
+                    childBounds[octant],
+                    buildOptions,
+                    depth + 1,
+                    maxDepth,
+                    minimumSurfaceVoxelCountToSplit);
+                if (childNode == null)
                 {
-                    childrenByParent[parentIndex] = new List<int>();
+                    continue;
                 }
 
-                childrenByParent[parentIndex].Add(i);
+                node.Children.Add(new HierarchyTreeChild(octant, childNode));
+                leafTriangleCount += childNode.LeafTriangleCount;
             }
 
-            List<int> orderedIndices = new List<int>(nodeRecords.Count);
-            Queue<int> frontier = new Queue<int>();
-            for (int i = 0; i < rootIndices.Count; i++)
+            node.LeafTriangleCount = node.Children.Count == 0
+                ? GetTriangleCount(shellMesh)
+                : leafTriangleCount;
+            return node;
+        }
+
+        private static HierarchyTreeNode BuildCompactNodeRecursive(
+            string meshName,
+            HierarchyTreeNode canonicalNode,
+            VoxelLevelData canonicalL0,
+            int targetResolution,
+            CpuVoxelSurfaceBuildOptions buildOptions,
+            int shellLevel)
+        {
+            Mesh compactMesh = BuildCompactNodeMesh(
+                meshName,
+                canonicalNode,
+                canonicalL0,
+                targetResolution,
+                buildOptions,
+                shellLevel);
+            HierarchyTreeNode compactNode = new HierarchyTreeNode(
+                canonicalNode.OwnershipBounds,
+                GetMeshBounds(compactMesh, canonicalNode.LocalBounds),
+                canonicalNode.Depth,
+                compactMesh);
+
+            if (canonicalNode.Children.Count == 0)
             {
-                frontier.Enqueue(rootIndices[i]);
+                compactNode.LeafTriangleCount = GetTriangleCount(compactMesh);
+                return compactNode;
             }
+
+            List<HierarchyTreeChild> compactChildren = new List<HierarchyTreeChild>(canonicalNode.Children.Count);
+            int compactChildLeafTriangles = 0;
+            for (int i = 0; i < canonicalNode.Children.Count; i++)
+            {
+                HierarchyTreeChild canonicalChild = canonicalNode.Children[i];
+                HierarchyTreeNode compactChild = BuildCompactNodeRecursive(
+                    meshName,
+                    canonicalChild.Node,
+                    canonicalL0,
+                    targetResolution,
+                    buildOptions,
+                    shellLevel);
+                compactChildren.Add(new HierarchyTreeChild(canonicalChild.Octant, compactChild));
+                compactChildLeafTriangles += compactChild.LeafTriangleCount;
+            }
+
+            int compactTriangles = GetTriangleCount(compactMesh);
+            if (compactTriangles > 0 && compactTriangles <= compactChildLeafTriangles)
+            {
+                compactNode.LeafTriangleCount = compactTriangles;
+                return compactNode;
+            }
+
+            compactNode.Children.AddRange(compactChildren);
+            compactNode.LeafTriangleCount = compactChildLeafTriangles;
+            return compactNode;
+        }
+
+        private static Mesh BuildCompactNodeMesh(
+            string meshName,
+            HierarchyTreeNode canonicalNode,
+            VoxelLevelData canonicalL0,
+            int targetResolution,
+            CpuVoxelSurfaceBuildOptions buildOptions,
+            int shellLevel)
+        {
+            CpuVoxelVolume resampledVolume = CreateResampledVolume(canonicalL0, canonicalNode.OwnershipBounds, targetResolution);
+            return CpuVoxelSurfaceMeshBuilder.BuildSurfaceMesh(
+                resampledVolume,
+                null,
+                canonicalNode.LocalBounds,
+                $"{meshName}_L{shellLevel}_D{canonicalNode.Depth}_{targetResolution}",
+                buildOptions);
+        }
+
+        private static Mesh BuildOwnedNodeMesh(
+            VoxelLevelData level,
+            Bounds ownershipBounds,
+            Bounds clipBounds,
+            string meshName,
+            CpuVoxelSurfaceBuildOptions buildOptions)
+        {
+            return CpuVoxelSurfaceMeshBuilder.BuildSurfaceMesh(
+                level.Volume,
+                ownershipBounds,
+                clipBounds,
+                meshName,
+                buildOptions);
+        }
+
+        private static MeshVoxelizerHierarchyNode[] FlattenHierarchy(HierarchyTreeNode root, int shellLevel)
+        {
+            List<HierarchyTreeNode> orderedNodes = new List<HierarchyTreeNode>();
+            List<int> parentIndices = new List<int>();
+            Dictionary<HierarchyTreeNode, int> nodeIndices = new Dictionary<HierarchyTreeNode, int>();
+            Queue<HierarchyQueueRecord> frontier = new Queue<HierarchyQueueRecord>();
+            frontier.Enqueue(new HierarchyQueueRecord(root, -1));
 
             while (frontier.Count > 0)
             {
-                int oldIndex = frontier.Dequeue();
-                orderedIndices.Add(oldIndex);
+                HierarchyQueueRecord record = frontier.Dequeue();
+                int currentIndex = orderedNodes.Count;
+                orderedNodes.Add(record.Node);
+                parentIndices.Add(record.ParentIndex);
+                nodeIndices.Add(record.Node, currentIndex);
 
-                List<int>? children = childrenByParent[oldIndex];
-                if (children == null)
+                for (int i = 0; i < record.Node.Children.Count; i++)
                 {
-                    continue;
-                }
-
-                for (int i = 0; i < children.Count; i++)
-                {
-                    frontier.Enqueue(children[i]);
+                    frontier.Enqueue(new HierarchyQueueRecord(record.Node.Children[i].Node, currentIndex));
                 }
             }
 
-            int[] oldToNewIndex = new int[nodeRecords.Count];
-            for (int i = 0; i < orderedIndices.Count; i++)
+            MeshVoxelizerHierarchyNode[] hierarchy = new MeshVoxelizerHierarchyNode[orderedNodes.Count];
+            for (int i = 0; i < orderedNodes.Count; i++)
             {
-                oldToNewIndex[orderedIndices[i]] = i;
-            }
+                HierarchyTreeNode node = orderedNodes[i];
+                int firstChildIndex = node.Children.Count == 0 ? -1 : nodeIndices[node.Children[0].Node];
+                byte childMask = 0;
+                for (int childIndex = 0; childIndex < node.Children.Count; childIndex++)
+                {
+                    childMask |= (byte)(1 << node.Children[childIndex].Octant);
+                }
 
-            MeshVoxelizerHierarchyNode[] hierarchyNodes = new MeshVoxelizerHierarchyNode[orderedIndices.Count];
-            for (int i = 0; i < orderedIndices.Count; i++)
-            {
-                int oldIndex = orderedIndices[i];
-                NodeBuildRecord nodeRecord = nodeRecords[oldIndex];
-                List<int>? children = childrenByParent[oldIndex];
-                int parentIndex = nodeRecord.ParentIndex < 0 ? -1 : oldToNewIndex[nodeRecord.ParentIndex];
-                int firstChildIndex = children == null || children.Count == 0 ? -1 : oldToNewIndex[children[0]];
+                Mesh? shellL0Mesh = null;
+                Mesh? shellL1Mesh = null;
+                Mesh? shellL2Mesh = null;
+                switch (shellLevel)
+                {
+                    case 0:
+                        shellL0Mesh = node.ShellMesh;
+                        break;
+                    case 1:
+                        shellL1Mesh = node.ShellMesh;
+                        break;
+                    case 2:
+                        shellL2Mesh = node.ShellMesh;
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(shellLevel), shellLevel, "Shell level must be 0, 1, or 2.");
+                }
 
-                hierarchyNodes[i] = new MeshVoxelizerHierarchyNode(
-                    nodeRecord.LocalBounds,
-                    nodeRecord.Depth,
-                    parentIndex,
+                hierarchy[i] = new MeshVoxelizerHierarchyNode(
+                    node.LocalBounds,
+                    node.Depth,
+                    parentIndices[i],
                     firstChildIndex,
-                    nodeRecord.ChildMask,
-                    nodeRecord.ShellL0Mesh,
-                    nodeRecord.ShellL1Mesh,
-                    nodeRecord.ShellL2Mesh);
+                    childMask,
+                    shellL0Mesh,
+                    shellL1Mesh,
+                    shellL2Mesh);
             }
 
-            return hierarchyNodes;
+            return hierarchy;
         }
 
         private static void ValidateResolution(int resolution, string parameterName)
@@ -201,114 +401,65 @@ namespace MeshVoxelizerProject
             return new VoxelLevelData(CPUVoxelizer.VoxelizeToVolume(sourceMesh, resolution), resolution);
         }
 
-        private static int AddNodeRecursive(
-            List<NodeBuildRecord> nodeRecords,
-            string meshName,
-            VoxelLevelData l0,
-            VoxelLevelData l1,
-            VoxelLevelData l2,
-            CpuVoxelSurfaceBuildOptions l0BuildOptions,
-            CpuVoxelSurfaceBuildOptions l1BuildOptions,
-            CpuVoxelSurfaceBuildOptions l2BuildOptions,
-            Bounds nodeBounds,
-            int parentIndex,
-            int depth,
-            int maxDepth,
-            int minimumSurfaceVoxelCountToSplit)
+        private static CpuVoxelVolume CreateResampledVolume(VoxelLevelData sourceLevel, Bounds ownershipBounds, int resolution)
         {
-            int surfaceVoxelCount = CountSurfaceVoxels(l0, nodeBounds);
-            if (surfaceVoxelCount == 0)
+            float maxLength = Mathf.Max(ownershipBounds.size.x, Mathf.Max(ownershipBounds.size.y, ownershipBounds.size.z));
+            if (maxLength <= Mathf.Epsilon)
             {
-                return -1;
+                throw new InvalidOperationException($"Cannot resample zero-sized ownership bounds {ownershipBounds}.");
             }
 
-            int nodeIndex = nodeRecords.Count;
-            NodeBuildRecord nodeRecord = new NodeBuildRecord(
-                nodeBounds,
-                depth,
-                parentIndex,
-                    BuildNodeMesh(
-                        l0,
-                        nodeBounds,
-                        $"{meshName}_Node{nodeIndex:D3}_D{depth}_L0_{l0.Resolution}",
-                        l0BuildOptions),
-                    BuildNodeMesh(
-                        l1,
-                        nodeBounds,
-                        $"{meshName}_Node{nodeIndex:D3}_D{depth}_L1_{l1.Resolution}",
-                        l1BuildOptions),
-                    BuildNodeMesh(
-                        l2,
-                        nodeBounds,
-                        $"{meshName}_Node{nodeIndex:D3}_D{depth}_L2_{l2.Resolution}",
-                        l2BuildOptions));
-            nodeRecords.Add(nodeRecord);
+            float unit = maxLength / resolution;
+            int width = Mathf.Max(1, Mathf.CeilToInt(ownershipBounds.size.x / unit));
+            int height = Mathf.Max(1, Mathf.CeilToInt(ownershipBounds.size.y / unit));
+            int depth = Mathf.Max(1, Mathf.CeilToInt(ownershipBounds.size.z / unit));
+            Voxel_t[,,] coarseVoxels = new Voxel_t[width, height, depth];
+            Vector3 coarseMin = ownershipBounds.min;
+            float fineUnit = sourceLevel.Volume.UnitLength;
 
-            if (depth >= maxDepth || surfaceVoxelCount < minimumSurfaceVoxelCountToSplit)
+            for (int z = 0; z < sourceLevel.Depth; z++)
             {
-                return nodeIndex;
-            }
-
-            Bounds[] childBounds = SplitIntoOctants(nodeBounds);
-            int[] childSurfaceCounts = new int[8];
-            int occupiedChildCount = 0;
-            for (int octant = 0; octant < childBounds.Length; octant++)
-            {
-                childSurfaceCounts[octant] = CountSurfaceVoxels(l0, childBounds[octant]);
-                if (childSurfaceCounts[octant] > 0)
+                for (int y = 0; y < sourceLevel.Height; y++)
                 {
-                    occupiedChildCount++;
+                    for (int x = 0; x < sourceLevel.Width; x++)
+                    {
+                        if (!sourceLevel.IsOccupied(x, y, z) || !IsVoxelOwnedByBounds(sourceLevel, x, y, z, ownershipBounds))
+                        {
+                            continue;
+                        }
+
+                        Bounds fineBounds = new Bounds(sourceLevel.GetCellCenter(x, y, z), Vector3.one * fineUnit);
+                        if (!TryIntersectBounds(fineBounds, ownershipBounds, out Bounds clippedFineBounds))
+                        {
+                            continue;
+                        }
+
+                        Vector3 clippedMin = clippedFineBounds.min;
+                        Vector3 clippedMax = clippedFineBounds.max;
+                        int minX = Mathf.Clamp(Mathf.FloorToInt((clippedMin.x - coarseMin.x) / unit), 0, width - 1);
+                        int minY = Mathf.Clamp(Mathf.FloorToInt((clippedMin.y - coarseMin.y) / unit), 0, height - 1);
+                        int minZ = Mathf.Clamp(Mathf.FloorToInt((clippedMin.z - coarseMin.z) / unit), 0, depth - 1);
+                        int maxX = Mathf.Clamp(Mathf.CeilToInt((clippedMax.x - coarseMin.x) / unit) - 1, 0, width - 1);
+                        int maxY = Mathf.Clamp(Mathf.CeilToInt((clippedMax.y - coarseMin.y) / unit) - 1, 0, height - 1);
+                        int maxZ = Mathf.Clamp(Mathf.CeilToInt((clippedMax.z - coarseMin.z) / unit) - 1, 0, depth - 1);
+
+                        for (int coarseZ = minZ; coarseZ <= maxZ; coarseZ++)
+                        {
+                            for (int coarseY = minY; coarseY <= maxY; coarseY++)
+                            {
+                                for (int coarseX = minX; coarseX <= maxX; coarseX++)
+                                {
+                                    Voxel_t coarseVoxel = coarseVoxels[coarseX, coarseY, coarseZ];
+                                    coarseVoxel.fill = 1u;
+                                    coarseVoxels[coarseX, coarseY, coarseZ] = coarseVoxel;
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            if (occupiedChildCount < 2)
-            {
-                return nodeIndex;
-            }
-
-            int firstChildIndex = -1;
-            byte childMask = 0;
-            for (int octant = 0; octant < childBounds.Length; octant++)
-            {
-                if (childSurfaceCounts[octant] == 0)
-                {
-                    continue;
-                }
-
-                int childIndex = AddNodeRecursive(
-                    nodeRecords,
-                    meshName,
-                    l0,
-                    l1,
-                    l2,
-                    l0BuildOptions,
-                    l1BuildOptions,
-                    l2BuildOptions,
-                    childBounds[octant],
-                    nodeIndex,
-                    depth + 1,
-                    maxDepth,
-                    minimumSurfaceVoxelCountToSplit);
-                if (childIndex < 0)
-                {
-                    continue;
-                }
-
-                if (firstChildIndex < 0)
-                {
-                    firstChildIndex = childIndex;
-                }
-
-                childMask |= (byte)(1 << octant);
-            }
-
-            if (firstChildIndex >= 0)
-            {
-                nodeRecord.FirstChildIndex = firstChildIndex;
-                nodeRecord.ChildMask = childMask;
-            }
-
-            return nodeIndex;
+            return new CpuVoxelVolume(coarseMin, unit, coarseVoxels);
         }
 
         private static int CountSurfaceVoxels(VoxelLevelData level, Bounds nodeBounds)
@@ -334,15 +485,6 @@ namespace MeshVoxelizerProject
             }
 
             return count;
-        }
-
-        private static Mesh BuildNodeMesh(
-            VoxelLevelData level,
-            Bounds nodeBounds,
-            string meshName,
-            CpuVoxelSurfaceBuildOptions buildOptions)
-        {
-            return CpuVoxelSurfaceMeshBuilder.BuildSurfaceMesh(level.Volume, nodeBounds, meshName, buildOptions);
         }
 
         private static bool ShouldEmitFace(VoxelLevelData level, int x, int y, int z)
@@ -401,33 +543,77 @@ namespace MeshVoxelizerProject
             return childBounds;
         }
 
-        private sealed class NodeBuildRecord
+        private static int GetTriangleCount(Mesh? mesh)
         {
-            public NodeBuildRecord(Bounds localBounds, int depth, int parentIndex, Mesh shellL0Mesh, Mesh shellL1Mesh, Mesh shellL2Mesh)
+            return mesh == null ? 0 : checked((int)(mesh.GetIndexCount(0) / 3L));
+        }
+
+        private static Bounds GetMeshBounds(Mesh mesh, Bounds fallbackBounds)
+        {
+            return GetTriangleCount(mesh) > 0 ? mesh.bounds : fallbackBounds;
+        }
+
+        private static bool TryIntersectBounds(Bounds a, Bounds b, out Bounds intersection)
+        {
+            Vector3 min = Vector3.Max(a.min, b.min);
+            Vector3 max = Vector3.Min(a.max, b.max);
+            if (max.x <= min.x || max.y <= min.y || max.z <= min.z)
             {
+                intersection = default;
+                return false;
+            }
+
+            intersection = new Bounds((min + max) * 0.5f, max - min);
+            return true;
+        }
+
+        private sealed class HierarchyTreeNode
+        {
+            public HierarchyTreeNode(Bounds ownershipBounds, Bounds localBounds, int depth, Mesh shellMesh)
+            {
+                OwnershipBounds = ownershipBounds;
                 LocalBounds = localBounds;
                 Depth = depth;
-                ParentIndex = parentIndex;
-                ShellL0Mesh = shellL0Mesh;
-                ShellL1Mesh = shellL1Mesh;
-                ShellL2Mesh = shellL2Mesh;
+                ShellMesh = shellMesh ?? throw new ArgumentNullException(nameof(shellMesh));
             }
+
+            public Bounds OwnershipBounds { get; }
 
             public Bounds LocalBounds { get; }
 
             public int Depth { get; }
 
+            public Mesh ShellMesh { get; }
+
+            public List<HierarchyTreeChild> Children { get; } = new List<HierarchyTreeChild>();
+
+            public int LeafTriangleCount { get; set; }
+        }
+
+        private sealed class HierarchyTreeChild
+        {
+            public HierarchyTreeChild(int octant, HierarchyTreeNode node)
+            {
+                Octant = octant;
+                Node = node ?? throw new ArgumentNullException(nameof(node));
+            }
+
+            public int Octant { get; }
+
+            public HierarchyTreeNode Node { get; }
+        }
+
+        private readonly struct HierarchyQueueRecord
+        {
+            public HierarchyQueueRecord(HierarchyTreeNode node, int parentIndex)
+            {
+                Node = node;
+                ParentIndex = parentIndex;
+            }
+
+            public HierarchyTreeNode Node { get; }
+
             public int ParentIndex { get; }
-
-            public int FirstChildIndex { get; set; } = -1;
-
-            public byte ChildMask { get; set; }
-
-            public Mesh ShellL0Mesh { get; }
-
-            public Mesh ShellL1Mesh { get; }
-
-            public Mesh ShellL2Mesh { get; }
         }
 
         private readonly struct VoxelLevelData

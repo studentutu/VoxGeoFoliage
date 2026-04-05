@@ -174,7 +174,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 {
                     Material shellMaterial = prototype.ShellMaterial ??
                                              throw new InvalidOperationException($"{prototype.name} is missing shellMaterial.");
-                    List<BranchShellNode> leafNodes = GetRequiredLeafNodes(prototype);
+                    List<BranchShellNode> leafNodes = GetRequiredLeafNodes(prototype, 0);
                     for (int leafIndex = 0; leafIndex < leafNodes.Count; leafIndex++)
                     {
                         Mesh shellL0Mesh = BranchShellNodeUtility.GetShellMesh(leafNodes[leafIndex], 0) ??
@@ -205,7 +205,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     GetRequiredWoodMesh(prototype, shellLevel),
                     woodMaterial);
 
-                List<BranchShellNode> leafNodes = GetRequiredLeafNodes(prototype);
+                List<BranchShellNode> leafNodes = GetRequiredLeafNodes(prototype, shellLevel);
                 for (int leafIndex = 0; leafIndex < leafNodes.Count; leafIndex++)
                 {
                     Mesh shellMesh = BranchShellNodeUtility.GetShellMesh(leafNodes[leafIndex], shellLevel) ??
@@ -235,12 +235,13 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             CreateMeshChild(parent, "Impostor", impostorMesh, impostorMaterial);
         }
 
-        private static List<BranchShellNode> GetRequiredLeafNodes(BranchPrototypeSO prototype)
+        private static List<BranchShellNode> GetRequiredLeafNodes(BranchPrototypeSO prototype, int shellLevel)
         {
-            List<BranchShellNode> leafNodes = BranchShellNodeUtility.CollectLeafNodes(prototype.ShellNodes);
+            List<BranchShellNode> leafNodes = BranchShellNodeUtility.CollectLeafNodes(
+                BranchShellNodeUtility.GetHierarchyForLevel(prototype, shellLevel));
             if (leafNodes.Count == 0)
             {
-                throw new InvalidOperationException($"{prototype.name} is missing shellNodes.");
+                throw new InvalidOperationException($"{prototype.name} is missing shellNodesL{shellLevel}.");
             }
 
             return leafNodes;

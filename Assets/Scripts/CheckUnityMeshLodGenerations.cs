@@ -16,6 +16,7 @@ namespace DefaultNamespace
         [SerializeField] private MeshFilter _meshFilter;
         [SerializeField] private Mesh sourceMesh;
         [SerializeField] private int meshLodLimit = -1;
+        public bool minimizelods = false;
 
         public bool Regenerate = false;
         [CanBeNull] private Mesh _generatedMesh;
@@ -57,8 +58,14 @@ namespace DefaultNamespace
 
             try
             {
-                MeshLodUtility.GenerateMeshLods(_generatedMesh, MeshLodUtility.LodGenerationFlags.DiscardOddLevels, meshLodLimit);
-                _meshFilter.sharedMesh = _generatedMesh;// generated mesh now has Lod0,1,2,3,4,5,6 submeshes(discared 1,3,5)
+                if (minimizelods)
+                    MeshLodUtility.GenerateMeshLods(_generatedMesh, MeshLodUtility.LodGenerationFlags.DiscardOddLevels,
+                        meshLodLimit);
+                else
+                    MeshLodUtility.GenerateMeshLods(_generatedMesh, meshLodLimit);
+
+                _meshFilter.sharedMesh =
+                    _generatedMesh; // generated mesh now has Lod0,1,2,3,4,5,6 submeshes(discared 1,3,5)
             }
             catch (System.Exception exception)
             {

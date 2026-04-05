@@ -130,22 +130,22 @@ namespace VoxGeoFol.Features.Vegetation.Editor
 
                 r0Triangles += GetTriangleCount(prototype.WoodMesh);
                 r0Triangles += GetTriangleCount(prototype.FoliageMesh);
-                r0Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodes, 0);
+                r0Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL0, 0);
 
                 r1Triangles += GetTriangleCount(prototype.ShellL1WoodMesh);
-                r1Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodes, 1);
+                r1Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL1, 1);
 
                 r2Triangles += GetTriangleCount(prototype.ShellL2WoodMesh);
-                r2Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodes, 2);
+                r2Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL2, 2);
 
                 shellL0OnlyTriangles += GetTriangleCount(prototype.WoodMesh);
-                shellL0OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodes, 0);
+                shellL0OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL0, 0);
 
                 shellL1OnlyTriangles += GetTriangleCount(prototype.ShellL1WoodMesh);
-                shellL1OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodes, 1);
+                shellL1OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL1, 1);
 
                 shellL2OnlyTriangles += GetTriangleCount(prototype.ShellL2WoodMesh);
-                shellL2OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodes, 2);
+                shellL2OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL2, 2);
             }
 
             return new VegetationAuthoringSummary(

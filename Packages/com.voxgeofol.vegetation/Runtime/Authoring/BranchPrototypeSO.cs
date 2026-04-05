@@ -1,6 +1,8 @@
 #nullable enable
 
+using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace VoxGeoFol.Features.Vegetation.Authoring
 {
@@ -16,7 +18,10 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         [SerializeField] private Material? foliageMaterial;
         [SerializeField] private Color leafColorTint = Color.white;
         [SerializeField] private string generatedCanopyShellsRelativeFolder = string.Empty;
-        [SerializeField] private BranchShellNode[] shellNodes = System.Array.Empty<BranchShellNode>();
+        [FormerlySerializedAs("shellNodes")]
+        [SerializeField] private BranchShellNode[] shellNodesL0 = Array.Empty<BranchShellNode>();
+        [SerializeField] private BranchShellNode[] shellNodesL1 = Array.Empty<BranchShellNode>();
+        [SerializeField] private BranchShellNode[] shellNodesL2 = Array.Empty<BranchShellNode>();
         [SerializeField] private Mesh? shellL1WoodMesh;
         [SerializeField] private Mesh? shellL2WoodMesh;
         [SerializeField] private Material? shellMaterial;
@@ -41,7 +46,11 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
 
         public string GeneratedCanopyShellsRelativeFolder => generatedCanopyShellsRelativeFolder;
 
-        public BranchShellNode[] ShellNodes => shellNodes;
+        public BranchShellNode[] ShellNodesL0 => shellNodesL0;
+
+        public BranchShellNode[] ShellNodesL1 => shellNodesL1;
+
+        public BranchShellNode[] ShellNodesL2 => shellNodesL2;
 
         public Mesh? ShellL1WoodMesh => shellL1WoodMesh;
 

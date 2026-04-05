@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using VoxelSystem;
@@ -33,13 +34,14 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         public static Mesh BuildVoxelSurfaceMesh(
             CpuVoxelVolume volume,
             Bounds? ownedBounds,
+            Bounds? clipBounds,
             string meshName,
             bool skipReduction)
         {
             CpuVoxelSurfaceBuildOptions buildOptions = skipReduction
                 ? CpuVoxelSurfaceBuildOptions.Raw
                 : CpuVoxelSurfaceBuildOptions.Reduced;
-            return CpuVoxelSurfaceMeshBuilder.BuildSurfaceMesh(volume, ownedBounds, meshName, buildOptions);
+            return CpuVoxelSurfaceMeshBuilder.BuildSurfaceMesh(volume, ownedBounds, clipBounds, meshName, buildOptions);
         }
 
         public static Mesh BuildVoxelSurfaceMesh(
@@ -49,7 +51,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             bool skipReduction)
         {
             CpuVoxelVolume volume = CPUVoxelizer.VoxelizeToVolume(sourceMesh, resolution);
-            return BuildVoxelSurfaceMesh(volume, null, meshName, skipReduction);
+            return BuildVoxelSurfaceMesh(volume, null, sourceMesh.bounds, meshName, skipReduction);
         }
 
         public static GeneratedMeshCandidate SelectBestVoxelMeshCandidate(
@@ -60,7 +62,8 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             int triangleBudget,
             bool skipReduction,
             bool skipSimplifyFallback,
-            string meshName)
+            string meshName,
+            Bounds? clipBounds = null)
         {
             if (sourceMesh == null)
             {
@@ -68,7 +71,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             GeneratedMeshCandidate bestCandidate =
-                BuildVoxelMeshCandidate(sourceMesh, initialResolution, meshName, skipReduction);
+                BuildVoxelMeshCandidate(sourceMesh, initialResolution, meshName, skipReduction, clipBounds);
             if (bestCandidate.TriangleCount <= triangleBudget || skipSimplifyFallback)
             {
                 return bestCandidate;
@@ -84,7 +87,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 }
 
                 GeneratedMeshCandidate retryCandidate =
-                    BuildVoxelMeshCandidate(sourceMesh, nextResolution, meshName, skipReduction);
+                    BuildVoxelMeshCandidate(sourceMesh, nextResolution, meshName, skipReduction, clipBounds);
                 bestCandidate = SelectBetterCandidate(bestCandidate, retryCandidate, triangleBudget);
                 if (bestCandidate.TriangleCount <= triangleBudget)
                 {
@@ -101,6 +104,11 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 if (lodMesh == null)
                 {
                     continue;
+                }
+
+                if (clipBounds.HasValue)
+                {
+                    ClipMeshToBounds(lodMesh, clipBounds.Value);
                 }
 
                 GeneratedMeshCandidate lodCandidate = new GeneratedMeshCandidate(
@@ -203,9 +211,15 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             Mesh sourceMesh,
             int resolution,
             string meshName,
-            bool skipReduction)
+            bool skipReduction,
+            Bounds? clipBounds)
         {
-            Mesh mesh = BuildVoxelSurfaceMesh(sourceMesh, resolution, $"{meshName}_{resolution}", skipReduction);
+            Mesh mesh = BuildVoxelSurfaceMesh(
+                CPUVoxelizer.VoxelizeToVolume(sourceMesh, resolution),
+                null,
+                clipBounds ?? sourceMesh.bounds,
+                $"{meshName}_{resolution}",
+                skipReduction);
             return new GeneratedMeshCandidate(mesh, GetTriangleCount(mesh), $"voxel resolution {resolution}");
         }
 
@@ -343,6 +357,48 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             if (colors32.Length == sourceMesh.vertexCount)
             {
                 targetMesh.colors32 = colors32;
+            }
+        }
+
+        private static void ClipMeshToBounds(Mesh mesh, Bounds clipBounds)
+        {
+            Vector3[] vertices = mesh.vertices;
+            int[] triangles = mesh.triangles;
+            Vector3 min = clipBounds.min;
+            Vector3 max = clipBounds.max;
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                Vector3 vertex = vertices[i];
+                vertex.x = Mathf.Clamp(vertex.x, min.x, max.x);
+                vertex.y = Mathf.Clamp(vertex.y, min.y, max.y);
+                vertex.z = Mathf.Clamp(vertex.z, min.z, max.z);
+                vertices[i] = vertex;
+            }
+
+            List<int> clippedTriangles = new List<int>(triangles.Length);
+            for (int i = 0; i < triangles.Length; i += 3)
+            {
+                Vector3 a = vertices[triangles[i]];
+                Vector3 b = vertices[triangles[i + 1]];
+                Vector3 c = vertices[triangles[i + 2]];
+                if ((b - a).sqrMagnitude <= Mathf.Epsilon ||
+                    (c - a).sqrMagnitude <= Mathf.Epsilon ||
+                    Vector3.Cross(b - a, c - a).sqrMagnitude <= Mathf.Epsilon)
+                {
+                    continue;
+                }
+
+                clippedTriangles.Add(triangles[i]);
+                clippedTriangles.Add(triangles[i + 1]);
+                clippedTriangles.Add(triangles[i + 2]);
+            }
+
+            mesh.vertices = vertices;
+            mesh.triangles = clippedTriangles.ToArray();
+            mesh.RecalculateBounds();
+            if (clippedTriangles.Count > 0)
+            {
+                mesh.RecalculateNormals();
             }
         }
     }

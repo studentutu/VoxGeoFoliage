@@ -21,6 +21,7 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
 - Read:
   - [UnityAssembledVegetation_FULL](../DetailedDocs/UnityAssembledVegetation_FULL.md) - architecture authority
   - [Milestone1](../DetailedDocs/Milestone1.md) - MVP plan, task breakdown, data model, folder structure
+  - [FixBoundaryVoxelizedLodIssuePLAN](../DetailedDocs/FixBoundaryVoxelizedLodIssuePLAN.md) - strict-bound voxel shell and compact-hierarchy implementation notes
 
 ## CI and Tests
 

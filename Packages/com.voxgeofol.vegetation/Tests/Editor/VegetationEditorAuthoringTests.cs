@@ -95,7 +95,7 @@ public sealed class VegetationEditorAuthoringTests
         SetPrivateField(prototype, "woodMaterial", woodMaterial);
         SetPrivateField(prototype, "foliageMesh", foliageMesh);
         SetPrivateField(prototype, "foliageMaterial", foliageMaterial);
-        SetPrivateField(prototype, "shellNodes", new[] { CreateShellNode(shellL0Mesh, shellL0Mesh, shellL0Mesh) });
+        SetPrivateField(prototype, "shellNodesL0", new[] { CreateShellNode(shellL0Mesh, 0) });
         SetPrivateField(prototype, "shellMaterial", shellMaterial);
 
         BranchPlacement firstPlacement = CreateBranchPlacement(
@@ -187,7 +187,7 @@ public sealed class VegetationEditorAuthoringTests
         BranchPrototypeSO prototype = CreateTransientScriptableObject<BranchPrototypeSO>();
         SetPrivateField(prototype, "woodMaterial", woodMaterial);
         SetPrivateField(prototype, "shellL1WoodMesh", woodMesh);
-        SetPrivateField(prototype, "shellNodes", new[] { CreateShellNode(shellMesh, shellMesh, shellMesh) });
+        SetPrivateField(prototype, "shellNodesL1", new[] { CreateShellNode(shellMesh, 1) });
         SetPrivateField(prototype, "shellMaterial", shellMaterial);
 
         BranchPlacement placement = CreateBranchPlacement(
@@ -293,7 +293,9 @@ public sealed class VegetationEditorAuthoringTests
 
         VegetationTreeAuthoringEditorUtility.BakeImpostor(authoring);
 
-        Assert.AreEqual(0, prototype.ShellNodes.Length);
+        Assert.AreEqual(0, prototype.ShellNodesL0.Length);
+        Assert.AreEqual(0, prototype.ShellNodesL1.Length);
+        Assert.AreEqual(0, prototype.ShellNodesL2.Length);
         Assert.IsNull(prototype.ShellL1WoodMesh);
         Assert.IsNull(prototype.ShellL2WoodMesh);
         AssertGeneratedMeshStored(blueprint.ImpostorMesh);
@@ -340,6 +342,72 @@ public sealed class VegetationEditorAuthoringTests
         AssertGeneratedMeshStored(blueprint.ImpostorMesh, ExplicitImpostorMeshAssetRoot);
     }
 
+    [Test]
+    public void PersistGeneratedMesh_RebuildsStableFlatNormals()
+    {
+        EnsureTestFolders();
+
+        BranchPrototypeSO prototype = CreateAsset<BranchPrototypeSO>("PersistNormalsPrototype.asset");
+        Mesh generatedMesh = new Mesh
+        {
+            name = "BrokenGeneratedMesh"
+        };
+        generatedMesh.vertices = new[]
+        {
+            new Vector3(0f, 0f, 0f),
+            new Vector3(1f, 0f, 0f),
+            new Vector3(0f, 1f, 0f),
+            new Vector3(1f, 1f, 0f)
+        };
+        generatedMesh.triangles = new[]
+        {
+            0, 1, 2,
+            2, 1, 3,
+            0, 0, 1
+        };
+        generatedMesh.normals = new[]
+        {
+            Vector3.up,
+            Vector3.right,
+            new Vector3(float.NaN, 0f, 0f),
+            Vector3.zero
+        };
+        generatedMesh.RecalculateBounds();
+        createdObjects.Add(generatedMesh);
+
+        Mesh persistedMesh = GeneratedMeshAssetUtility.PersistGeneratedMesh(
+            prototype,
+            "PersistedNormalRepair",
+            generatedMesh,
+            GeneratedMeshAssetRoot);
+
+        AssertGeneratedMeshStored(persistedMesh);
+        Assert.AreEqual(6, persistedMesh.vertexCount);
+        Assert.AreEqual(6, persistedMesh.normals.Length);
+        Assert.AreEqual(2, persistedMesh.triangles.Length / 3);
+
+        int[] triangles = persistedMesh.triangles;
+        Vector3[] vertices = persistedMesh.vertices;
+        Vector3[] normals = persistedMesh.normals;
+        for (int triangleIndex = 0; triangleIndex < triangles.Length; triangleIndex += 3)
+        {
+            Vector3 normalA = normals[triangles[triangleIndex]];
+            Vector3 normalB = normals[triangles[triangleIndex + 1]];
+            Vector3 normalC = normals[triangles[triangleIndex + 2]];
+            AssertStableNormal(normalA);
+            AssertStableNormal(normalB);
+            AssertStableNormal(normalC);
+            Assert.That(Vector3.Dot(normalA, normalB), Is.GreaterThan(0.999f));
+            Assert.That(Vector3.Dot(normalA, normalC), Is.GreaterThan(0.999f));
+
+            Vector3 a = vertices[triangles[triangleIndex]];
+            Vector3 b = vertices[triangles[triangleIndex + 1]];
+            Vector3 c = vertices[triangles[triangleIndex + 2]];
+            Vector3 faceNormal = Vector3.Cross(b - a, c - a).normalized;
+            Assert.That(Vector3.Dot(normalA, faceNormal), Is.GreaterThan(0.999f));
+        }
+    }
+
     private void AssertGeneratedMeshStored(Mesh? mesh, string expectedRoot = GeneratedMeshAssetRoot)
     {
         Assert.IsNotNull(mesh);
@@ -367,6 +435,13 @@ public sealed class VegetationEditorAuthoringTests
         Assert.AreEqual(expected.y, actual.y, 0.0001f);
         Assert.AreEqual(expected.z, actual.z, 0.0001f);
         Assert.AreEqual(expected.w, actual.w, 0.0001f);
+    }
+
+    private static void AssertStableNormal(Vector3 normal)
+    {
+        Assert.IsFalse(float.IsNaN(normal.x) || float.IsNaN(normal.y) || float.IsNaN(normal.z));
+        Assert.IsFalse(float.IsInfinity(normal.x) || float.IsInfinity(normal.y) || float.IsInfinity(normal.z));
+        Assert.That(normal.sqrMagnitude, Is.GreaterThan(0.99f));
     }
 
     private void EnsureTestFolders()
@@ -487,9 +562,27 @@ public sealed class VegetationEditorAuthoringTests
         return material;
     }
 
-    private BranchShellNode CreateShellNode(Mesh l0Mesh, Mesh l1Mesh, Mesh l2Mesh)
+    private BranchShellNode CreateShellNode(Mesh shellMesh, int shellLevel)
     {
-        return new BranchShellNode(new Bounds(Vector3.zero, Vector3.one), 0, -1, 0, l0Mesh, l1Mesh, l2Mesh);
+        Mesh? shellL0Mesh = null;
+        Mesh? shellL1Mesh = null;
+        Mesh? shellL2Mesh = null;
+        switch (shellLevel)
+        {
+            case 0:
+                shellL0Mesh = shellMesh;
+                break;
+            case 1:
+                shellL1Mesh = shellMesh;
+                break;
+            case 2:
+                shellL2Mesh = shellMesh;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(shellLevel), shellLevel, "Shell level must be 0, 1, or 2.");
+        }
+
+        return new BranchShellNode(new Bounds(Vector3.zero, Vector3.one), 0, -1, 0, shellL0Mesh, shellL1Mesh, shellL2Mesh);
     }
 
     private ImpostorBakeSettings CreateFastImpostorBakeSettings()

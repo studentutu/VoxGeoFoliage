@@ -32,24 +32,25 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 
 1. All vegetation geometry is opaque-only - no transparency, no alpha clip, no masked materials.
 2. Trees are assembled from reusable branch prototypes, not single monolithic meshes.
-3. Canopy shells are hierarchical branch-local voxelized meshes: `BranchPrototypeSO.shellNodes` stores an adaptive octree where every occupied node owns its own `L0/L1/L2` shell chain.
+3. Canopy shells are hierarchical branch-local voxelized meshes: `BranchPrototypeSO.shellNodesL0` stores the canonical L0 ownership tree, while `shellNodesL1` and `shellNodesL2` store compact tier-specific hierarchies rebuilt from owned `L0` occupancy at their authored resolutions.
 4. Shell preview tiers keep branch structure: L0 reuses source wood, while L1/L2 use baked simplified wood meshes attached beside the leaf-frontier shell nodes.
-5. Generated shell and impostor meshes now prefer topology-preserving simplification first: merge adjacent coplanar voxel faces, keep voxel silhouette/bounds, and only then enter bounded fallback when the authored settings still miss budgets.
-6. Shell and impostor simplification must remain optional through authoring settings so developers can inspect raw voxel output in the editor and tests can stay on the fast path.
-7. Impostor (far LOD) is a simplified opaque mesh with billboard Y-rotation, not a textured card.
-8. GPU classification is a single compute dispatch per frame (frustum + LOD + backside minimization + draw emission).
-9. BRG (BatchRendererGroup) is the rendering backend; no MaterialPropertyBlock usage.
-10. Per-instance color variation via `RSUV` only (packed uint) - no MaterialPropertyBlock, no DOTS instanced properties for color. Single variation mechanism preserving SRP batching.
-11. Branch scale is in steps of 0.25 (e.g. 0.25, 0.5, 0.75, 1.0, 1.25...); no scale quantization optimization yet.
-12. Spatial partitioning via uniform grid; cell visibility is CPU frustum test + CullingGroup API (optional occlusion layer, Unity hard limit of 1024 sphere limit per culling group).
-13. Authoring data lives in ScriptableObjects; runtime data in GPU buffers; no runtime data on MonoBehaviours.
-14. Editor preview is transient child GameObjects with `HideFlags.DontSave | HideFlags.NotEditable` - never serialized.
-15. Shell generation and impostor baking are editor-only operations (not runtime).
-16. Generated shell and impostor geometry must be persisted as standalone `.mesh` assets under a writable project folder: prefer an owner-local `GeneratedMeshes/` folder under `Assets/`, otherwise fall back to `Assets/VoxGeoFol.Generated/Vegetation/Meshes/`. Do not rely on transient meshes or sub-assets that can be lost.
-17. All vegetation code lives under `Packages/com.voxgeofol.vegetation/` with `Runtime/Authoring`, `Editor`, `Runtime/Shaders`, `Runtime/Rendering`, `Tests/Editor`, and `Samples~/` subfolders as needed.
-18. No Unity `LODGroup` - LOD selection is fully GPU-driven via compute classification; `LODGroup` is incompatible with BRG indirect rendering.
-19. Canopy/impostor shaders are minimal vertex-lit: no albedo texture, no normal map, no emission, no specular. Trunk shader uses albedo texture but no normal map.
-20. Trunk is rendered in all tiers `R0-R2`; only `R3` (impostor) omits the trunk mesh.
+5. All editor-baked voxel artifacts must stay inside authoritative source occupancy; this strict-bound rule applies to canopy shell hierarchies, voxelized branch wood attachments, and tree impostors, and persisted bounds come from emitted mesh bounds.
+6. Generated shell and impostor meshes now prefer topology-preserving simplification first: merge adjacent coplanar voxel faces, keep voxel silhouette/bounds, and only then enter bounded fallback when the authored settings still miss budgets.
+7. Shell and impostor simplification must remain optional through authoring settings so developers can inspect raw voxel output in the editor and tests can stay on the fast path.
+8. Impostor (far LOD) is a simplified opaque mesh with billboard Y-rotation, not a textured card.
+9. GPU classification is a single compute dispatch per frame (frustum + LOD + backside minimization + draw emission).
+10. BRG (BatchRendererGroup) is the rendering backend; no MaterialPropertyBlock usage.
+11. Per-instance color variation via `RSUV` only (packed uint) - no MaterialPropertyBlock, no DOTS instanced properties for color. Single variation mechanism preserving SRP batching.
+12. Branch scale is in steps of 0.25 (e.g. 0.25, 0.5, 0.75, 1.0, 1.25...); no scale quantization optimization yet.
+13. Spatial partitioning via uniform grid; cell visibility is CPU frustum test + CullingGroup API (optional occlusion layer, Unity hard limit of 1024 sphere limit per culling group).
+14. Authoring data lives in ScriptableObjects; runtime data in GPU buffers; no runtime data on MonoBehaviours.
+15. Editor preview is transient child GameObjects with `HideFlags.DontSave | HideFlags.NotEditable` - never serialized.
+16. Shell generation and impostor baking are editor-only operations (not runtime).
+17. Generated shell and impostor geometry must be persisted as standalone `.mesh` assets under a writable project folder: prefer an owner-local `GeneratedMeshes/` folder under `Assets/`, otherwise fall back to `Assets/VoxGeoFol.Generated/Vegetation/Meshes/`. Do not rely on transient meshes or sub-assets that can be lost.
+18. All vegetation code lives under `Packages/com.voxgeofol.vegetation/` with `Runtime/Authoring`, `Editor`, `Runtime/Shaders`, `Runtime/Rendering`, `Tests/Editor`, and `Samples~/` subfolders as needed.
+19. No Unity `LODGroup` - LOD selection is fully GPU-driven via compute classification; `LODGroup` is incompatible with BRG indirect rendering.
+20. Canopy/impostor shaders are minimal vertex-lit: no albedo texture, no normal map, no emission, no specular. Trunk shader uses albedo texture but no normal map.
+21. Trunk is rendered in all tiers `R0-R2`; only `R3` (impostor) omits the trunk mesh.
 
 ## Wiring Hubs
 
@@ -57,15 +58,15 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 - `VegetationRendererFeature` - URP integration: schedules compute dispatch + depth prepass + color pass
 - `VegetationBRGManager` - BRG lifecycle: mesh/material registration, draw command emission
 - `VegetationAuthoringValidator` - Task 1 authoring contract authority: explicit validation for readability, opacity, budgets, bounds, scale, and LOD ordering
-- `CanopyShellGenerator` - editor-side Phase C follow-up branch authority: uses `MeshVoxelizerHierarchyBuilder` to voxelize readable foliage, applies optional coplanar-face reduction on `L0/L1/L2`, performs bounded non-blocking fallback for over-budget shell levels, and refreshes voxelized `shellL1WoodMesh` / `shellL2WoodMesh`
-- `MeshVoxelizerHierarchyBuilder` / `MeshVoxelizerHierarchyDemo` - shared hierarchy authority and manual inspection utility: backed by `CPUVoxelizer` volumes, splits L0 surface voxels into octant nodes, and emits one mesh triplet per node while preserving the hierarchy contract
-- `CPUVoxelizer` / `CpuVoxelSurfaceMeshBuilder` - shared CPU voxel backend authority: builds indexed voxel volumes and surface-only meshes, including the optional coplanar-face merge path now used by canopy, wood, and impostor generation
-- `GeneratedMeshSimplificationUtility` - editor-side simplification authority: selects the best generated mesh candidate, runs bounded voxel-resolution retries, and uses Unity `MeshLodUtility` as the last-resort fallback for non-blocking baking
+- `CanopyShellGenerator` - editor-side branch-shell authority: bakes canonical `shellNodesL0`, derives compact `shellNodesL1` / `shellNodesL2` from owned `L0` occupancy, applies optional reduction and mesh-only fallback, and refreshes bounded voxelized `shellL1WoodMesh` / `shellL2WoodMesh`
+- `MeshVoxelizerHierarchyBuilder` / `MeshVoxelizerHierarchyDemo` - shared hierarchy authority and manual inspection utility: backed by `CPUVoxelizer` volumes, splits canonical `L0` surface voxels into octant nodes, then derives separate compact `L1/L2` hierarchies from that owned occupancy
+- `CPUVoxelizer` / `CpuVoxelSurfaceMeshBuilder` - shared CPU voxel backend authority: builds indexed voxel volumes and bounded surface-only meshes, including the optional coplanar-face merge path now used by canopy, wood, and impostor generation
+- `GeneratedMeshSimplificationUtility` - editor-side simplification authority: selects the best generated mesh candidate, runs bounded voxel-resolution retries, rebuilds Unity `MeshLodUtility` input meshes with explicit `SetTriangles` index buffers before fallback generation, still skips unsupported meshes safely, and uses Unity `MeshLodUtility` as the last-resort fallback for non-blocking baking
 - `ImpostorMeshGenerator` - editor-side tree authority: merges trunk + original placed branch `woodMesh`/`foliageMesh` in tree space, uses the same reduction/fallback path, and stores `impostorMesh` without requiring baked canopy shells
 - `GeneratedMeshAssetUtility` - editor-side Phase B asset persistence authority: writes generated shell/impostor meshes as explicit `.mesh` files into writable project asset folders beside the owner asset when possible, while honoring explicit relative-folder overrides from the authoring asset
 - `CheckVoxelMeshSimplification` / `CheckUnityMeshLodGenerations` - repo-local manual comparison demos under `Assets/Scripts`: let developers compare source meshes, raw voxel surfaces, reduced voxel surfaces, and Unity `MeshLodUtility` output on existing meshes without touching package bake data
 - `VegetationTreeAuthoringEditorUtility` - editor-side Phase C authority: bake entry points, aggregated validation, and per-tier authoring summary for `VegetationTreeAuthoring`
-- `VegetationEditorPreview` - editor-side Phase C preview authority: rebuilds transient branch-root hierarchies for all milestone representation tiers
+- `VegetationEditorPreview` - editor-side Phase C preview authority: rebuilds transient branch-root hierarchies for all milestone representation tiers and selects `shellNodesL0`, `shellNodesL1`, or `shellNodesL2` directly based on the active shell tier
 - `VegetationTreeAuthoringEditor` - editor integration: inspector-side preview controls, bake buttons, validation display, and window launcher
 - `VegetationTreeAuthoringWindow` - editor integration: dedicated window for driving the same preview and bake utilities outside the Inspector
 

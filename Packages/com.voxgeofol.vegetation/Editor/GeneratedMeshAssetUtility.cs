@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
@@ -21,7 +22,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         /// </summary>
         public static Mesh PersistGeneratedMesh(UnityEngine.Object ownerAsset, string meshName, Mesh generatedMesh, string? relativeFolderToSave = null)
         {
-            // Range: owner asset can be transient or saved. Condition: generated mesh already contains final topology. Output: explicit .mesh asset in the requested Assets folder when provided, otherwise beside the owner asset or under a writable fallback folder.
+            // Range: owner asset can be transient or saved. Condition: generated mesh already contains the final authored shape, but this utility may still strip degenerate faces and rebuild stable hard normals before persistence. Output: explicit .mesh asset in the requested Assets folder when provided, otherwise beside the owner asset or under a writable fallback folder.
             if (ownerAsset == null)
             {
                 throw new ArgumentNullException(nameof(ownerAsset));
@@ -33,6 +34,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             generatedMesh.name = meshName;
+            RefreshMeshForPersistence(generatedMesh);
             string assetPath = AssetDatabase.GetAssetPath(ownerAsset);
             if (string.IsNullOrEmpty(assetPath))
             {
@@ -80,6 +82,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             generatedMesh.name = meshName;
+            RefreshMeshForPersistence(generatedMesh);
 
             string meshFolderPath = ResolveExplicitFolderPath(relativeFolderToSave);
             EnsureFolderPath(meshFolderPath);
@@ -188,6 +191,116 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         private static string NormalizeAssetPath(string assetPath)
         {
             return assetPath.Replace('\\', '/').TrimEnd('/');
+        }
+
+        private static void RefreshMeshForPersistence(Mesh mesh)
+        {
+            Vector3[] sourceVertices = mesh.vertices;
+            int[] sourceTriangles = mesh.triangles;
+            if (sourceVertices.Length == 0 || sourceTriangles.Length == 0)
+            {
+                mesh.normals = Array.Empty<Vector3>();
+                mesh.RecalculateBounds();
+                return;
+            }
+
+            Vector2[] sourceUv = mesh.uv;
+            Color[] sourceColors = mesh.colors;
+            Color32[] sourceColors32 = mesh.colors32;
+            bool hasUv = sourceUv.Length == sourceVertices.Length;
+            bool hasColors = sourceColors.Length == sourceVertices.Length;
+            bool hasColors32 = sourceColors32.Length == sourceVertices.Length;
+
+            List<Vector3> repairedVertices = new List<Vector3>(sourceTriangles.Length);
+            List<int> repairedTriangles = new List<int>(sourceTriangles.Length);
+            List<Vector3> repairedNormals = new List<Vector3>(sourceTriangles.Length);
+            List<Vector2>? repairedUv = hasUv ? new List<Vector2>(sourceTriangles.Length) : null;
+            List<Color>? repairedColors = hasColors ? new List<Color>(sourceTriangles.Length) : null;
+            List<Color32>? repairedColors32 = hasColors32 ? new List<Color32>(sourceTriangles.Length) : null;
+
+            for (int triangleIndex = 0; triangleIndex < sourceTriangles.Length; triangleIndex += 3)
+            {
+                int indexA = sourceTriangles[triangleIndex];
+                int indexB = sourceTriangles[triangleIndex + 1];
+                int indexC = sourceTriangles[triangleIndex + 2];
+                if ((uint)indexA >= sourceVertices.Length ||
+                    (uint)indexB >= sourceVertices.Length ||
+                    (uint)indexC >= sourceVertices.Length)
+                {
+                    continue;
+                }
+
+                Vector3 a = sourceVertices[indexA];
+                Vector3 b = sourceVertices[indexB];
+                Vector3 c = sourceVertices[indexC];
+                Vector3 faceCross = Vector3.Cross(b - a, c - a);
+                float faceMagnitude = faceCross.magnitude;
+                if (faceMagnitude <= 0.000001f)
+                {
+                    continue;
+                }
+
+                Vector3 faceNormal = faceCross / faceMagnitude;
+                int repairedIndex = repairedVertices.Count;
+                repairedVertices.Add(a);
+                repairedVertices.Add(b);
+                repairedVertices.Add(c);
+                repairedTriangles.Add(repairedIndex);
+                repairedTriangles.Add(repairedIndex + 1);
+                repairedTriangles.Add(repairedIndex + 2);
+                repairedNormals.Add(faceNormal);
+                repairedNormals.Add(faceNormal);
+                repairedNormals.Add(faceNormal);
+
+                if (repairedUv != null)
+                {
+                    repairedUv.Add(sourceUv[indexA]);
+                    repairedUv.Add(sourceUv[indexB]);
+                    repairedUv.Add(sourceUv[indexC]);
+                }
+
+                if (repairedColors != null)
+                {
+                    repairedColors.Add(sourceColors[indexA]);
+                    repairedColors.Add(sourceColors[indexB]);
+                    repairedColors.Add(sourceColors[indexC]);
+                }
+
+                if (repairedColors32 != null)
+                {
+                    repairedColors32.Add(sourceColors32[indexA]);
+                    repairedColors32.Add(sourceColors32[indexB]);
+                    repairedColors32.Add(sourceColors32[indexC]);
+                }
+            }
+
+            mesh.Clear();
+            mesh.indexFormat = repairedVertices.Count > ushort.MaxValue ? IndexFormat.UInt32 : IndexFormat.UInt16;
+            mesh.SetVertices(repairedVertices);
+            mesh.SetTriangles(repairedTriangles, 0, true);
+            mesh.SetNormals(repairedNormals);
+
+            if (repairedUv != null)
+            {
+                mesh.SetUVs(0, repairedUv);
+            }
+
+            if (repairedColors != null)
+            {
+                mesh.SetColors(repairedColors);
+            }
+            else if (repairedColors32 != null)
+            {
+                mesh.SetColors(repairedColors32);
+            }
+
+            if (repairedTriangles.Count == 0)
+            {
+                mesh.bounds = new Bounds(Vector3.zero, Vector3.zero);
+                return;
+            }
+
+            mesh.RecalculateBounds();
         }
 
         private static void CopyMeshData(Mesh sourceMesh, Mesh destinationMesh)
