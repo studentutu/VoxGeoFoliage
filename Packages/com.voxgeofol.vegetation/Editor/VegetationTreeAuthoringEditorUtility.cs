@@ -115,49 +115,50 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
             BranchPlacement[] placements = blueprint.Branches;
 
-            int r0Triangles = GetTriangleCount(blueprint.TrunkMesh);
-            int r1Triangles = GetTriangleCount(blueprint.TrunkMesh);
-            int r2Triangles = GetTriangleCount(blueprint.TrunkMesh);
-            int r3Triangles = GetTriangleCount(blueprint.ImpostorMesh);
-            int shellL0OnlyTriangles = 0;
+            int l0Triangles = GetTriangleCount(blueprint.TrunkMesh);
+            int l1Triangles = GetTriangleCount(blueprint.TrunkMesh);
+            int l2Triangles = GetTriangleCount(blueprint.TrunkL3Mesh);
+            int l3Triangles = GetTriangleCount(blueprint.TrunkL3Mesh);
+            int impostorTriangles = GetTriangleCount(blueprint.ImpostorMesh);
             int shellL1OnlyTriangles = 0;
             int shellL2OnlyTriangles = 0;
+            int shellL3OnlyTriangles = 0;
 
             for (int i = 0; i < placements.Length; i++)
             {
                 BranchPrototypeSO prototype = placements[i].Prototype ??
                                               throw new InvalidOperationException($"branches[{i}] is missing prototype.");
 
-                r0Triangles += GetTriangleCount(prototype.WoodMesh);
-                r0Triangles += GetTriangleCount(prototype.FoliageMesh);
-                r0Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL0, 0);
+                l0Triangles += GetTriangleCount(prototype.WoodMesh);
+                l0Triangles += GetTriangleCount(prototype.FoliageMesh);
 
-                r1Triangles += GetTriangleCount(prototype.ShellL1WoodMesh);
-                r1Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL1, 1);
+                l1Triangles += GetTriangleCount(prototype.WoodMesh);
+                l1Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL0, 0);
 
-                r2Triangles += GetTriangleCount(prototype.ShellL2WoodMesh);
-                r2Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL2, 2);
+                l2Triangles += GetTriangleCount(prototype.ShellL1WoodMesh);
+                l2Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL1, 1);
 
-                shellL0OnlyTriangles += GetTriangleCount(prototype.WoodMesh);
-                shellL0OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL0, 0);
+                l3Triangles += GetTriangleCount(prototype.ShellL2WoodMesh);
+                l3Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL2, 2);
 
-                shellL1OnlyTriangles += GetTriangleCount(prototype.ShellL1WoodMesh);
-                shellL1OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL1, 1);
+                shellL1OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL0, 0);
 
-                shellL2OnlyTriangles += GetTriangleCount(prototype.ShellL2WoodMesh);
-                shellL2OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL2, 2);
+                shellL2OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL1, 1);
+
+                shellL3OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL2, 2);
             }
 
             return new VegetationAuthoringSummary(
                 placements.Length,
                 blueprint.TreeBounds,
-                r0Triangles,
-                r1Triangles,
-                r2Triangles,
-                r3Triangles,
-                shellL0OnlyTriangles,
+                l0Triangles,
+                l1Triangles,
+                l2Triangles,
+                l3Triangles,
+                impostorTriangles,
                 shellL1OnlyTriangles,
-                shellL2OnlyTriangles);
+                shellL2OnlyTriangles,
+                shellL3OnlyTriangles);
         }
 
         internal static TreeBlueprintSO GetRequiredBlueprint(VegetationTreeAuthoring authoring)

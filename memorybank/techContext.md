@@ -33,7 +33,8 @@ Repo-used libraries and plugins:
 - `Packages/com.voxgeofol.vegetation/Runtime`
   - runtime-side authoring data and shared vegetation code, including tier-specific `BranchShellNode` canopy hierarchies persisted as `shellNodesL0`, `shellNodesL1`, and `shellNodesL2`
   - `MeshVoxelizerV1/` hosts the compatibility hierarchy API plus legacy voxelizer reference/demo code; the hierarchy builder in this folder is now CPU-volume-backed
-  - `VoxelizerV2/` hosts the CPU/GPU voxel utilities; the production canopy, generated branch wood, and impostor bake paths now use the CPU volume + bounded surface mesh path from this folder, including optional coplanar-face reduction through `CpuVoxelSurfaceMeshBuilder`
+  - `VoxelizerV2/` hosts the CPU/GPU voxel utilities; the production canopy, generated branch wood, simplified trunk, and impostor bake paths now use the CPU volume + bounded surface mesh path from this folder, including optional coplanar-face reduction through `CpuVoxelSurfaceMeshBuilder`
+  - planned runtime rendering authority is `Graphics.RenderMeshIndirect` through `Runtime/Rendering`; current authority docs now describe a hybrid MVP path where `CPU/GPU` cell visibility feeds GPU hierarchy survival records, GPU decode is preferred when feasible, and CPU fallback decodes BFS hierarchies into final per-draw-slot indirect submissions only through non-blocking async results
 - `Packages/com.voxgeofol.vegetation/Editor`
   - Phase B hierarchical shell/impostor bake tooling, Phase C preview/inspector/window tooling, and the editor-only simplification/fallback helpers used by shell, wood, and impostor generation
 - `Packages/com.voxgeofol.vegetation/Tests/Editor`
@@ -77,7 +78,8 @@ Repo-used libraries and plugins:
 - New or renamed `.cs` files require Full Unity compile path so the generated solution is rebuilt from Unity itself.
 - Vegetation package code lives under `Packages/com.voxgeofol.vegetation`; do not add new vegetation scripts back under `Assets/Scripts/Features/Vegetation`.
 - Generated vegetation meshes must be written into project `Assets/` space, never into `Packages/`, so public package installs stay writable.
-- Editor-baked voxel artifacts must be clipped back to authoritative source bounds; this applies to canopy shells, generated branch wood, and impostor meshes.
+- Editor-baked voxel artifacts must be clipped back to authoritative source bounds; this applies to canopy shells, generated branch wood, simplified trunk meshes, and impostor meshes.
+- Current vegetation runtime authority docs target indirect rendering plus runtime `L0/L1/L2/L3 + Impostor`, not BRG or one tree-wide runtime tier; the MVP path now prefers GPU visibility/decode where feasible and only uses the CPU fallback bridge through completed non-blocking async GPU readback results.
 - The current scripting toolchain tops out at `LangVersion 9.0`; use block-scoped namespaces, not file-scoped namespaces.
 - Use message-bus or singleton when cross communication is needed (prefer message bus with explicit sender and data).
 - All static runtime classes must have explicit `Reset` method that is invoked once in `EditorPlayModeStaticServicesReset.cs`.

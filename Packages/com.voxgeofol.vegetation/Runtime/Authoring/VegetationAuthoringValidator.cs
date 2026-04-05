@@ -56,11 +56,13 @@ public static class VegetationAuthoringValidator
         }
 
         ValidateRequiredReadableMesh(blueprint.TrunkMesh, "trunkMesh", result);
+        ValidateRequiredReadableMesh(blueprint.TrunkL3Mesh, "trunkL3Mesh", result);
         ValidateRequiredOpaqueMaterial(blueprint.TrunkMaterial, "trunkMaterial", result);
         ValidateBranchPlacements(blueprint, result);
         result.Merge(ValidateLodProfile(blueprint.LodProfile));
         ValidateImpostor(blueprint, result);
         ValidateTreeBounds(blueprint, result);
+        ValidateTrunkL3Bounds(blueprint, result);
 
         return result;
     }
@@ -70,7 +72,7 @@ public static class VegetationAuthoringValidator
     /// </summary>
     public static VegetationValidationResult ValidateLodProfile(LODProfileSO? lodProfile)
     {
-        // Range: accepts null for explicit missing-profile reporting. Condition: projected-area thresholds must be monotonic and non-negative. Output: aggregated LOD-profile validation issues.
+        // Range: accepts null for explicit missing-profile reporting. Condition: authored distance bands must be monotonic and positive. Output: aggregated LOD-profile validation issues.
         VegetationValidationResult result = new VegetationValidationResult();
         if (lodProfile == null)
         {
@@ -78,33 +80,23 @@ public static class VegetationAuthoringValidator
             return result;
         }
 
-        if (lodProfile.R0MinProjectedArea < 0f ||
-            lodProfile.R1MinProjectedArea < 0f ||
-            lodProfile.ShellL0MinProjectedArea < 0f ||
-            lodProfile.ShellL1MinProjectedArea < 0f ||
-            lodProfile.ShellL2MinProjectedArea < 0f ||
-            lodProfile.AbsoluteCullProjectedMin < 0f)
+        if (lodProfile.L0Distance <= 0f ||
+            lodProfile.L1Distance <= 0f ||
+            lodProfile.L2Distance <= 0f ||
+            lodProfile.L3Distance <= 0f ||
+            lodProfile.ImpostorDistance <= 0f ||
+            lodProfile.AbsoluteCullDistance <= 0f)
         {
-            result.AddError("LOD projected-area thresholds must be non-negative.");
+            result.AddError("LOD distances must be greater than zero.");
         }
 
-        if (!(lodProfile.R0MinProjectedArea > lodProfile.R1MinProjectedArea &&
-              lodProfile.R1MinProjectedArea > lodProfile.ShellL0MinProjectedArea &&
-              lodProfile.ShellL0MinProjectedArea > lodProfile.ShellL1MinProjectedArea &&
-              lodProfile.ShellL1MinProjectedArea > lodProfile.ShellL2MinProjectedArea &&
-              lodProfile.ShellL2MinProjectedArea > lodProfile.AbsoluteCullProjectedMin))
+        if (!(lodProfile.L0Distance < lodProfile.L1Distance &&
+              lodProfile.L1Distance < lodProfile.L2Distance &&
+              lodProfile.L2Distance < lodProfile.L3Distance &&
+              lodProfile.L3Distance < lodProfile.ImpostorDistance &&
+              lodProfile.ImpostorDistance < lodProfile.AbsoluteCullDistance))
         {
-            result.AddError("LOD thresholds must strictly decrease: r0 > r1 > shellL0 > shellL1 > shellL2 > absoluteCull.");
-        }
-
-        if (lodProfile.BacksideBiasScale < 0f)
-        {
-            result.AddError("backsideBiasScale must be zero or greater.");
-        }
-
-        if (lodProfile.SilhouetteKeepThreshold < 0f)
-        {
-            result.AddError("silhouetteKeepThreshold must be zero or greater.");
+            result.AddError("LOD distances must strictly increase: l0 < l1 < l2 < l3 < impostor < absoluteCull.");
         }
 
         return result;
@@ -194,6 +186,16 @@ public static class VegetationAuthoringValidator
             result.AddError("Wood triangle counts must not increase: source >= L1Wood >= L2Wood.");
         }
 
+        if (!ContainsBounds(sourceWoodMesh.bounds, shellL1WoodMesh.bounds))
+        {
+            result.AddError("shellL1WoodMesh bounds must stay inside woodMesh bounds.");
+        }
+
+        if (!ContainsBounds(sourceWoodMesh.bounds, shellL2WoodMesh.bounds))
+        {
+            result.AddError("shellL2WoodMesh bounds must stay inside woodMesh bounds.");
+        }
+
         ValidateShellNodeHierarchy(shellNodesL0, 0, "shellNodesL0", result);
         ValidateShellNodeHierarchy(shellNodesL1, 1, "shellNodesL1", result);
         ValidateShellNodeHierarchy(shellNodesL2, 2, "shellNodesL2", result);
@@ -265,7 +267,7 @@ public static class VegetationAuthoringValidator
 
             if (node.FirstChildIndex >= 0 && node.FirstChildIndex <= i)
             {
-                result.AddError($"{fieldPrefix}[{i}] firstChildIndex must point to a later preorder node.");
+                    result.AddError($"{fieldPrefix}[{i}] firstChildIndex must point to a later node index in the flattened hierarchy.");
             }
 
             if (node.ChildMask == 0)
@@ -391,6 +393,11 @@ public static class VegetationAuthoringValidator
         {
             result.AddError($"impostorMesh must stay at or below {RecommendedImpostorTriangleBudget} triangles.");
         }
+
+        if (!ContainsBounds(blueprint.TreeBounds, impostorMesh.bounds))
+        {
+            result.AddError("impostorMesh bounds must stay inside treeBounds.");
+        }
     }
 
     private static void ValidateLocalBoundsContainSourceMeshes(BranchPrototypeSO prototype, VegetationValidationResult result)
@@ -442,6 +449,26 @@ public static class VegetationAuthoringValidator
         if (!ContainsBounds(blueprint.TreeBounds, expectedBounds))
         {
             result.AddError("treeBounds must fully contain trunkMesh and every placed branch localBounds.");
+        }
+    }
+
+    private static void ValidateTrunkL3Bounds(TreeBlueprintSO blueprint, VegetationValidationResult result)
+    {
+        Mesh? trunkMesh = blueprint.TrunkMesh;
+        Mesh? trunkL3Mesh = blueprint.TrunkL3Mesh;
+        if (trunkMesh == null || trunkL3Mesh == null || !trunkMesh.isReadable || !trunkL3Mesh.isReadable)
+        {
+            return;
+        }
+
+        if (!ContainsBounds(trunkMesh.bounds, trunkL3Mesh.bounds))
+        {
+            result.AddError("trunkL3Mesh bounds must stay inside trunkMesh bounds.");
+        }
+
+        if (!ContainsBounds(blueprint.TreeBounds, trunkL3Mesh.bounds))
+        {
+            result.AddError("trunkL3Mesh bounds must stay inside treeBounds.");
         }
     }
 

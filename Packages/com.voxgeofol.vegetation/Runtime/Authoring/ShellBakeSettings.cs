@@ -18,9 +18,9 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         [SerializeField] [Min(4)] private int voxelResolutionL1 = 30;
         [Tooltip("Lowest detail shell resolution. Defaults to the verified 20 subdivision level.")]
         [SerializeField] [Min(4)] private int voxelResolutionL2 = 20;
-        [Tooltip("Generated wood resolution for the R1 shell preview attachment.")]
+        [Tooltip("Generated wood resolution for the authored compact L1 shell attachment (runtime L2).")]
         [SerializeField] [Min(2)] private int woodVoxelResolutionL1 = 50;
-        [Tooltip("Generated wood resolution for the R2 shell preview attachment.")]
+        [Tooltip("Generated wood resolution for the authored compact L2 shell attachment (runtime L3).")]
         [SerializeField] [Min(2)] private int woodVoxelResolutionL2 = 20;
         [SerializeField] [Min(1)] private int minimumSurfaceVoxelCountToSplit = 8;
         [SerializeField] private bool skipReduction;

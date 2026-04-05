@@ -13,8 +13,11 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - shell
   - canopy
   - impostor
+  - far mesh
   - foliage
   - BRG
+  - indirect
+  - RenderMeshIndirect
   - classification
   - LOD
   - spatial grid

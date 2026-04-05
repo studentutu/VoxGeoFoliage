@@ -70,9 +70,9 @@
   - persist each hierarchy into its own authoring array,
   - continue using reduction/fallback only after real voxel generation.
 - `VegetationEditorPreview` must pick the tier-specific hierarchy directly:
-  - `R0` and `ShellL0Only` use `shellNodesL0`,
-  - `R1` and `ShellL1Only` use `shellNodesL1` plus `shellL1WoodMesh`,
-  - `R2` and `ShellL2Only` use `shellNodesL2` plus `shellL2WoodMesh`.
+  - runtime `L1` and `ShellL1Only` use `shellNodesL0`,
+  - runtime `L2` and `ShellL2Only` use `shellNodesL1` plus `shellL1WoodMesh`,
+  - runtime `L3` and `ShellL3Only` use `shellNodesL2` plus `shellL2WoodMesh`.
 - `VegetationAuthoringValidator` and triangle summary code must validate and count each hierarchy independently instead of assuming one shared node tree.
 - Update [Milestone1.md](C:/Users/admin/Documents/UnityProjects/VoxGeoFol/DetailedDocs/Milestone1.md), [UnityAssembledVegetation_FULL.md](C:/Users/admin/Documents/UnityProjects/VoxGeoFol/DetailedDocs/UnityAssembledVegetation_FULL.md), [progress.md](C:/Users/admin/Documents/UnityProjects/VoxGeoFol/memorybank/progress.md), and [projectrules.md](C:/Users/admin/Documents/UnityProjects/VoxGeoFol/memorybank/projectrules.md) so they describe canonical `L0` plus compact `L1/L2` hierarchies and the global strict-bounds rule for leaves, branch wood, and impostor baking.
 
@@ -89,7 +89,7 @@
 - Add a compaction regression:
   - `shellNodesL1.Length <= shellNodesL0.Length`,
   - `shellNodesL2.Length <= shellNodesL1.Length` on the representative separated-cluster fixture.
-- Update preview tests so `ShellL1Only` and `ShellL2Only` instantiate from the tier-specific hierarchy arrays, not from `L0` leaves.
+- Update preview tests so `ShellL1Only`, `ShellL2Only`, and `ShellL3Only` instantiate from the tier-specific hierarchy arrays, not from one shared leaf set.
 - Keep existing monotonic validation, but apply it at tier totals:
   - total `L0` shell triangles > total `L1` shell triangles > total `L2` shell triangles.
 - Verification target after edits:

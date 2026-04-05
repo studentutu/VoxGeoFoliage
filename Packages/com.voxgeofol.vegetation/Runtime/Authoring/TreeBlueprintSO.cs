@@ -12,6 +12,7 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
     public sealed class TreeBlueprintSO : ScriptableObject
     {
         [SerializeField] private Mesh? trunkMesh;
+        [SerializeField] private Mesh? trunkL3Mesh;
         [SerializeField] private Material? trunkMaterial;
         [SerializeField] private BranchPlacement[] branches = Array.Empty<BranchPlacement>();
         [SerializeField] private string generatedImpostorMeshesRelativeFolder = string.Empty;
@@ -23,6 +24,8 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
 
         public Mesh? TrunkMesh => trunkMesh;
 
+        public Mesh? TrunkL3Mesh => trunkL3Mesh;
+
         public Material? TrunkMaterial => trunkMaterial;
 
         public BranchPlacement[] Branches => branches;
@@ -32,7 +35,8 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         public Mesh? ImpostorMesh => impostorMesh;
 
         public Material? ImpostorMaterial => impostorMaterial;
-        public ImpostorBakeSettings ImposterSettings => ImposterBakeSettings?? new ImpostorBakeSettings();
+
+        public ImpostorBakeSettings ImposterSettings => ImposterBakeSettings ?? new ImpostorBakeSettings();
 
         public LODProfileSO? LodProfile => lodProfile;
 

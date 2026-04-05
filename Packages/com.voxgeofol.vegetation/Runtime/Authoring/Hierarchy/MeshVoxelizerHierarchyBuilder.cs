@@ -325,6 +325,7 @@ namespace MeshVoxelizerProject
 
         private static MeshVoxelizerHierarchyNode[] FlattenHierarchy(HierarchyTreeNode root, int shellLevel)
         {
+            // Range: root must be non-null. Condition: MVP flattening uses BFS so immediate children occupy one contiguous block; this favors simple hybrid decode before the later DFS/subtree-span upgrade. Output: one flattened hierarchy array for the selected authored shell tier.
             List<HierarchyTreeNode> orderedNodes = new List<HierarchyTreeNode>();
             List<int> parentIndices = new List<int>();
             Dictionary<HierarchyTreeNode, int> nodeIndices = new Dictionary<HierarchyTreeNode, int>();

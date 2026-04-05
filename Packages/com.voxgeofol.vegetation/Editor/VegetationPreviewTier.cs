@@ -7,12 +7,13 @@ namespace VoxGeoFol.Features.Vegetation.Editor
     /// </summary>
     public enum VegetationPreviewTier
     {
-        R0Full = 0,
-        R1ShellL1 = 1,
-        R2ShellL2 = 2,
-        R3Impostor = 3,
-        ShellL0Only = 4,
+        L0 = 0,
+        L1 = 1,
+        L2 = 2,
+        L3 = 3,
+        Impostor = 4,
         ShellL1Only = 5,
-        ShellL2Only = 6
+        ShellL2Only = 6,
+        ShellL3Only = 7
     }
 }

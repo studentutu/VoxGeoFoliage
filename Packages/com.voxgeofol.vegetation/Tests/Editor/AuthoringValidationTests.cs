@@ -125,7 +125,7 @@ public sealed class AuthoringValidationTests
 
         VegetationValidationResult result = prototype.Validate();
 
-        AssertHasError(result, "firstChildIndex must point to a later preorder node");
+        AssertHasError(result, "firstChildIndex must point to a later node index in the flattened hierarchy");
     }
 
     [Test]
@@ -162,6 +162,17 @@ public sealed class AuthoringValidationTests
     }
 
     [Test]
+    public void TreeBlueprint_NullTrunkL3_FailsValidation()
+    {
+        TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
+        SetPrivateField(blueprint, "trunkL3Mesh", null);
+
+        VegetationValidationResult result = blueprint.Validate();
+
+        AssertHasError(result, "trunkL3Mesh is required.");
+    }
+
+    [Test]
     public void TreeBlueprint_EmptyBranches_FailsValidation()
     {
         TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
@@ -173,16 +184,16 @@ public sealed class AuthoringValidationTests
     }
 
     [Test]
-    public void TreeBlueprint_LODThresholds_MonotonicallyDecreasing()
+    public void TreeBlueprint_LODDistances_MonotonicallyIncreasing()
     {
         TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
         LODProfileSO lodProfile = CreateValidLodProfile();
-        SetPrivateField(lodProfile, "shellL0MinProjectedArea", 0.25f);
+        SetPrivateField(lodProfile, "l2Distance", 10f);
         SetPrivateField(blueprint, "lodProfile", lodProfile);
 
         VegetationValidationResult result = blueprint.Validate();
 
-        AssertHasError(result, "LOD thresholds must strictly decrease");
+        AssertHasError(result, "LOD distances must strictly increase");
     }
 
     [Test]
@@ -194,6 +205,17 @@ public sealed class AuthoringValidationTests
         VegetationValidationResult result = blueprint.Validate();
 
         AssertHasError(result, "treeBounds must fully contain trunkMesh and every placed branch localBounds.");
+    }
+
+    [Test]
+    public void TreeBlueprint_TrunkL3BoundsStayInsideTrunkBounds()
+    {
+        TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
+        SetPrivateField(blueprint, "trunkL3Mesh", CreateMesh("OversizedTrunkL3", 4, new Bounds(Vector3.zero, new Vector3(4f, 8f, 4f))));
+
+        VegetationValidationResult result = blueprint.Validate();
+
+        AssertHasError(result, "trunkL3Mesh bounds must stay inside trunkMesh bounds.");
     }
 
     [Test]
@@ -270,6 +292,7 @@ public sealed class AuthoringValidationTests
         BranchPlacement placement = new BranchPlacement();
         LODProfileSO lodProfile = CreateValidLodProfile();
         Mesh trunkMesh = CreateMesh("TrunkMesh", 8, new Bounds(Vector3.zero, new Vector3(2f, 6f, 2f)));
+        Mesh trunkL3Mesh = CreateMesh("TrunkL3Mesh", 4, new Bounds(Vector3.zero, new Vector3(1.25f, 5f, 1.25f)));
         Material trunkMaterial = CreateOpaqueMaterial("TrunkMaterial");
 
         SetPrivateField(placement, "prototype", prototype);
@@ -278,6 +301,7 @@ public sealed class AuthoringValidationTests
         SetPrivateField(placement, "scale", scale);
 
         SetPrivateField(blueprint, "trunkMesh", trunkMesh);
+        SetPrivateField(blueprint, "trunkL3Mesh", trunkL3Mesh);
         SetPrivateField(blueprint, "trunkMaterial", trunkMaterial);
         SetPrivateField(blueprint, "branches", new[] { placement });
         SetPrivateField(blueprint, "lodProfile", lodProfile);
@@ -295,14 +319,12 @@ public sealed class AuthoringValidationTests
     private LODProfileSO CreateValidLodProfile()
     {
         LODProfileSO lodProfile = CreateScriptableObject<LODProfileSO>();
-        SetPrivateField(lodProfile, "r0MinProjectedArea", 0.5f);
-        SetPrivateField(lodProfile, "r1MinProjectedArea", 0.25f);
-        SetPrivateField(lodProfile, "shellL0MinProjectedArea", 0.12f);
-        SetPrivateField(lodProfile, "shellL1MinProjectedArea", 0.06f);
-        SetPrivateField(lodProfile, "shellL2MinProjectedArea", 0.02f);
-        SetPrivateField(lodProfile, "absoluteCullProjectedMin", 0.005f);
-        SetPrivateField(lodProfile, "backsideBiasScale", 0.2f);
-        SetPrivateField(lodProfile, "silhouetteKeepThreshold", 0.8f);
+        SetPrivateField(lodProfile, "l0Distance", 5f);
+        SetPrivateField(lodProfile, "l1Distance", 15f);
+        SetPrivateField(lodProfile, "l2Distance", 30f);
+        SetPrivateField(lodProfile, "l3Distance", 60f);
+        SetPrivateField(lodProfile, "impostorDistance", 120f);
+        SetPrivateField(lodProfile, "absoluteCullDistance", 200f);
         return lodProfile;
     }
 

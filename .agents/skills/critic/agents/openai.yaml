@@ -1,0 +1,4 @@
+interface:
+  display_name: "Critic"
+  short_description: "Production design review and alternative analysis"
+  default_prompt: "Use $critic to review this design for production readiness and recommend a stronger combined approach."

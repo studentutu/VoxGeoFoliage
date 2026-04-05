@@ -12,11 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cdf8f2ed4c768fd4ba52a2e181c27385, type: 3}
   m_Name: VegetationLODProfile
   m_EditorClassIdentifier: Vegetation::VoxGeoFol.Features.Vegetation.Authoring.LODProfileSO
-  r0MinProjectedArea: 0.4
-  r1MinProjectedArea: 0.2
-  shellL0MinProjectedArea: 0.1
-  shellL1MinProjectedArea: 0.05
-  shellL2MinProjectedArea: 0.02
-  absoluteCullProjectedMin: 0.005
-  backsideBiasScale: 0.3
-  silhouetteKeepThreshold: 0.7
+  l0Distance: 5
+  l1Distance: 15
+  l2Distance: 30
+  l3Distance: 60
+  impostorDistance: 120
+  absoluteCullDistance: 10000

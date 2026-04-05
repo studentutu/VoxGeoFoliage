@@ -1,44 +1,30 @@
-# Unity Assembled Vegetation System — Full End-to-End Plan (Branch-Shell Architecture)
+# Unity Assembled Vegetation System - Full End-to-End Plan
 
 ## 0. Purpose
 
-This document defines a production-ready architecture for a **high-performance vegetation system in Unity 6.3 (URP)** inspired by Unreal Engine 5.7 foliage innovations (Assemblies, voxelized LOD, and hierarchical wind animation).
+This document defines the production target inspired by Unreal Engine 5.7 foliage innovations (Assemblies, voxelized LOD, and hierarchical wind animation) for a high-performance vegetation system in Unity 6 URP.
 
 The system is designed to:
-- Maximize **geometry reuse** (branch-based assembly)
-- Minimize **CPU overhead** via GPU-driven rendering
-- Preserve **canopy mass and silhouette at distance**
-- Scale to **millions of instances**
-- Integrate cleanly with **URP Forward+**
-- remove usage of Masked transparent material on foliage (only opaque rendering)
+- scale to millions of whole-tree instances
+- preserve as much visible detail as possible near the camera
+- simplify aggressively everywhere else
+- reconstruct exact surviving branch and shell parts from a persisted hierarchy
+- extend URP directly instead of relying on Unity `LODGroup`
+- render through indirect draws grouped by exact mesh/material slots
 
-With following constraints:
-- No Nanite (currently no Unity equivalent)
-- Uses **fully reduced geometry at all stages**
-- Uses **branch assembly reuse**
-- Uses **multi-level canopy shells**
-- canopy shell levels are first-class runtime representation tiers
-- Uses **single-pass GPU classification (LOD + Occlusion + Draw emission)**
-- All runtime geometry is reduced geometry
-- No transparency
-- No masked / alpha-tested materials
-- Opaque rendering only
+Hard constraints:
+- no transparency, opaque-only rendering, transparency will break tile-based rendering on mobiles/handheld devices.
+- no alpha clip
+- no billboards or cards
+- no `BatchRendererGroup`
+- no Unity `LODGroup`
+- no `MaterialPropertyBlock`
+- latest generated meshes always persist, even when validation marks them invalid
 - Impostors are not billboards or cards, very simple mesh
 - Far-distance fallback is a simplified plain opaque mesh (front facing only)
 - Wind is hierarchical and representation-dependent
-- LOD + Occlusion + Draw emission are fused into a single GPU compute dispatch per frame
 
-This system is intended to reproduce the performance behavior of modern large-scale foliage renderers inside Unity’s actual rendering constraints, rather than copying UE/Nanite literally.
-
-Core principles:
-- Opaque-only rendering (no transparency, no alpha test), transparency will break tile-based rendering on mobiles/handheld devices.
-- Reduced geometry at all levels (no Nanite equivalent)
-- Branch-based assembly with reusable modules
-- Branch-attached canopy shells (L0/L1/L2)
-- Single GPU compute pass for LOD + occlusion + draw emission
-- SRP Batcher–friendly via scale control and shared assets
-- For color variation prefer (BRG) to keep SRP-friendly batching.  
-- do not use MaterialPropertyBlock! For per instance variation prefer to use new Unity API Renderer Shader User Value (RSUV) with a single 'uint' as a packed custom 32-bit integer per renderer for all variation data (required DOTS Instancing shader support). This preserves SRP-friendly batching.
+The runtime backend is `Graphics.RenderMeshIndirect` driven from a URP renderer feature. This does not mean one literal draw call for the whole vegetation system. It means one vegetation submission path built from multiple indirect calls, each bound to one exact mesh/material slot.
 
 ---
 
@@ -46,441 +32,475 @@ Core principles:
 
 ## 1.1 High-Level Pipeline
 
-Authoring → Baking → Runtime (Gather/Switch LOD) → GPU Classification → Indirect Rendering
+Authoring -> Bake -> CPU/GPU cell visibility (prefer GPU for MVP when feasible) -> GPU tree classification -> GPU branch and hierarchy survival evaluation -> CPU/GPU survivor decode (prefer GPU for MVP when feasible, otherwise use non-blocking CPU fallback) -> CPU upload of indirect args and visible instance data -> optional URP indirect depth pass -> URP indirect color pass
 
-## 1.2 Core Rules
+## 1.2 MVP Runtime Decode Model
 
-- No transparency or masked materials
-- No transparency billboards (onlu opque very simplified front-sided geometry)
-- Far representation = simplified opaque mesh
-- Geometry always reduced
-- Single compute dispatch per frame
-- Branch reuse everywhere
+Milestone 1 uses a temporary hybrid decode path:
+- GPU applies coarse visibility, LOD rules, and hierarchy survival decisions.
+- GPU-side frontier decode is preferred for MVP when it can be kept simple and stable.
+- CPU fallback reads back compact survival records only through completed non-blocking async results.
+- CPU fallback decodes the persisted BFS hierarchy into exact visible mesh-part draws.
+- CPU uploads final per-draw-slot instance lists and indirect args.
+- URP renders those lists via `RenderMeshIndirect`.
+
+This is an MVP compromise. After MVP, the intended direction is to move from BFS plus simple hybrid decode to DFS preorder plus subtree spans and push the final decode fully onto the GPU.
+
+## 1.3 Core Rules
+
+- All runtime geometry is opaque.
+- `L0` is the full source branch representation and is only allowed very near the camera.
+- Runtime shell tiers are `L1`, `L2`, and `L3`.
+- Current authored shell arrays map as:
+  - runtime `L1` -> authored `shellNodesL0`
+  - runtime `L2` -> authored `shellNodesL1`
+  - runtime `L3` -> authored `shellNodesL2`
+- Far trees render one coarse opaque far mesh (`impostorMesh`), no separate trunk (one mesh combines all branches/trunk/leaves into a somewhat true-shape bounded geometry imposter).
+- Trunk stays full for runtime `L0` and `L1`, then switches to simplified `trunkL3Mesh` for runtime `L2`, `L3`, and the far mesh path.
+- Runtime uses the latest baked meshes even if validation marks them invalid. Invalid state is diagnostic, not a rollback trigger.
 
 ---
 
 # 2. Representation Model
 
-## 2.1 Hierarchy
+## 2.1 Tree-Level Runtime Modes
 
-| Tier | Representation |
-|------|----------------|
-| R0 | trunk + branch shells L0 |
-| R1 | trunk + branch shells L1/L2 |
-| R2 | shells only |
-| R3 | far opaque mesh |
+| Mode | Meaning |
+|------|---------|
+| Culled | Tree rejected before draw emission |
+| Expanded | Tree expands into trunk plus branch-driven canopy parts |
+| Impostor | Tree emits one coarse opaque far mesh |
 
-## 2.2 Tree Composition
+Only surviving near and mid trees enter `Expanded`. Far trees stay as one far mesh.
 
-Authoritative form: `Tree = Trunk + Σ (BranchPlacement -> BranchPrototype -> Full (editor authoring)/ Properly culled (runtime) BranchShellNodeHierarchy)`
+## 2.2 Expanded-Tree Part Tiers
 
-### Branch Reconstruction Rule
+| Runtime Tier | Canopy Representation | Branch Wood Representation | Trunk Representation |
+|--------------|------------------------|----------------------------|----------------------|
+| `L0` | Source branch `foliageMesh` at branch-placement granularity | Source branch `woodMesh` | Full `trunkMesh` |
+| `L1` | Surviving frontier from authored `shellNodesL0` | Source branch `woodMesh` where needed beside the shell frontier | Full `trunkMesh` |
+| `L2` | Surviving frontier from authored `shellNodesL1` | `shellL1WoodMesh` | Simplified `trunkL3Mesh` |
+| `L3` | Surviving frontier from authored `shellNodesL2` | `shellL2WoodMesh` | Simplified `trunkL3Mesh` |
 
-- `BranchPrototypeSO.shellNodesL0` is the canonical canopy ownership hierarchy for a branch.
-- `BranchPrototypeSO.shellNodesL1` and `BranchPrototypeSO.shellNodesL2` are separately persisted compact hierarchies derived from owned `L0` occupancy.
-- Branch reconstruction always starts at the hierarchy root and traverses downward; it does not start from a pre-pruned leaf frontier.
-- Parent node bounds are tested first. If a parent node is rejected, its descendants are rejected without further work.
-- A full assembled tree always keeps the full branch hierarchy so branch-local canopy culling can happen early, before per-node mesh emission.
+Notes:
+- `L0` is branch-placement granularity because the source asset contract stores one reusable source branch, not source geometry split by shell node.
+- `L1/L2/L3` use hierarchy-frontier granularity, so only surviving node meshes are emitted.
+- `Impostor` is tree-level only. It does not expand into branch parts.
 
+## 2.3 `LODProfileSO` Authority
+
+`LODProfileSO` owns the authored distance bands per species.
+
+Expected authored thresholds:
+- `l0Distance`
+- `l1Distance`
+- `l2Distance`
+- `l3Distance`
+- `impostorDistance`
+- `absoluteCullDistance`
+
+Rules:
+- distance bands are monotonically increasing
+- `l0Distance < l1Distance < l2Distance < l3Distance < impostorDistance < absoluteCullDistance`
+- `l0Distance` is the very-near source-geometry band and is typically under 5 meters for that species
+- part-distance tests use the nearest point on the authoritative branch or node bounds
+
+## 2.4 Tree Composition and Branch Reconstruction
+
+Authoritative form:
+
+```text
+Tree
+  = trunk
+  + Sum(BranchPlacement -> BranchPrototype -> source branch OR shell frontier)
+```
+
+Branch reconstruction rules:
+- `BranchPrototypeSO.shellNodesL0` is the canonical ownership and split hierarchy.
+- `shellNodesL1` and `shellNodesL2` are separately persisted compact hierarchies derived from owned `L0` occupancy.
+- Runtime `L1` uses `shellNodesL0`, runtime `L2` uses `shellNodesL1`, and runtime `L3` uses `shellNodesL2`.
+- Branch reconstruction always starts at the hierarchy root and traverses downward.
+- Parent bounds are tested before descendants.
+- If a branch placement enters runtime `L0`, emit the source branch meshes and skip shell frontier emission for that branch in that frame.
+- If a branch placement enters runtime `L1/L2/L3`, choose exactly one hierarchy tier for that branch in that frame and emit the surviving frontier from that tier.
+
+## 2.5 MVP BFS Hierarchy Contract
+
+The persisted shell arrays are currently treated as BFS-flattened hierarchies for MVP decode.
+
+Required invariants:
+- root node is always index `0`
+- immediate children of a node occupy one contiguous block starting at `firstChildIndex`
+- `childMask` stores the octant occupancy bits for that immediate child block
+- children are ordered in ascending octant-bit order inside that block
+- child depth is always parent depth + 1
+- child bounds always stay inside parent bounds
+- node `localBounds` always contain the emitted mesh bounds for that node
+
+This is enough for MVP survivor decode, including the GPU-preferred path and the CPU fallback.
+
+It is not enough for efficient subtree skipping at scale. After MVP, switch to DFS preorder plus subtree spans.
+
+## 2.6 Rendering Stack
+
+- Unity 6 URP Forward+
+- compute shaders for tree classification, branch decisions, and hierarchy survival decisions
+- hybrid CPU/GPU survivor decode for MVP with GPU preferred and non-blocking CPU fallback
+- `Graphics.RenderMeshIndirect`
+- per-draw-slot indirect args and visible instance buffers
+- URP renderer feature for depth and color pass integration
 
 ---
-
-## 2.3 Rendering Stack
-
-- Unity 6.3
-- URP Forward+
-- Opaque materials only
-- Compute shader classification
-- BatchRendererGroup and/or RenderMeshIndirect
-- StructuredBuffer / RWStructuredBuffer / AppendStructuredBuffer
-- Indirect draw arguments
-
----
-
-## 2.4 URP Configuration
-
-Required:
-- Forward+
-- SRP Batcher ON
-- Opaque-only simple lit shaders
-- Compute shaders enabled
-- Depth texture and depth pyramid support for occlusion
-- Avoid material features that force expensive divergence
-
-Recommended:
-- no per-instance material variants unless packed into instance data
-- minimize keyword explosion
-- avoid unnecessary passes
-- keep simple lit shaders tightly specialized (remove normals from canopy shell material)
-
-## 2.5 Performance Strategy
-
-The core performance strategy is:
-
-1. Opaque-only everything
-   - maximize depth rejection
-   - stabilize occlusion
-   - reduce overdraw
-   - limit branch scale variability to pre-defined progressively smaller number of scale factors (SRP batching explicitly requires the same scaling)
-
-2. Reduce geometry early
-   - especially backside and interior mass
-
-3. Use shells as primary budget representations
-   - not just distant fallbacks
-
-4. Use a very cheap far opaque mesh
-   - not a textured billboard
-
-5. Single GPU classification dispatch
-   - unify LOD + occlusion + draw emission
-
-6. Hierarchical wind
-   - cost decreases with representation simplification
 
 # 3. Canopy Shell System
 
 ## 3.1 Definition
 
-Branch-local opaque volumetric mesh representing foliage mass.
+Branch-local opaque volumetric canopy meshes persisted as tier-specific hierarchies.
 
-## 3.2 Generation
+## 3.2 Adaptive Hierarchical Shell Architecture
 
-Per branch prototype:
-1. Reduced geometry input
-2. Voxel/SDF density
-3. Extract L0/L1/L2
-4. Simplify
-5. Store
+The authored shell model is:
 
-## 3.3 Material
-
-- Fully opaque
-- Soft diffuse shading
-- Stable normals
-
-## 3.4 Hierarchical Sub-Branch Canopy Shells
-
-### Problem with Fixed L0/L1/L2
-
-The original MVP shell path used 3 fixed shell meshes per branch prototype (`shellL0Mesh`, `shellL1Mesh`, `shellL2Mesh`). That breaks down for large branches:
-
-- A large branch may have foliage clusters at very different distances from the camera
-- One shell chain for the whole branch forces the entire branch to stay detailed or simplify together
-- Low-resolution shells become visibly cubic if they are baked from a single coarse branch-wide volume
-
-### Adaptive Hierarchical Shell Architecture
-
-The implemented authoring path replaces the fixed branch-wide shell chain with an adaptive octree:
-
-```
+```text
 BranchPrototypeSO
   -> BranchShellNode[] shellNodesL0
   -> BranchShellNode[] shellNodesL1
   -> BranchShellNode[] shellNodesL2
-
-BranchShellNode:
-  - Bounds localBounds
-  - int depth
-  - int firstChildIndex
-  - byte childMask
-  - Mesh shellLxMesh
 ```
 
-`shellNodesL0` is the canonical split/ownership tree. `shellNodesL1` and `shellNodesL2` are compact trees baked from owned `L0` occupancy at their authored resolutions. Parent and child shell nodes remain mutually exclusive at render time, but each tier now keeps its own persisted traversal tree.
+Each `BranchShellNode` stores:
+- local bounds
+- hierarchy topology (`firstChildIndex`, `childMask`)
+- one emitted mesh for that authored tier
 
-### Hierarchical Bake Pipeline
+Authored mapping to runtime:
+- authored `shellNodesL0` -> runtime `L1`
+- authored `shellNodesL1` -> runtime `L2`
+- authored `shellNodesL2` -> runtime `L3`
 
-Current production authoring path (`2026-03-30`):
+## 3.3 Current Hierarchical Bake Pipeline
 
-1. Voxelize the readable branch foliage mesh at canonical `L0`
-2. Use `L0` surface occupancy to split the branch bounds into octant shell nodes
-3. Emit bounded `L0` meshes for the canonical ownership hierarchy
-4. Derive compact `L1` and `L2` hierarchies by re-voxelizing owned `L0` occupancy into coarse node-local volumes
-5. Persist the three hierarchies on `BranchPrototypeSO.shellNodesL0/shellNodesL1/shellNodesL2`
-6. Run one coarse CPU voxel surface extraction on the merged tree-space assembly for the far impostor
+Per branch prototype:
+1. Read the source foliage mesh.
+2. Build one canonical `L0` voxel occupancy field.
+3. Split into canonical authored `L0` ownership nodes using owned surface occupancy.
+4. Emit bounded authored `L0` meshes for canonical nodes.
+5. Re-voxelize owned authored `L0` occupancy into coarse node-local volumes for authored `L1` and authored `L2`.
+6. Persist `shellNodesL0`, `shellNodesL1`, and `shellNodesL2`.
+7. Bake `shellL1WoodMesh` and `shellL2WoodMesh`.
+8. Bake one coarse far mesh from the full assembled tree.
 
-### Runtime / GPU Extension
+## 3.4 Runtime Use of the Shell Hierarchy
 
-The runtime-facing full version should flatten the same hierarchy:
+At runtime:
+- tree classification decides whether the tree stays `Impostor` or expands
+- expanded trees enqueue branch work items
+- each branch work item chooses runtime `L0`, `L1`, `L2`, or `L3`
+- shell-mode branches evaluate the chosen hierarchy
+- GPU writes compact survival decisions
+- survivor decode reconstructs the visible frontier from those decisions, preferably on GPU and otherwise through the non-blocking CPU fallback, then emits exact visible frontier meshes by draw slot
 
-```
-BranchPrototypeGPU:
-  - uint shellNodeCountL0
-  - uint shellNodeDataStartIndexL0
-  - uint shellNodeCountL1
-  - uint shellNodeDataStartIndexL1
-  - uint shellNodeCountL2
-  - uint shellNodeDataStartIndexL2
+This is the core reason the hierarchy exists: exact visible parts can be emitted independently, instead of forcing one mesh choice for the whole branch.
 
-BranchShellNodeData:
-  - float3 localCenter
-  - float3 localExtents
-  - uint firstChildIndex
-  - uint childMask
-  - uint shellMeshIndex
-```
+## 3.5 Invalid Output Policy
 
-GPU classification then evaluates shell-node AABBs instead of one branch-wide shell AABB. Full-tree reconstruction keeps all three persisted hierarchies alive for every branch instance, picks the hierarchy that matches the selected shell tier, and performs early culling on parent shell-node bounds before visiting children. The surviving nodes form the active frontier inside the chosen `L0`, `L1`, or `L2` hierarchy for that branch instance.
+Generated meshes are not discarded when they miss budgets.
 
-### Benefits
+Required behavior:
+- persist the latest generated shell, branch-wood, `trunkL3Mesh`, and far-mesh outputs
+- mark the owning authoring asset invalid through validation
+- keep the latest generated meshes wired for preview and runtime
+- do not silently restore the previous valid bake
 
-- **Gradual detail reduction**: nearby crown lobes stay detailed while distant lobes simplify
-- **Better continuity**: `L0` comes from a solid canonical field instead of a fragile surface-only shell extraction
-- **Less blockiness**: `L1/L2` are rebuilt from owned `L0` occupancy instead of reusing identical `L0` cells
-- **Reduced overdraw**: shell nodes can be culled or simplified independently
-
-### Legacy MVP Simplification
-
-The old single-cell MVP shell model is now a legacy authoring path. It has been removed from the current editor bake and validation flow in favor of the adaptive `BranchShellNode[]` hierarchy.
-
-## 3.5 Wind
-
-- Low frequency
-- Mass motion only
+Invalid state means "current bake needs follow-up", not "runtime must revert".
 
 ---
 
 # 4. Authoring Workflow
 
-## 4.1 Tree Assembly/ Branch Creation
-- Modular opaque foliage chunks
-- Reuse branches with transforms
+## 4.1 Tree Assembly / Branch Creation
 
-Trees are not authored as single final meshes.
-
-They are authored as:
+Trees are authored as:
 
 ```text
-Tree = trunk + reusable branch modules + reduced branch sets + shell chain + far opaque mesh
+Tree = trunk + reusable branch placements + generated shell hierarchies + generated far mesh
 ```
 
-Every authored asset must preserve the system constraints:
-- opaque-only
-- reduced-only
-- no billboard dependence
-- no alpha-leaf assumptions
-- minimized number of unique scaled branches (approximate same branch to the nearest usable scale)
+Authoring constraints:
+- opaque-only source materials
+- readable source meshes
+- reusable branch modules
+- bounded generated output
 
----
+## 4.2 Baking Outputs
 
-## 4.2 Baking
-- R0/R1 reduction
-- Shell L0/L1/L2 per branch
-- Far mesh
+Required baked outputs:
+- `shellNodesL0`
+- `shellNodesL1`
+- `shellNodesL2`
+- `shellL1WoodMesh`
+- `shellL2WoodMesh`
+- `trunkL3Mesh`
+- far mesh (`impostorMesh`)
 
-## 4.3 Canopy shell chain baking
+## 4.3 Simplified Trunk for `L3`
 
-Bake:
-- shell L0
-- shell L1
-- shell L2
+Runtime `L3` requires a separate simplified trunk mesh.
 
-### Baking pipeline
-1. Build aggregate canopy occupancy from branch set
-2. Voxelize or field-sample canopy mass
-3. Extract shell candidates at different density thresholds
-4. Simplify while preserving silhouette and dominant crown lobes
-5. Compute bounds and metadata
-6. Export levels
+Rules:
+- generate `trunkL3Mesh` from `trunkMesh`
+- use the same bounded reduction policy used elsewhere
+- keep it inside authoritative trunk bounds
+- make it materially cheaper than the full `trunkMesh`
 
-## 4.4  Far opaque mesh baking
+## 4.4 Far Mesh Baking
 
-This is critical.
+The far mesh is a coarse opaque tree-space mesh built from:
+- trunk mesh
+- all placed branch wood meshes
+- all placed branch foliage meshes
 
-Generate a plain opaque far mesh from the full assembled tree source:
+Rules:
 - no cards
 - no billboards
 - no alpha-based impostor
-
-The far mesh should:
 - preserve gross crown silhouette
-- preserve trunk anchor if visible
-- minimize triangle count aggressively
-- be stable under lighting and wind
-
-Recommended generation:
-1. Reconstruct one temporary tree-space mesh from `trunkMesh` + all placed branch `woodMesh` + `foliageMesh`
-2. Voxelize that source at a deliberately crude size `4`
-3. Emit the direct voxel surface as the far mesh
-4. Keep normals stable for simple opaque shading
-
-
-## 4.5 Validation
-- No alpha
-- Proper silhouette
-- Shell continuity
+- preserve trunk anchor when visible
+- minimize triangles aggressively
 
 ---
-
-## 4.6 Editor preview modes
-
-The editor must support previewing each runtime representation:
-- R0 + shell L0
-- R1 + shell L1-L2
-- shell L0
-- shell L1
-- shell L2
-- far opaque mesh
-
-And each wind mode:
-- R0 branch wind
-- R1 reduced wind
-- shell sway
-- far mesh motion
 
 # 5. Runtime System
 
-## 5.1 Data
+## 5.1 Runtime Work Units
 
-- Tree instances
-- Branch instances
-- Prototypes
-- Shell levels
-- Visible records
+The runtime must not treat "one tree thread does everything" as the final model.
+
+Required staged work:
+1. tree-level coarse visibility (`CPU` or `GPU`, prefer `GPU` when feasible)
+2. tree-level mode selection (`Culled`, `Expanded`, `Impostor`)
+3. branch-level tier selection (`L0/L1/L2/L3`)
+4. hierarchy survival decisions for shell tiers
+5. survivor decode (`GPU` preferred, `CPU` non-blocking fallback)
+6. per-draw-slot indirect submission
+
+## 5.2 Exact Runtime Node and Survival Payloads
+
+MVP decode requires two explicit decision contracts.
+
+### `BranchShellNodeRuntimeBfs`
+
+```text
+- float3 localCenter
+- float3 localExtents
+- uint firstChildIndex
+- uint childMask
+- uint shellDrawSlot
+```
+
+Meaning:
+- `firstChildIndex` points to the start of the contiguous immediate-child block
+- `childMask` defines which octants exist in that block
+- `shellDrawSlot` is the exact mesh/material slot for that node mesh in the active authored hierarchy
+
+### `BranchDecisionGPU`
+
+```text
+- uint treeIndex
+- uint branchPlacementIndex
+- uint runtimeTier        // L0, L1, L2, L3
+```
+
+### `NodeDecisionGPU`
+
+```text
+- uint treeIndex
+- uint branchPlacementIndex
+- uint runtimeTier        // L1, L2, L3 only
+- uint nodeIndex
+- uint decision           // Reject, EmitSelf, ExpandChildren
+```
+
+GPU or CPU fallback uses `BranchDecisionGPU` and `NodeDecisionGPU` to reconstruct the final visible frontier.
+
+## 5.3 Why BFS Is Acceptable For MVP
+
+BFS is acceptable for MVP because the decode path is still intentionally simple, whether the frontier is reconstructed by a temporary GPU queue or by the non-blocking CPU fallback after GPU rules are applied.
+
+MVP BFS strengths:
+- easy immediate-child lookup from `firstChildIndex + childMask`
+- simple queue-based decode on GPU or CPU
+- no need for subtree spans yet
+
+MVP BFS weaknesses:
+- no cheap subtree skipping
+- weaker cache locality for deep traversal
+- not a good final shape for fully GPU-driven traversal
+
+After MVP, migrate to DFS preorder with subtree spans.
 
 ---
 
-# 6. GPU Pipeline
+# 6. GPU and CPU Decode Pipeline
 
-Single compute pass:
+## 6.1 Frame Stages
 
-- Frustum culling
-- Occlusion
-- LOD selection
-- Shell selection
-- Emit visible records
-- Build indirect args
+Per frame:
+1. CPU or GPU updates coarse cell visibility, with GPU preferred when feasible
+2. GPU clears counters and staging buffers
+3. GPU classifies trees into `Culled`, `Expanded`, or `Impostor`
+4. GPU emits one far-mesh instance record for `Impostor` trees
+5. GPU emits one `BranchDecisionGPU` record for each surviving expanded branch placement
+6. GPU emits `NodeDecisionGPU` records for shell-tier branches
+7. GPU decodes the surviving frontier directly when feasible; otherwise CPU consumes the latest completed non-blocking readback of compact decision buffers
+8. CPU uploads per-draw-slot instance data and indirect args from GPU-decoded lists or from the CPU fallback decode result
+10. URP renders indirect depth and color passes
 
-## 6.1 Example classification pseudocode
+## 6.2 Example Tree Classification Pseudocode
 
 ```hlsl
-[numthreads(64,1,1)]
-void ClassifyVegetation(uint id : SV_DispatchThreadID)
+[numthreads(64, 1, 1)]
+void ClassifyTrees(uint id : SV_DispatchThreadID)
 {
     TreeInstanceGPU tree = _TreeInstances[id];
-    TreeRuntimeStaticGPU treeStatic = _TreeStatic[id];
     LODProfileGPU lod = _LODProfiles[tree.lodProfileIndex];
 
     if (!CellVisible(tree.cellIndex))
         return;
 
-    float projectedArea = ComputeProjectedArea(tree, treeStatic);
-    if (projectedArea < _AbsoluteCullProjectedMin)
+    float treeDistance = DistanceToTreeBounds(tree, _CameraPosition);
+    if (treeDistance > lod.absoluteCullDistance)
         return;
 
-    float occlusionConfidence = EstimateOcclusion(tree, treeStatic);
-    if (occlusionConfidence <= _HardOcclusionReject)
+    if (treeDistance >= lod.impostorDistance)
+    {
+        EmitImpostorTree(tree);
         return;
+    }
 
-    float silhouetteImportance = EvaluateSilhouetteImportance(tree, treeStatic);
-    float backsidePenalty = EvaluateBacksidePenalty(tree, treeStatic);
-    float shadowValue = EvaluateShadowValue(tree, treeStatic);
-
-    uint representationType;
-    uint shellLevel;
-    float lodFade;
-
-    SelectRepresentation(
-        projectedArea,
-        occlusionConfidence,
-        silhouetteImportance,
-        backsidePenalty,
-        shadowValue,
-        lod,
-        representationType,
-        shellLevel,
-        lodFade);
-
-    VisibleVegetationRecord record =
-        BuildVisibleRecord(tree, treeStatic, representationType, shellLevel, lodFade, occlusionConfidence);
-
-    uint visibleIndex = WriteVisibleRecord(record);
-
-    EmitToCompactedList(representationType, shellLevel, visibleIndex);
-    IncrementIndirectCounter(representationType, shellLevel, treeStatic, record.meshVariantIndex);
+    EmitExpandedTree(tree);
 }
 ```
 
-## 6.2 Representation selector example
+## 6.3 Example Branch Tier Selection Pseudocode
 
 ```hlsl
-void SelectRepresentation(
-    float projectedArea,
-    float occlusionConfidence,
-    float silhouetteImportance,
-    float backsidePenalty,
-    float shadowValue,
-    LODProfileGPU lod,
-    out uint representationType,
-    out uint shellLevel,
-    out float lodFade)
+[numthreads(64, 1, 1)]
+void ClassifyBranches(uint id : SV_DispatchThreadID)
 {
-    float r0Score =
-        projectedArea * 0.45 +
-        silhouetteImportance * 0.35 +
-        shadowValue * 0.20 -
-        backsidePenalty * lod.backsideBiasScale;
+    ExpandedTreeGPU expanded = _ExpandedTrees[id];
+    TreeBlueprintGPU blueprint = _TreeBlueprints[expanded.blueprintIndex];
+    LODProfileGPU lod = _LODProfiles[blueprint.lodProfileIndex];
 
-    if (r0Score > lod.silhouetteKeepThreshold &&
-        projectedArea > lod.r0MinProjectedArea)
+    for each branch placement in blueprint
     {
-        representationType = 0; // R0
-        shellLevel = 0;
-        lodFade = 0;
-        return;
+        float branchDistance = DistanceToBranchBounds(expanded, branchPlacement, _CameraPosition);
+
+        if (branchDistance < lod.l0Distance)
+        {
+            EmitBranchDecision(expanded, branchPlacement, TierL0);
+            continue;
+        }
+
+        if (branchDistance < lod.l1Distance)
+        {
+            EmitBranchDecision(expanded, branchPlacement, TierL1);
+            continue;
+        }
+
+        if (branchDistance < lod.l2Distance)
+        {
+            EmitBranchDecision(expanded, branchPlacement, TierL2);
+            continue;
+        }
+
+        EmitBranchDecision(expanded, branchPlacement, TierL3);
     }
-
-    if (projectedArea > lod.r1MinProjectedArea)
-    {
-        representationType = 1; // R1
-        shellLevel = 0;
-        lodFade = 0;
-        return;
-    }
-
-    representationType = 2; // shell
-    lodFade = 0;
-
-    if (projectedArea > lod.shellL0MinProjectedArea)
-    {
-        shellLevel = 0;
-        return;
-    }
-
-    if (projectedArea > lod.shellL1MinProjectedArea)
-    {
-        shellLevel = 1;
-        return;
-    }
-
-    if (projectedArea > lod.shellL2MinProjectedArea)
-    {
-        shellLevel = 2;
-        return;
-    }
-
-    representationType = 3; // far mesh
-    shellLevel = 0;
 }
 ```
+
+## 6.4 Example Shell Hierarchy Survival Pseudocode
+
+```hlsl
+[numthreads(64, 1, 1)]
+void EvaluateHierarchyNodes(uint id : SV_DispatchThreadID)
+{
+    BranchDecisionGPU branch = _BranchDecisions[id];
+    if (branch.runtimeTier == TierL0)
+        return;
+
+    uint nodeIndex = 0; // root of selected BFS hierarchy
+    Queue<uint> frontier;
+    frontier.Push(nodeIndex);
+
+    while (frontier.NotEmpty())
+    {
+        uint current = frontier.Pop();
+        NodeDecision decision = EvaluateNodeDecision(branch, current);
+        EmitNodeDecision(branch, current, decision);
+
+        if (decision == ExpandChildren)
+        {
+            PushImmediateChildren(frontier, current);
+        }
+    }
+}
+```
+
+## 6.5 Hybrid Survivor Decode
+
+Hybrid decode is the authoritative MVP reconstruction step.
+
+For each `BranchDecisionGPU`:
+- if runtime tier is `L0`, emit source branch `woodMesh + foliageMesh`
+- if runtime tier is `L1`, decode `shellNodesL0`
+- if runtime tier is `L2`, decode `shellNodesL1`
+- if runtime tier is `L3`, decode `shellNodesL2`
+
+For each `NodeDecisionGPU`:
+- `Reject` -> stop on that node
+- `EmitSelf` -> add that node's `shellDrawSlot` to the per-draw-slot visible list
+- `ExpandChildren` -> enqueue the node's contiguous immediate-child block using BFS contract
+
+Preferred MVP path:
+- decode the visible frontier on GPU and append final per-draw-slot visible instance data directly
+
+CPU fallback path:
+- read back compact decision buffers through completed non-blocking async results
+- decode the visible frontier on CPU from the same BFS contract
+
+After survivor decode:
+- emit full or simplified trunk draw for the tree
+- group all visible instances by exact mesh/material draw slot
+- upload instance transforms and indirect args
+- render one indirect call per draw slot
 
 ---
 
 # 7. GPU Buffer Layout
 
-## 7.1 Buffers
+## 7.1 Static Buffers
 
-- TreeInstances
-- BranchInstances
-- BranchPrototypes
-- ShellLevels
-- VisibleRecords
-- IndirectArgs
+- `TreeInstances`
+- `TreeBlueprints`
+- `BranchPlacements`
+- `BranchPrototypes`
+- `BranchShellNodesL0`
+- `BranchShellNodesL1`
+- `BranchShellNodesL2`
 
-## 7.2 Flow
+## 7.2 Per-Frame Staging Buffers
 
-Tree → Branch → Prototype → Shell → Mesh
+- `ExpandedTrees`
+- `BranchDecisions`
+- `NodeDecisions`
+- decoded visible instance lists per draw slot (`GPU` preferred, `CPU` fallback)
+- indirect argument buffers per draw slot
+
+## 7.3 Flow
+
+Tree -> Expanded or Impostor -> BranchDecision -> NodeDecision -> CPU/GPU BFS decode -> DrawSlot -> Indirect call
 
 ---
 
@@ -488,101 +508,103 @@ Tree → Branch → Prototype → Shell → Mesh
 
 ## 8.1 Draw Groups
 
-- R0
-- R1
-- Shell L0/L1/L2
-- Far mesh
+| Group | Mesh Source | Shader |
+|------|-------------|--------|
+| TrunkFull | `TreeBlueprintSO.trunkMesh` | `VegetationTrunkLit` |
+| TrunkL3 | `TreeBlueprintSO.trunkL3Mesh` | `VegetationTrunkLit` |
+| BranchWoodL0 | `BranchPrototypeSO.woodMesh` | `VegetationTrunkLit` |
+| BranchFoliageL0 | `BranchPrototypeSO.foliageMesh` | `VegetationCanopyLit` |
+| BranchWoodL1 | `BranchPrototypeSO.woodMesh` | `VegetationTrunkLit` |
+| BranchWoodL2 | `BranchPrototypeSO.shellL1WoodMesh` | `VegetationTrunkLit` |
+| BranchWoodL3 | `BranchPrototypeSO.shellL2WoodMesh` | `VegetationTrunkLit` |
+| ShellL1 | `BranchPrototypeSO.shellNodesL0[*]` | `VegetationCanopyLit` |
+| ShellL2 | `BranchPrototypeSO.shellNodesL1[*]` | `VegetationCanopyLit` |
+| ShellL3 | `BranchPrototypeSO.shellNodesL2[*]` | `VegetationCanopyLit` |
+| Impostor | `TreeBlueprintSO.impostorMesh` | `VegetationFarMeshLit` |
 
 ## 8.2 Shaders
 
-- Opaque only
-- Stable lighting
-- Wind tiers
-
-### Branch shader
+`VegetationCanopyLit.shader`
 - opaque only
-- reduced geometry only
-- limited wind
-- branch/trunk shading
+- no normal map
+- no emission
+- RSUV-driven canopy tint
 
-### Shell shader
+`VegetationTrunkLit.shader`
 - opaque only
-- density-preserving canopy shading
-- low-frequency wind
-- stable normals
+- albedo texture allowed
+- no normal map
+- no emission
 
-### Far mesh shader
+`VegetationFarMeshLit.shader`
 - opaque only
-- very stable shading
-- minimal wind
-- imposter camera-facing
+- no billboard rotation
+- stable simple shading
+
+## 8.3 URP Integration
+
+`VegetationRendererFeature` owns:
+- compute dispatch ordering
+- optional non-blocking `AsyncGPUReadback` scheduling for the CPU fallback path
+- indirect args upload
+- indirect depth pass
+- indirect color pass
+
+The renderer feature is the rendering integration point. It is not a BRG wrapper.
 
 ---
 
-# 9. Wind System
+# 9. Developer Verification
 
-| Tier | Wind |
-|------|------|
-| R0 | branch motion |
-| R1 | reduced |
-| Shell | sway |
-| Far | minimal |
+Milestone 1 should not add a large new runtime test plan yet. It must add strong developer-side verification for the hybrid decode path.
 
----
-
-# 10. Deferred Optimization: Scale Quantization
-
-## Rule
-
-Scale must be discrete or fixed per branch (to generate shell levels with 1 scale per branch).
-
-Preferred:
-scale = 1.0
-
-Alternative:
-{0.75, 1.0, 1.25}
+Required developer verification:
+- dump one flattened hierarchy per tier and confirm:
+  - root at index `0`
+  - contiguous child block starts at `firstChildIndex`
+  - child block order matches ascending octant bits in `childMask`
+  - child depth is parent depth + 1
+  - child bounds stay inside parent bounds
+  - mesh bounds stay inside node `localBounds`
+- log one frame of `BranchDecisionGPU` output and verify selected runtime tiers match authored distances
+- log one frame of `NodeDecisionGPU` output and verify the CPU-decoded frontier matches the emitted shell nodes for that camera position
+- compare per-draw-slot decoded instance counts against uploaded indirect args
+- verify the GPU decode path produces the same visible frontier as the CPU fallback on one captured frame
+- if CPU fallback is active, verify its readback path stays non-blocking and only consumes completed async results
+- verify `L0` only appears inside the authored near band
+- verify `Impostor` only appears once tree distance reaches the impostor band
+- verify invalid generated meshes still render, while validation marks the asset invalid in tooling
 
 ---
 
-# 11. Tasks Breakdown
+# 10. Deferred Optimization
 
-## Phase 1
-- Data structures
-- Core buffers
-
-## Phase 2
-- Authoring tools
-- Baking tools
-
-## Phase 3
-- GPU classification
-
-## Phase 4
-- Rendering integration
-
-## Phase 5
-- Optimization + validation
+Deferred items:
+- DFS preorder plus subtree spans
+- fully GPU-driven frontier decode
+- HiZ depth pyramid occlusion
+- dithered transitions
+- hierarchical wind refinement
+- scale quantization
+- streaming and dynamic loading
 
 ---
 
-# 12. Validation
+# 11. Conclusion
 
-Must ensure:
-- No transparency
-- Stable LOD transitions
-- Proper batching
-- Controlled triangle count
+This system targets large-scale vegetation in Unity by combining:
+- reusable authored branches
+- bounded baked shell hierarchies
+- GPU visibility and hierarchy survival decisions
+- hybrid CPU/GPU BFS decode for MVP with GPU preferred
+- exact per-draw-slot indirect submission
 
----
-
-# 13. Conclusion
-
-This system achieves scalable vegetation rendering in Unity by:
-
-- replacing leaf geometry with opaque volumes
-- using branch-attached shells
-- enforcing batching constraints
-- using a single GPU pass
+The runtime authority is now:
+- runtime `L0/L1/L2/L3 + Impostor`
+- authored shell arrays shifted into runtime `L1/L2/L3`
+- BFS hierarchy flattening for MVP
+- hybrid survivor decode before indirect submission, with GPU preferred and non-blocking CPU fallback
+- multiple indirect calls grouped by exact mesh/material slots, not one literal draw call
 
 ---
 

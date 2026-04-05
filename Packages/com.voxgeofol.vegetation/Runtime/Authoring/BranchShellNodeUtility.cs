@@ -35,7 +35,7 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         /// </summary>
         public static List<BranchShellNode> CollectLeafNodes(BranchShellNode[]? shellNodes)
         {
-            // Range: accepts null or empty node arrays. Condition: node hierarchy uses preorder child storage. Output: all nodes that should render on the active leaf frontier.
+            // Range: accepts null or empty node arrays. Condition: MVP hierarchy flattening stores immediate children in BFS-contiguous child blocks. Output: all nodes that should render on the active leaf frontier.
             List<BranchShellNode> leafNodes = new List<BranchShellNode>();
             if (shellNodes == null || shellNodes.Length == 0)
             {

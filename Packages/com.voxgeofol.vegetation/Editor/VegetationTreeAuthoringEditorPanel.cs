@@ -93,13 +93,14 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     EditorGUILayout.LabelField("Branch Count", summary.BranchCount.ToString());
                     EditorGUILayout.LabelField("Tree Bounds Center", summary.TreeBounds.center.ToString("F3"));
                     EditorGUILayout.LabelField("Tree Bounds Size", summary.TreeBounds.size.ToString("F3"));
-                    DrawTriangleLabel("R0 Full", summary.R0Triangles);
-                    DrawTriangleLabel("R1 ShellL1", summary.R1Triangles);
-                    DrawTriangleLabel("R2 ShellL2", summary.R2Triangles);
-                    DrawTriangleLabel("R3 Impostor", summary.R3Triangles);
-                    DrawTriangleLabel("ShellL0 Only", summary.ShellL0OnlyTriangles);
+                    DrawTriangleLabel("L0", summary.L0Triangles);
+                    DrawTriangleLabel("L1", summary.L1Triangles);
+                    DrawTriangleLabel("L2", summary.L2Triangles);
+                    DrawTriangleLabel("L3", summary.L3Triangles);
+                    DrawTriangleLabel("Impostor", summary.ImpostorTriangles);
                     DrawTriangleLabel("ShellL1 Only", summary.ShellL1OnlyTriangles);
                     DrawTriangleLabel("ShellL2 Only", summary.ShellL2OnlyTriangles);
+                    DrawTriangleLabel("ShellL3 Only", summary.ShellL3OnlyTriangles);
                 }
                 catch (Exception exception)
                 {

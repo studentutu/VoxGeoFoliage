@@ -5,35 +5,29 @@ using UnityEngine;
 namespace VoxGeoFol.Features.Vegetation.Authoring
 {
     /// <summary>
-    /// Immutable projected-area thresholds for vegetation tier selection.
+    /// Immutable authored distance bands for vegetation tier selection.
     /// </summary>
     [CreateAssetMenu(fileName = "VegetationLODProfile", menuName = "VoxGeoFol/Vegetation/LOD Profile")]
     public sealed class LODProfileSO : ScriptableObject
     {
-        [SerializeField] private float r0MinProjectedArea = 0.4f;
-        [SerializeField] private float r1MinProjectedArea = 0.2f;
-        [SerializeField] private float shellL0MinProjectedArea = 0.1f;
-        [SerializeField] private float shellL1MinProjectedArea = 0.05f;
-        [SerializeField] private float shellL2MinProjectedArea = 0.02f;
-        [SerializeField] private float absoluteCullProjectedMin = 0.005f;
-        [SerializeField] private float backsideBiasScale = 0.3f;
-        [SerializeField] private float silhouetteKeepThreshold = 0.7f;
+        [SerializeField] [Min(0.01f)] private float l0Distance = 5f;
+        [SerializeField] [Min(0.01f)] private float l1Distance = 15f;
+        [SerializeField] [Min(0.01f)] private float l2Distance = 30f;
+        [SerializeField] [Min(0.01f)] private float l3Distance = 60f;
+        [SerializeField] [Min(0.01f)] private float impostorDistance = 120f;
+        [SerializeField] [Min(0.01f)] private float absoluteCullDistance = 10_000f;
 
-        public float R0MinProjectedArea => r0MinProjectedArea;
+        public float L0Distance => l0Distance;
 
-        public float R1MinProjectedArea => r1MinProjectedArea;
+        public float L1Distance => l1Distance;
 
-        public float ShellL0MinProjectedArea => shellL0MinProjectedArea;
+        public float L2Distance => l2Distance;
 
-        public float ShellL1MinProjectedArea => shellL1MinProjectedArea;
+        public float L3Distance => l3Distance;
 
-        public float ShellL2MinProjectedArea => shellL2MinProjectedArea;
+        public float ImpostorDistance => impostorDistance;
 
-        public float AbsoluteCullProjectedMin => absoluteCullProjectedMin;
-
-        public float BacksideBiasScale => backsideBiasScale;
-
-        public float SilhouetteKeepThreshold => silhouetteKeepThreshold;
+        public float AbsoluteCullDistance => absoluteCullDistance;
 
         /// <summary>
         /// [INTEGRATION] Validates this LOD profile before runtime buffer flattening consumes it.

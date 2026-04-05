@@ -16,35 +16,42 @@ Authority: [Milestone1.md](../DetailedDocs/Milestone1.md)
 - Unity `MeshLodUtility` fallback root-cause handling is now in place: vegetation fallback and local demo scripts rebuild the LOD input mesh with explicit `SetTriangles` index buffers before calling `MeshLodUtility`, still skip unsupported meshes cleanly when needed, and log warnings instead of surfacing Unity errors. Rider MSBuild compile passed on `2026-04-04`.
 - Repo-local simplification inspection tooling is now in place: `Assets/Scripts/CheckVoxelMeshSimplification.cs` can compare an existing source mesh against raw voxel output, reduced voxel output, and Unity `MeshLodUtility` output from the same inspector-driven demo component. Full Unity compile passed on `2026-04-03`.
 - Public package preparation is complete: the vegetation feature now lives in `Packages/com.voxgeofol.vegetation`, distributable demo content ships from `Samples~/Vegetation Demo`, the repo-local mirror remains under `Assets/Tree`, and generated meshes stay in writable `Assets/` space.
+- Architecture authority was reconciled on `2026-04-05`: Milestone 1 now targets URP plus `Graphics.RenderMeshIndirect`, runtime `L0/L1/L2/L3 + Impostor`, hybrid `CPU/GPU` cell visibility and survivor decode with GPU preferred, non-blocking CPU fallback when used, and persisted-invalid generated meshes.
+- Authoring contract alignment landed on `2026-04-05`: `LODProfileSO` now uses authored distance bands, `TreeBlueprintSO` now exposes `trunkL3Mesh`, validator bounds checks now cover simplified wood/trunk/impostor meshes, and preview/summary naming now matches runtime `L0/L1/L2/L3/Impostor`.
 
 ## Open Tasks
 
+### Phase B / C Alignment Follow-up
+- [ ] Add `trunkL3Mesh` generation and persistence so the authored outputs fully match the current runtime contract.
+
 ### Phase C Follow-up Verification and Tuning
-- [ ] Run manual in-Editor visual verification for `R0Full`, `R1ShellL1`, `R2ShellL2`, `ShellL0Only`, `ShellL1Only`, `ShellL2Only`, and `R3Impostor` on the real demo assets.
+- [ ] Run manual in-Editor visual verification for runtime `L0`, `L1`, `L2`, `L3`, shell-only views, and `Impostor` on the real demo assets.
 - [ ] Compare baked `L1/L2` compact hierarchies against the `branch_leaves_quadcards` reference assets to judge silhouette retention and canopy mass.
 - [ ] Tune `ShellBakeSettings` and `ImpostorBakeSettings` on the sample assets until validation budgets pass without depending on last-resort `MeshLodUtility` fallback.
 - [ ] Decide whether the compact-tier merge/prune heuristic needs tighter equivalence checks after manual review identifies weak merges.
 - [ ] Rerun the Unity EditMode vegetation suite once the Unity Editor can be closed for the long runner path.
 
-Current follow-up focus is verification and tuning, not structure changes. The authoring implementation now uses canonical `L0` ownership, separately persisted compact `L1/L2` hierarchies, and strict authoritative bounds across shell, wood, and impostor generation.
+Current follow-up focus is verification plus runtime-alignment follow-up. The authoring implementation now exposes the runtime naming contract directly, uses authored distance bands, and validates strict authoritative bounds across shell, wood, simplified trunk, and impostor meshes; the remaining mismatch is `trunkL3Mesh` generation/persistence and the hybrid runtime path with GPU-preferred visibility/decode plus CPU fallback.
 
 
 
-### Phase D: Spatial Grid + CPU Classification
+### Phase D: Spatial Grid + MVP Visibility/Decode Mirror
 - [ ] Implement `VegetationSpatialGrid`
-- [ ] Implement `VegetationClassifier` (CPU mirror)
-- [ ] Mirror tree-blueprint expansion into branch draw-slot selection
+- [ ] Implement the MVP visibility path with GPU-preferred design and CPU fallback for tree-level `Culled` / `Expanded` / `Impostor` selection
+- [ ] Mirror branch tier selection into runtime `L0/L1/L2/L3`
+- [ ] Mirror BFS survivor decode into exact source-branch or shell-frontier draw-slot selection, with GPU preferred and non-blocking CPU fallback
 - [ ] Write spatial grid EditMode tests
 - [ ] Write classification EditMode tests
 - [ ] Compile check + run tests
 
-### Phase E: GPU Pipeline (Shaders + BRG + Renderer Feature)
-- [ ] Implement `VegetationClassify.compute`
+### Phase E: GPU Pipeline (Indirect Rendering + Renderer Feature)
+- [ ] Implement `VegetationClassify.compute` tree-classify, branch-tier, and node-decision kernels
 - [ ] Implement `VegetationCanopyLit.shader`
 - [ ] Implement `VegetationTrunkLit.shader`
-- [ ] Implement `VegetationImpostorLit.shader`
+- [ ] Implement `VegetationFarMeshLit.shader`
 - [ ] Implement `VegetationDepthOnly.shader`
-- [ ] Implement `VegetationBRGManager` with per-blueprint / per-prototype draw-slot registry
+- [ ] Implement `VegetationIndirectRenderer` with per-slot indirect draw registry and visible-instance buffers
+- [ ] Implement GPU survivor decode when feasible, with the non-blocking CPU fallback bridge from GPU decision buffers into final indirect args
 - [ ] Implement `VegetationRendererFeature` + `VegetationRenderPass`
 - [ ] Implement `VegetationRuntimeManager` with GPU static-buffer flattening
 - [ ] End-to-end manual test in a demo scene
