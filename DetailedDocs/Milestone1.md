@@ -47,6 +47,7 @@ The authoritative Milestone 1 runtime contract is now:
 - runtime branch tier classification uses one per-placement bounding sphere with exact sphere-surface distance:
   - `distance = max(0, length(cameraWorldPosition - sphereCenterWorld) - sphereRadiusWorld)`
 - runtime shell-node visibility still uses authored node bounds
+- current Phase D shell-node rule is conservative and explicit: visible internal nodes `ExpandChildren`, visible leaves `EmitSelf`, and nodes outside the frustum `Reject`; finer intra-tier collapse is deferred
 - indirect submission uses scene-wide per exact draw slot and must rebuild `RenderMeshIndirect` `worldBounds` from visible data; fixed whole-scene bounds are forbidden in Milestone 1
 
 Any older BRG wording or tree-wide `R0/R1/R2/R3` runtime wording is obsolete.
@@ -482,6 +483,24 @@ Required gate checklist done:
 
 ---
 
+## Phase D Completion Update (`2026-04-09`)
+
+Phase D landed with the following concrete implementation:
+- frozen runtime contracts for draw slots, flattened blueprints/prototypes/scene branches, BFS shell-node caches, branch decisions, node decisions, indirect-arg seeds, and per-slot visible-instance outputs
+- `VegetationSpatialGrid` deterministic tree-to-cell registration with conservative resident cell bounds
+- `VegetationRuntimeRegistryBuilder` / `VegetationRuntimeRegistry` flattening from scene authoring into runtime caches without reading editor-only fields
+- `VegetationCpuReferenceEvaluator` plus `VegetationDecisionDecoder` for deterministic tree classification, branch tiers, shell-node decisions, trunk selection, BFS decode, and per-slot visible bounds
+- `VegetationRuntimeManager` orchestration and runtime tree-index assignment
+- `VegetationGpuDecisionPipeline` plus `VegetationClassify.compute` as the current GPU parity hook against the same contracts
+- EditMode coverage for registration, CPU decode, and GPU parity entry conditions
+
+Validation status:
+- `Fully Compile by Unity` succeeded on `2026-04-09`
+- Unity EditMode tests passed on `2026-04-09`
+- current batch-mode Unity environment imports `VegetationClassify.compute` without exposing the expected kernels, so the GPU parity test is intentionally ignored there and the runtime GPU hook throws explicit `NotSupportedException` instead of pretending GPU success
+
+---
+
 ## Implementation Order
 
 ### Phase A: Foundation [DONE]
@@ -506,7 +525,7 @@ Required gate checklist done:
 2. Reconcile real sample assets with the current validator and preview contract
 3. Freeze the runtime bounds and submission contracts before runtime implementation starts
 
-### Phase D: Spatial Grid + Runtime Data Foundation
+### Phase D: Spatial Grid + Runtime Data Foundation [DONE]
 
 1. `D1` Freeze the runtime-side data contracts that Phase D owns:
    - flattened tree/tree-blueprint/branch-placement/prototype payloads
@@ -544,6 +563,9 @@ Required gate checklist done:
    - classification/decode parity checks between CPU mirror and GPU path
    - frame-capture logging for branch decisions, node decisions, and per-slot counts
 8. `D8` Compile check + targeted manual verification
+
+Current caveat:
+- the compute shader parity hook exists and is wired, but Unity batch-mode currently imports the shader without exposing its kernels; Phase E must investigate that environment issue while replacing the parity hook with the real renderer-facing GPU bridge
 
 ### Phase E: Hybrid Decode Rendering Pipeline
 

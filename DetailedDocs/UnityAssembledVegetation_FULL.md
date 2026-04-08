@@ -306,6 +306,12 @@ At runtime:
 - GPU writes compact survival decisions
 - survivor decode reconstructs the visible frontier from those decisions on GPU by default and otherwise only through the temporary non-blocking CPU fallback path, then emits exact visible frontier meshes by draw slot
 
+Current Phase D decision rule:
+- nodes outside the frustum are `Reject`
+- visible internal nodes are `ExpandChildren`
+- only visible leaves are `EmitSelf`
+- finer intra-tier screen-size collapse is deferred until after the current MVP foundation
+
 This is the core reason the hierarchy exists: exact visible parts can be emitted independently, instead of forcing one mesh choice for the whole branch.
 
 ## 3.6 Invalid Output Policy
@@ -577,6 +583,11 @@ void EvaluateHierarchyNodes(uint id : SV_DispatchThreadID)
 }
 ```
 
+Current Phase D implementation keeps this rule deterministic:
+- `Reject` when the node AABB is outside the frustum
+- `ExpandChildren` for visible nodes that still have children
+- `EmitSelf` only for visible leaves
+
 ## 6.5 Hybrid Survivor Decode
 
 Hybrid decode is the authoritative MVP reconstruction step.
@@ -707,6 +718,7 @@ Required developer verification:
 - verify `L0` only appears inside the authored near band
 - verify `Impostor` only appears once tree distance reaches the impostor band
 - verify invalid generated meshes still render, while validation marks the asset invalid in tooling
+- if Unity imports `VegetationClassify.compute` without exposing the expected kernels, fail explicitly and skip GPU parity verification instead of silently faking GPU success
 
 ---
 

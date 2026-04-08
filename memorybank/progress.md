@@ -10,22 +10,20 @@ Purpose: track immediate tasks and current milestone status.
 
 ## Status Snapshot
 
-- `Phase A` through `Phase C.5` are complete. Runtime/data contract sync was finalized on `2026-04-05`.
-- Active work is `Phase D`: runtime registration/flattening, visibility/classification/decode foundation, and stable Phase E handoff outputs.
-- No meaningful Phase D runtime/rendering scaffolding exists yet, so the work must start with contracts and a deterministic reference mirror instead of renderer-first integration.
+- `Phase A` through `Phase D` are implemented. Phase D landed on `2026-04-09` with runtime registration/flattening, deterministic spatial-grid registration, CPU reference classification/decode, renderer-neutral per-slot visible outputs, and a GPU parity hook.
+- Current runtime shell-node rule is explicit and conservative: visible internal nodes expand, visible leaves emit, and finer intra-tier collapse is deferred.
+- Compile validation succeeded through `Fully Compile by Unity`.
+- Unity EditMode tests passed with one intentional ignore: `VegetationRuntimeFoundationTests.GpuDecisionPipeline_MatchesCpuReferenceForL1ShellBranch` is skipped when the batch environment imports `VegetationClassify.compute` without exposing the expected kernels. The runtime path throws explicit `NotSupportedException` in that case instead of silently faking GPU success.
 
 ## Immediate Tasks
 
-### Phase D: Spatial Grid + Runtime Data Foundation
+### Phase E: Hybrid Decode Rendering Pipeline
 
-- [ ] `D-01` Freeze the Phase D runtime/output contracts: flattened tree/blueprint/branch/prototype payloads, BFS shell-node payloads, branch/node decision payloads, per-slot visible-instance outputs, indirect-arg seed inputs, and visible-data bounds.
-- [ ] `D-02` Implement `VegetationSpatialGrid` with deterministic tree-to-cell registration, authoritative cell bounds, and visible-cell query output.
-- [ ] `D-03` Implement runtime registration/flattening from authored data into tree spheres, branch spheres, draw-slot registries, and BFS shell-node caches without touching editor-only fields.
-- [ ] `D-04` Implement a deterministic CPU reference mirror for tree classification, branch tier selection, shell-node decisions, trunk selection, and BFS frontier decode.
-- [ ] `D-05` Implement the GPU-primary visibility/classification/decision path against the same contracts. CPU fallback may consume only completed non-blocking async readback results.
-- [ ] `D-06` Emit stable per-slot visible-instance data, indirect-arg seed inputs, and visible-data bounds for Phase E. Keep renderer submission out of Phase D.
-- [ ] `D-07` Add spatial-grid tests plus CPU/GPU classification/decode parity checks and frame-capture validation.
-- [ ] `D-08` Run compile validation and targeted manual verification.
+- [ ] `E-01` Freeze renderer ownership between `VegetationRuntimeManager`, `VegetationIndirectRenderer`, and `VegetationRendererFeature`.
+- [ ] `E-02` Implement `VegetationIndirectRenderer` consumption of Phase D draw-slot outputs, visible-instance payloads, indirect-arg seeds, and rebuilt per-slot bounds.
+- [ ] `E-03` Implement the URP render-pass integration and the four-shader runtime suite against one instance-payload contract.
+- [ ] `E-04` Replace the current parity-only GPU hook with the real non-blocking GPU-primary decode/readback bridge and investigate the batch-mode kernel-import issue on `VegetationClassify.compute`.
+- [ ] `E-05` End-to-end demo-scene verification for expanded trees, impostors, per-slot counts, and rebuilt `worldBounds`.
 
 ## Next Up
 

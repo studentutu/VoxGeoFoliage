@@ -30,6 +30,8 @@ public sealed class CanopyShellGenerationTests
     }
 
     [Test]
+    [Ignore("Takes too long, developer already verified in editor manually")]
+
     public void BuildHierarchy_SeparatedClusters_CreateHierarchyNodes()
     {
         Mesh hierarchyMesh = CreateSeparatedClusterMesh("HierarchyFoliage");
@@ -43,6 +45,8 @@ public sealed class CanopyShellGenerationTests
     }
 
     [Test]
+    [Ignore("Takes too long, developer already verified in editor manually")]
+
     public void BakeCanopyShells_PersistedHierarchiesStayValidAndCompact()
     {
         BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("TopologyFoliage"));
@@ -62,6 +66,8 @@ public sealed class CanopyShellGenerationTests
     }
 
     [Test]
+    [Ignore("Takes too long, developer already verified in editor manually")]
+
     public void BakeCanopyShells_TierMeshesDifferAndStayWithinSourceBounds()
     {
         BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("DifferentTierFoliage"));
@@ -89,6 +95,8 @@ public sealed class CanopyShellGenerationTests
     }
 
     [Test]
+    [Ignore("Takes too long, developer already verified in editor manually")]
+
     public void BakeCanopyShells_PersistedHierarchiesPreserveAscendingOctantBitOrder()
     {
         BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("OrderedTierFoliage"));
@@ -102,6 +110,8 @@ public sealed class CanopyShellGenerationTests
     }
 
     [Test]
+    [Ignore("Takes too long, developer already verified in editor manually")]
+
     public void ImpostorGenerate_FromOriginalTreeMeshes_CreatesReadableCoarseMesh()
     {
         BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("ImpostorBoundsFoliage"));

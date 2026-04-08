@@ -1,0 +1,339 @@
+#pragma kernel ClassifyCells
+#pragma kernel ClassifyTrees
+#pragma kernel ClassifyBranchesAndNodes
+
+struct CellGpu
+{
+    float3 center;
+    float padding0;
+    float3 extents;
+    float padding1;
+};
+
+struct LodProfileGpu
+{
+    float l0Distance;
+    float l1Distance;
+    float l2Distance;
+    float impostorDistance;
+    float absoluteCullDistance;
+};
+
+struct TreeGpu
+{
+    float3 sphereCenterWorld;
+    float boundingSphereRadius;
+    int cellIndex;
+    int lodProfileIndex;
+    int sceneBranchStartIndex;
+    int sceneBranchCount;
+};
+
+struct BranchGpu
+{
+    int treeIndex;
+    int branchPlacementIndex;
+    int prototypeIndex;
+    int padding0;
+    float3 sphereCenterWorld;
+    float boundingSphereRadius;
+    float4x4 localToWorld;
+    int decisionStartL1;
+    int decisionCountL1;
+    int decisionStartL2;
+    int decisionCountL2;
+    int decisionStartL3;
+    int decisionCountL3;
+    int padding1;
+    int padding2;
+};
+
+struct PrototypeGpu
+{
+    int shellNodeStartIndexL1;
+    int shellNodeCountL1;
+    int shellNodeStartIndexL2;
+    int shellNodeCountL2;
+    int shellNodeStartIndexL3;
+    int shellNodeCountL3;
+};
+
+struct ShellNodeGpu
+{
+    float3 localCenter;
+    float padding0;
+    float3 localExtents;
+    int firstChildIndex;
+    uint childMask;
+    int shellDrawSlot;
+    int padding1;
+    int padding2;
+};
+
+struct BranchDecisionGpu
+{
+    int treeIndex;
+    int branchInstanceIndex;
+    int branchPlacementIndex;
+    int runtimeTier;
+};
+
+struct NodeDecisionGpu
+{
+    int treeIndex;
+    int branchInstanceIndex;
+    int branchPlacementIndex;
+    int runtimeTier;
+    int nodeIndex;
+    int decision;
+};
+
+StructuredBuffer<CellGpu> _Cells;
+StructuredBuffer<LodProfileGpu> _LodProfiles;
+StructuredBuffer<TreeGpu> _Trees;
+StructuredBuffer<BranchGpu> _Branches;
+StructuredBuffer<PrototypeGpu> _Prototypes;
+StructuredBuffer<ShellNodeGpu> _ShellNodesL1;
+StructuredBuffer<ShellNodeGpu> _ShellNodesL2;
+StructuredBuffer<ShellNodeGpu> _ShellNodesL3;
+
+RWStructuredBuffer<uint> _CellVisibility;
+RWStructuredBuffer<int> _TreeModes;
+RWStructuredBuffer<BranchDecisionGpu> _BranchDecisions;
+RWStructuredBuffer<NodeDecisionGpu> _NodeDecisions;
+
+float4 _CameraWorldPosition;
+float4 _FrustumPlanes[6];
+int _CellCount;
+int _TreeCount;
+int _BranchCount;
+int _NodeDecisionCount;
+
+static const int TreeModeCulled = 0;
+static const int TreeModeExpanded = 1;
+static const int TreeModeImpostor = 2;
+static const int BranchTierInactive = -1;
+static const int BranchTierL0 = 0;
+static const int BranchTierL1 = 1;
+static const int BranchTierL2 = 2;
+static const int BranchTierL3 = 3;
+static const int NodeDecisionReject = 0;
+static const int NodeDecisionEmitSelf = 1;
+static const int NodeDecisionExpandChildren = 2;
+
+bool TestFrustumAabb(float3 center, float3 extents)
+{
+    [unroll]
+    for (int planeIndex = 0; planeIndex < 6; planeIndex++)
+    {
+        float3 normal = _FrustumPlanes[planeIndex].xyz;
+        float distance = _FrustumPlanes[planeIndex].w;
+        float projectedRadius = dot(abs(normal), extents);
+        float signedDistance = dot(normal, center) + distance;
+        if (signedDistance + projectedRadius < 0.0f)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+float ComputeSphereSurfaceDistance(float3 centerWorld, float radiusWorld)
+{
+    return max(0.0f, distance(_CameraWorldPosition.xyz, centerWorld) - radiusWorld);
+}
+
+void ComputeWorldBounds(float4x4 localToWorld, float3 localCenter, float3 localExtents, out float3 worldCenter, out float3 worldExtents)
+{
+    worldCenter = mul(localToWorld, float4(localCenter, 1.0f)).xyz;
+
+    float3 worldAxisX = mul(localToWorld, float4(localExtents.x, 0.0f, 0.0f, 0.0f)).xyz;
+    float3 worldAxisY = mul(localToWorld, float4(0.0f, localExtents.y, 0.0f, 0.0f)).xyz;
+    float3 worldAxisZ = mul(localToWorld, float4(0.0f, 0.0f, localExtents.z, 0.0f)).xyz;
+    worldExtents = abs(worldAxisX) + abs(worldAxisY) + abs(worldAxisZ);
+}
+
+void WriteRejectSlice(int branchInstanceIndex, int treeIndex, int branchPlacementIndex, int decisionStart, int decisionCount, int runtimeTier)
+{
+    for (int nodeIndex = 0; nodeIndex < decisionCount; nodeIndex++)
+    {
+        NodeDecisionGpu record;
+        record.treeIndex = treeIndex;
+        record.branchInstanceIndex = branchInstanceIndex;
+        record.branchPlacementIndex = branchPlacementIndex;
+        record.runtimeTier = runtimeTier;
+        record.nodeIndex = nodeIndex;
+        record.decision = NodeDecisionReject;
+        _NodeDecisions[decisionStart + nodeIndex] = record;
+    }
+}
+
+ShellNodeGpu GetShellNodeForTier(int runtimeTier, int shellNodeIndex)
+{
+    if (runtimeTier == BranchTierL1)
+    {
+        return _ShellNodesL1[shellNodeIndex];
+    }
+
+    if (runtimeTier == BranchTierL2)
+    {
+        return _ShellNodesL2[shellNodeIndex];
+    }
+
+    return _ShellNodesL3[shellNodeIndex];
+}
+
+void WriteSelectedSlice(
+    int branchInstanceIndex,
+    int treeIndex,
+    int branchPlacementIndex,
+    int decisionStart,
+    int decisionCount,
+    int runtimeTier,
+    int shellStartIndex,
+    float4x4 localToWorld)
+{
+    for (int nodeIndex = 0; nodeIndex < decisionCount; nodeIndex++)
+    {
+        ShellNodeGpu node = GetShellNodeForTier(runtimeTier, shellStartIndex + nodeIndex);
+        float3 worldCenter;
+        float3 worldExtents;
+        ComputeWorldBounds(localToWorld, node.localCenter, node.localExtents, worldCenter, worldExtents);
+
+        int decision = NodeDecisionReject;
+        if (TestFrustumAabb(worldCenter, worldExtents))
+        {
+            decision = (node.childMask != 0u && node.firstChildIndex >= 0)
+                ? NodeDecisionExpandChildren
+                : NodeDecisionEmitSelf;
+        }
+
+        NodeDecisionGpu record;
+        record.treeIndex = treeIndex;
+        record.branchInstanceIndex = branchInstanceIndex;
+        record.branchPlacementIndex = branchPlacementIndex;
+        record.runtimeTier = runtimeTier;
+        record.nodeIndex = nodeIndex;
+        record.decision = decision;
+        _NodeDecisions[decisionStart + nodeIndex] = record;
+    }
+}
+
+[numthreads(64, 1, 1)]
+void ClassifyCells(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint cellIndex = dispatchThreadId.x;
+    if (cellIndex >= (uint)_CellCount)
+    {
+        return;
+    }
+
+    CellGpu cell = _Cells[cellIndex];
+    _CellVisibility[cellIndex] = TestFrustumAabb(cell.center, cell.extents) ? 1u : 0u;
+}
+
+[numthreads(64, 1, 1)]
+void ClassifyTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint treeIndex = dispatchThreadId.x;
+    if (treeIndex >= (uint)_TreeCount)
+    {
+        return;
+    }
+
+    TreeGpu tree = _Trees[treeIndex];
+    int treeMode = TreeModeCulled;
+    if (tree.cellIndex >= 0 && _CellVisibility[tree.cellIndex] != 0u)
+    {
+        LodProfileGpu lodProfile = _LodProfiles[tree.lodProfileIndex];
+        float treeDistance = ComputeSphereSurfaceDistance(tree.sphereCenterWorld, tree.boundingSphereRadius);
+        if (treeDistance < lodProfile.absoluteCullDistance)
+        {
+            treeMode = treeDistance >= lodProfile.impostorDistance ? TreeModeImpostor : TreeModeExpanded;
+        }
+    }
+
+    _TreeModes[treeIndex] = treeMode;
+}
+
+[numthreads(64, 1, 1)]
+void ClassifyBranchesAndNodes(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint branchInstanceIndex = dispatchThreadId.x;
+    if (branchInstanceIndex >= (uint)_BranchCount)
+    {
+        return;
+    }
+
+    BranchGpu branch = _Branches[branchInstanceIndex];
+    TreeGpu tree = _Trees[branch.treeIndex];
+    int treeMode = _TreeModes[branch.treeIndex];
+
+    WriteRejectSlice(branchInstanceIndex, branch.treeIndex, branch.branchPlacementIndex, branch.decisionStartL1, branch.decisionCountL1, BranchTierL1);
+    WriteRejectSlice(branchInstanceIndex, branch.treeIndex, branch.branchPlacementIndex, branch.decisionStartL2, branch.decisionCountL2, BranchTierL2);
+    WriteRejectSlice(branchInstanceIndex, branch.treeIndex, branch.branchPlacementIndex, branch.decisionStartL3, branch.decisionCountL3, BranchTierL3);
+
+    BranchDecisionGpu branchDecision;
+    branchDecision.treeIndex = branch.treeIndex;
+    branchDecision.branchInstanceIndex = branchInstanceIndex;
+    branchDecision.branchPlacementIndex = branch.branchPlacementIndex;
+    branchDecision.runtimeTier = BranchTierInactive;
+
+    if (treeMode != TreeModeExpanded)
+    {
+        _BranchDecisions[branchInstanceIndex] = branchDecision;
+        return;
+    }
+
+    LodProfileGpu lodProfile = _LodProfiles[tree.lodProfileIndex];
+    float branchDistance = ComputeSphereSurfaceDistance(branch.sphereCenterWorld, branch.boundingSphereRadius);
+    int runtimeTier = branchDistance < lodProfile.l0Distance
+        ? BranchTierL0
+        : branchDistance < lodProfile.l1Distance
+            ? BranchTierL1
+            : branchDistance < lodProfile.l2Distance
+                ? BranchTierL2
+                : BranchTierL3;
+
+    branchDecision.runtimeTier = runtimeTier;
+    _BranchDecisions[branchInstanceIndex] = branchDecision;
+
+    PrototypeGpu prototype = _Prototypes[branch.prototypeIndex];
+    if (runtimeTier == BranchTierL1)
+    {
+        WriteSelectedSlice(
+            branchInstanceIndex,
+            branch.treeIndex,
+            branch.branchPlacementIndex,
+            branch.decisionStartL1,
+            branch.decisionCountL1,
+            BranchTierL1,
+            prototype.shellNodeStartIndexL1,
+            branch.localToWorld);
+    }
+    else if (runtimeTier == BranchTierL2)
+    {
+        WriteSelectedSlice(
+            branchInstanceIndex,
+            branch.treeIndex,
+            branch.branchPlacementIndex,
+            branch.decisionStartL2,
+            branch.decisionCountL2,
+            BranchTierL2,
+            prototype.shellNodeStartIndexL2,
+            branch.localToWorld);
+    }
+    else if (runtimeTier == BranchTierL3)
+    {
+        WriteSelectedSlice(
+            branchInstanceIndex,
+            branch.treeIndex,
+            branch.branchPlacementIndex,
+            branch.decisionStartL3,
+            branch.decisionCountL3,
+            BranchTierL3,
+            prototype.shellNodeStartIndexL3,
+            branch.localToWorld);
+    }
+}

@@ -32,6 +32,8 @@ Repo-used libraries and plugins:
   - embedded public package for the vegetation feature
 - `Packages/com.voxgeofol.vegetation/Runtime`
   - runtime-side authoring data and shared vegetation code, including tier-specific `BranchShellNode` canopy hierarchies persisted as `shellNodesL0`, `shellNodesL1`, and `shellNodesL2`
+  - `Runtime/Rendering/` now holds the Phase D runtime foundation: contracts, runtime flattening, deterministic spatial-grid registration, CPU reference decode, GPU parity hooks, and the renderer-neutral per-slot visible-output handoff for Phase E
+  - `Runtime/Shaders/VegetationClassify.compute` is the Phase D compute entry point used by the GPU decision-path parity hook
   - `MeshVoxelizerV1/` hosts the compatibility hierarchy API plus legacy voxelizer reference/demo code; the hierarchy builder in this folder is now CPU-volume-backed
   - `VoxelizerV2/` hosts the CPU/GPU voxel utilities; the production canopy, generated branch wood, simplified trunk, and impostor bake paths now use the CPU volume + bounded surface mesh path from this folder, including optional coplanar-face reduction through `CpuVoxelSurfaceMeshBuilder`
   - planned runtime rendering authority is `Graphics.RenderMeshIndirect` through `Runtime/Rendering`; current authority docs now describe a GPU-primary MVP path where GPU visibility/classification/survivor decode drive the runtime, CPU fallback is a temporary non-blocking bridge only through completed async results, far trees render one baked `impostorMesh` only, and the active `LODProfileSO` contract is `l0/l1/l2/impostor/absoluteCull`
@@ -80,6 +82,7 @@ Repo-used libraries and plugins:
 - Generated vegetation meshes must be written into project `Assets/` space, never into `Packages/`, so public package installs stay writable.
 - Editor-baked voxel artifacts must be clipped back to authoritative source bounds; this applies to canopy shells, generated branch wood, simplified trunk meshes, and impostor meshes. Persisted shell-node `localBounds` are authored ownership bounds, not mesh-tight bounds.
 - Current vegetation runtime authority docs target indirect rendering plus runtime `L0/L1/L2/L3 + Impostor`, not BRG or one tree-wide runtime tier; the MVP path is GPU-primary, keeps CPU fallback only as a temporary non-blocking bridge through completed async GPU readback results, draws `Impostor` as one baked mesh only, and uses the 5-band `l0/l1/l2/impostor/absoluteCull` LOD contract.
+- Phase D currently keeps shell-tier survival deterministic and conservative: visible internal shell nodes expand, visible leaves emit, and finer intra-tier collapse is deferred.
 - The current scripting toolchain tops out at `LangVersion 9.0`; use block-scoped namespaces, not file-scoped namespaces.
 - Use message-bus or singleton when cross communication is needed (prefer message bus with explicit sender and data).
 - All static runtime classes must have explicit `Reset` method that is invoked once in `EditorPlayModeStaticServicesReset.cs`.
