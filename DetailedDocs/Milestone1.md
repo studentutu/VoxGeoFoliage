@@ -506,21 +506,79 @@ Required gate checklist done:
 2. Reconcile real sample assets with the current validator and preview contract
 3. Freeze the runtime bounds and submission contracts before runtime implementation starts
 
-### Phase D: Spatial Grid + Runtime Data Gather/Decode Path
+### Phase D: Spatial Grid + Runtime Data Foundation
 
-1. Implement `VegetationSpatialGrid`
-2. Implement runtime registration/flattening for tree spheres, per-placement branch spheres, draw-slot registries, and BFS shell-node payloads
-3. Implement the GPU-primary visibility, classification, node-decision, and frontier-decode data path with the temporary non-blocking CPU fallback bridge
-4. Emit the per-slot visible-instance data, indirect-args inputs, and visible-data bounds that Phase E will consume
-5. Compile check + manual verification
+1. `D1` Freeze the runtime-side data contracts that Phase D owns:
+   - flattened tree/tree-blueprint/branch-placement/prototype payloads
+   - BFS shell-node runtime payloads
+   - branch-decision and node-decision payloads
+   - per-slot visible-instance output, indirect-arg seed input, and visible-data bounds payloads for Phase E
+2. `D2` Implement `VegetationSpatialGrid`:
+   - deterministic tree-to-cell registration
+   - authoritative cell bounds and visible-cell query output
+   - no renderer coupling and no occlusion scope creep
+3. `D3` Implement runtime registration/flattening from authored assets:
+   - tree spheres from `treeBounds`
+   - per-placement branch spheres from prototype `localBounds`
+   - exact draw-slot registries
+   - BFS shell-node runtime caches per authored tier
+4. `D4` Implement a deterministic CPU reference mirror for the runtime rules:
+   - tree mode classification (`Culled` / `Expanded` / `Impostor`)
+   - branch tier selection (`L0/L1/L2/L3`)
+   - shell-node decisions (`Reject` / `EmitSelf` / `ExpandChildren`)
+   - trunk selection and BFS frontier decode into per-slot visible-instance outputs
+5. `D5` Implement the GPU-primary visibility/classification/decision path against the same contracts:
+   - visible-cell upload
+   - tree classification
+   - branch tier selection
+   - shell-node decision production
+   - GPU-primary frontier decode or equivalent final visible-list emission
+   - CPU fallback may consume only completed non-blocking async readback results
+6. `D6` Stabilize the Phase E handoff surface:
+   - expose per-slot visible-instance data
+   - expose indirect-args seed inputs
+   - expose per-slot visible-data bounds rebuilt from visible outputs
+   - keep `RenderMeshIndirect` submission out of Phase D
+7. `D7` Add developer verification for Phase D:
+   - spatial-grid EditMode coverage
+   - classification/decode parity checks between CPU mirror and GPU path
+   - frame-capture logging for branch decisions, node decisions, and per-slot counts
+8. `D8` Compile check + targeted manual verification
 
 ### Phase E: Hybrid Decode Rendering Pipeline
 
-1. Implement shaders for canopy, trunk, far-mesh, and depth-only rendering
-2. Implement indirect renderer consumption of the Phase D outputs
-3. Implement renderer feature and render pass integration
-4. End-to-end manual verification in a demo scene
-5. Compile check + manual verification
+1. `E1` Freeze render-side ownership and pass contracts before implementation:
+   - `VegetationIndirectRenderer` owns per-slot visible buffers, indirect args, and visible-data `worldBounds`
+   - `VegetationRendererFeature` owns URP pass scheduling and render-pass integration, not classification authority
+   - `VegetationRuntimeManager` owns scene/runtime wiring and feeds stable Phase D outputs into rendering
+   - fixed whole-scene bounds and BRG-style shortcuts remain forbidden
+2. `E2` Implement the shader suite with one consistent instance-input contract:
+   - `VegetationCanopyLit.shader`
+   - `VegetationTrunkLit.shader`
+   - `VegetationFarMeshLit.shader`
+   - `VegetationDepthOnly.shader`
+   - opaque-only, RSUV-compatible, and no hidden per-shader divergence in instance payload layout
+3. `E3` Implement `VegetationIndirectRenderer` consumption of the Phase D outputs:
+   - exact draw-slot registry consume path
+   - per-slot visible-instance buffer upload
+   - per-slot indirect-args build/final upload
+   - per-slot `worldBounds` rebuild from visible data only
+4. `E4` Implement `VegetationRuntimeManager` runtime/renderer wiring:
+   - scene registration of authored vegetation instances
+   - lifetime/reset of runtime caches and GPU resources
+   - handoff from Phase D visibility/decode outputs into Phase E renderer consumption
+   - no editor-only field access and no bake/preview leakage into runtime
+5. `E5` Implement `VegetationRendererFeature` + `VegetationRenderPass` integration:
+   - frame ordering for Phase D output consumption
+   - indirect depth pass submission
+   - indirect color pass submission
+   - non-blocking CPU fallback handoff only when GPU-primary decode output is unavailable or explicitly disabled
+6. `E6` End-to-end verification in a demo scene:
+   - expanded trees render trunk, branch wood, source foliage, and shell tiers on the correct runtime bands
+   - impostor trees render `impostorMesh` only
+   - per-slot visible counts match uploaded indirect args and rebuilt `worldBounds`
+   - one captured debug frame confirms GPU-primary and CPU-fallback outputs match
+7. `E7` Compile check + manual verification
 
 ---
 
