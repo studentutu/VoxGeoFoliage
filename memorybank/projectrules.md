@@ -18,13 +18,14 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 12. OOP communications to ECS happen through transient request entities, either queued directly by helpers or created by loop-owned bus ingress.
 13. MVC separation for UI remains in effect.
 14. Prefer `Refresh` and `Simulate` naming over `Update` for explicit runtime APIs.
-15. Keep authoring, runtime ECS data, and Unity binding logic separate.
-16. Hot paths should be allocation-aware and follow DRY/SingleResponsibility best practices.
-17. Reusable public-facing features should live in embedded packages under `Packages/`; repo-local-only features can remain under `Assets/Scripts/Features`.
-18. No useless maintenance. Scripts are either completely dropped or fully migrated to new api, no obsolete wrappers!
-19. No useless abstractions, no bloatware.
-20. Avoid constant asset creation and editor refresh in tests! It makes test run multiple times slower!
-21. Avoid constant asset creation if full algorithm is not finished! Create finished asset once but do not refresh editor constantly! Only do AssetDatabase.SaveAssets() once all meshes are created. All operations with AssetDatabase is generally very-very long!
+15. Keep authoring, runtime ECS data, and Unity binding logic separate. 
+16. Separate what should done at edit-mode and runtime.
+17. Hot paths should be allocation-aware and follow DRY/SingleResponsibility best practices.
+18. Reusable public-facing features should live in embedded packages under `Packages/`; repo-local-only features can remain under `Assets/Scripts/Features`.
+19. No useless maintenance. Scripts are either completely dropped or fully migrated to new api, no obsolete wrappers!
+20. No useless abstractions, no bloatware.
+21. Avoid constant asset creation and editor refresh in tests! It makes test run multiple times slower!
+22. Avoid constant asset creation if full algorithm is not finished! Create finished asset once but do not refresh editor constantly! Only do AssetDatabase.SaveAssets() once all meshes are created. All operations with AssetDatabase is generally very-very long!
 
 --
 
@@ -33,7 +34,7 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 1. All vegetation geometry is opaque-only - no transparency, no alpha clip, no masked materials.
 2. Trees are assembled from reusable branch prototypes, not single monolithic meshes.
 3. Canopy shells are hierarchical branch-local voxelized meshes: `BranchPrototypeSO.shellNodesL0` stores the canonical authored L0 bounding ownership tree, while `shellNodesL1` and `shellNodesL2` store compact runtime-authored tiers rebuilt from owned `L0` occupancy at their authored resolutions. Runtime meaning is shifted: authored `shellNodesL0/L1/L2` map to runtime `L1/L2/L3`.
-4. Expanded-tree rendering keeps branch structure: runtime `L0` uses source branch geometry at branch-placement granularity, while runtime `L1/L2/L3` emit exact surviving hierarchy frontiers. Runtime `L2/L3` use baked simplified branch woodand trunk beside the shell frontier.
+4. Expanded-tree rendering keeps branch structure: runtime `L0` uses source branch geometry at branch-placement granularity, while preserving backside simplification rule, while runtime `L1/L2/L3` emit exact surviving hierarchy frontiers. Runtime `L2/L3` use baked simplified branch wood and trunk beside the shell frontier.
 5. All editor-baked voxel artifacts must stay inside authoritative source occupancy; canopy shell node `localBounds` persist authored octant ownership bounds, while emitted shell meshes, voxelized branch wood attachments, simplified `L2/L3` trunk-mesh `trunkL3Mesh`, and far-mesh `impostorMesh` must stay inside their authoritative source bounds.
 6. Generated shell, trunk, and far meshes prefer topology-preserving simplification first: merge adjacent coplanar voxel faces when possible, keep voxel silhouette/bounds, and only then enter bounded fallback when authored settings still miss budgets.
 7. Shell, trunk, and far-mesh simplification must remain optional through authoring settings so developers can inspect raw voxel output in the editor and tests can stay on the fast path.

@@ -116,15 +116,7 @@ This system does not use Unity `LODGroup`. LOD selection is owned by:
 
 ---
 
-## Task 1: Authoring Data Model
-
-### Implementation Status (`2026-04-05`)
-
-- Base authoring assets, validation, and branch/tree authoring are implemented under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
-- `LODProfileSO` now uses authored distance bands, `TreeBlueprintSO` now exposes `trunkL3Mesh`, and editor preview/summary naming is aligned to `L0/L1/L2/L3/Impostor`.
-- `trunkL3Mesh` generation/persistence, the Phase C.5 inspector gate summary, 5-band LOD validation, trunk-L3 validation, and BFS octant-order validation/tests are landed.
-- Remaining authoring follow-up is manual rebake/preview verification of the two authoritative tree-blueprint assets; remaining runtime follow-up is the GPU-primary decode path with the temporary CPU fallback bridge.
-- The data contract below is authoritative for follow-up work.
+## Task 1: Authoring Data Model [DONE]
 
 ### 1.1 ScriptableObjects
 
@@ -202,7 +194,7 @@ Field inventory only:
 
 ---
 
-## Task 2: Editor Preview
+## Task 2: Editor Preview [DONE]
 
 ### 2.1 Required Preview States
 
@@ -226,7 +218,7 @@ Field inventory only:
 
 ---
 
-## Task 3: Shell, Trunk, and Far-Mesh Baking
+## Task 3: Shell, Trunk, and Far-Mesh Baking [DONE]
 
 ### 3.1 Required Outputs
 
@@ -492,30 +484,29 @@ Required gate checklist:
 
 ## Implementation Order
 
-### Phase A: Foundation
+### Phase A: Foundation [DONE]
 1. Align docs and runtime naming
 2. Move `LODProfileSO` from projected-area thresholds to authored distance bands
 3. Add `trunkL3Mesh` to tree authoring
 4. Update validation to match the new contract
 
-### Phase B: Shell / Trunk / Far-Mesh Baking
+### Phase B: Shell / Trunk / Far-Mesh Baking [DONE]
 1. Keep current authored shell hierarchy path
 2. Add `trunkL3Mesh` generation
 3. Keep bounded far-mesh generation
 4. Preserve-invalid generated outputs
 
-### Phase C: Editor Preview
+### Phase C: Editor Preview [DONE]
 1. Align preview states with `L0/L1/L2/L3/Impostor`
 2. Keep shell-only inspection views
 3. Manual visual verification
 
-### Phase C.5: Runtime Readiness Gate
+### Phase C.5: Runtime Readiness Gate [DONE]
 1. Close every item in the mandatory runtime readiness checklist above
 2. Reconcile real sample assets with the current validator and preview contract
 3. Freeze the runtime bounds and submission contracts before runtime implementation starts
 
 ### Phase D: Spatial Grid + Runtime Data Gather/Decode Path
-Blocked until Phase C.5 is closed.
 
 1. Implement `VegetationSpatialGrid`
 2. Implement runtime registration/flattening for tree spheres, per-placement branch spheres, draw-slot registries, and BFS shell-node payloads

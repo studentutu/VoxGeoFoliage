@@ -83,4 +83,4 @@ Repo-used libraries and plugins:
 - The current scripting toolchain tops out at `LangVersion 9.0`; use block-scoped namespaces, not file-scoped namespaces.
 - Use message-bus or singleton when cross communication is needed (prefer message bus with explicit sender and data).
 - All static runtime classes must have explicit `Reset` method that is invoked once in `EditorPlayModeStaticServicesReset.cs`.
-- Existing vegetation EditMode bake tests keep bake settings explicit per fixture instead of relying on authoring defaults; the new C.5 coverage is limited to the two BFS child-order tests.
+- Existing vegetation EditMode bake tests keep bake settings explicit per fixture instead of relying on authoring defaults
