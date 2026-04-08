@@ -468,7 +468,7 @@ Required verification:
 
 Code-side C.5 items landed on `2026-04-05`.
 
-Required gate checklist:
+Required gate checklist done:
 - `trunkL3Mesh` generation and persistence are implemented and exposed through the editor bake flow
 - `Packages/com.voxgeofol.vegetation/Samples~/Vegetation Demo/VoxFoliage/TreeBlueprint_branch_leaves_fullgeo.asset` is rebaked with assigned `trunkL3Mesh`
 - `Assets/Tree/VoxFoliage/TreeBlueprint_branch_leaves_fullgeo.asset` is rebaked with assigned `trunkL3Mesh`
@@ -515,7 +515,6 @@ Required gate checklist:
 5. Compile check + manual verification
 
 ### Phase E: Hybrid Decode Rendering Pipeline
-Blocked until Phase C.5 is closed and Phase D emits the required runtime data.
 
 1. Implement shaders for canopy, trunk, far-mesh, and depth-only rendering
 2. Implement indirect renderer consumption of the Phase D outputs
