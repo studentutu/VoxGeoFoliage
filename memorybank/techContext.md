@@ -34,9 +34,9 @@ Repo-used libraries and plugins:
   - runtime-side authoring data and shared vegetation code, including tier-specific `BranchShellNode` canopy hierarchies persisted as `shellNodesL0`, `shellNodesL1`, and `shellNodesL2`
   - `MeshVoxelizerV1/` hosts the compatibility hierarchy API plus legacy voxelizer reference/demo code; the hierarchy builder in this folder is now CPU-volume-backed
   - `VoxelizerV2/` hosts the CPU/GPU voxel utilities; the production canopy, generated branch wood, simplified trunk, and impostor bake paths now use the CPU volume + bounded surface mesh path from this folder, including optional coplanar-face reduction through `CpuVoxelSurfaceMeshBuilder`
-  - planned runtime rendering authority is `Graphics.RenderMeshIndirect` through `Runtime/Rendering`; current authority docs now describe a GPU-primary MVP path where GPU visibility/classification/survivor decode drive the runtime, CPU fallback is a temporary non-blocking bridge only through completed async results, far trees render one baked `impostorMesh` only, and legacy `l3Distance` is ignored by Milestone 1 runtime logic and should be removed
+  - planned runtime rendering authority is `Graphics.RenderMeshIndirect` through `Runtime/Rendering`; current authority docs now describe a GPU-primary MVP path where GPU visibility/classification/survivor decode drive the runtime, CPU fallback is a temporary non-blocking bridge only through completed async results, far trees render one baked `impostorMesh` only, and the active `LODProfileSO` contract is `l0/l1/l2/impostor/absoluteCull`
 - `Packages/com.voxgeofol.vegetation/Editor`
-  - Phase B hierarchical shell/impostor bake tooling, Phase C preview/inspector/window tooling, and the editor-only simplification/fallback helpers used by shell, wood, and impostor generation
+  - Phase B hierarchical shell/trunk/impostor bake tooling, Phase C preview/inspector/window tooling, the Phase C.5 gate summary in `VegetationTreeAuthoringEditorPanel`, and the editor-only simplification/fallback helpers used by shell, wood, trunk, and impostor generation
 - `Packages/com.voxgeofol.vegetation/Tests/Editor`
   - vegetation EditMode coverage that now ships with the package
 - `Packages/com.voxgeofol.vegetation/Samples~/Vegetation Demo`
@@ -78,9 +78,9 @@ Repo-used libraries and plugins:
 - New or renamed `.cs` files require Full Unity compile path so the generated solution is rebuilt from Unity itself.
 - Vegetation package code lives under `Packages/com.voxgeofol.vegetation`; do not add new vegetation scripts back under `Assets/Scripts/Features/Vegetation`.
 - Generated vegetation meshes must be written into project `Assets/` space, never into `Packages/`, so public package installs stay writable.
-- Editor-baked voxel artifacts must be clipped back to authoritative source bounds; this applies to canopy shells, generated branch wood, simplified trunk meshes, and impostor meshes.
-- Current vegetation runtime authority docs target indirect rendering plus runtime `L0/L1/L2/L3 + Impostor`, not BRG or one tree-wide runtime tier; the MVP path is GPU-primary, keeps CPU fallback only as a temporary non-blocking bridge through completed async GPU readback results, draws `Impostor` as one baked mesh only, and ignores legacy `l3Distance`.
+- Editor-baked voxel artifacts must be clipped back to authoritative source bounds; this applies to canopy shells, generated branch wood, simplified trunk meshes, and impostor meshes. Persisted shell-node `localBounds` are authored ownership bounds, not mesh-tight bounds.
+- Current vegetation runtime authority docs target indirect rendering plus runtime `L0/L1/L2/L3 + Impostor`, not BRG or one tree-wide runtime tier; the MVP path is GPU-primary, keeps CPU fallback only as a temporary non-blocking bridge through completed async GPU readback results, draws `Impostor` as one baked mesh only, and uses the 5-band `l0/l1/l2/impostor/absoluteCull` LOD contract.
 - The current scripting toolchain tops out at `LangVersion 9.0`; use block-scoped namespaces, not file-scoped namespaces.
 - Use message-bus or singleton when cross communication is needed (prefer message bus with explicit sender and data).
 - All static runtime classes must have explicit `Reset` method that is invoked once in `EditorPlayModeStaticServicesReset.cs`.
-- Existing vegetation EditMode bake tests intentionally disable simplification and fallback through authoring settings so the suite stays on the fast raw-generation path.
+- Existing vegetation EditMode bake tests keep bake settings explicit per fixture instead of relying on authoring defaults; the new C.5 coverage is limited to the two BFS child-order tests.

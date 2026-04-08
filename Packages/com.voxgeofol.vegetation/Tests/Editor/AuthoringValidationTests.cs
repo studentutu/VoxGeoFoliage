@@ -129,6 +129,22 @@ public sealed class AuthoringValidationTests
     }
 
     [Test]
+    public void BranchPrototype_ShellHierarchyChildOrderOutOfOctantOrder_FailsValidation()
+    {
+        BranchPrototypeSO prototype = CreateValidBranchPrototype(includeShells: true);
+        Bounds rootBounds = new Bounds(Vector3.zero, Vector3.one * 2f);
+        SetShellHierarchies(
+            prototype,
+            CreateOutOfOrderShellHierarchy(rootBounds, 0),
+            CreateOutOfOrderShellHierarchy(rootBounds, 1),
+            CreateOutOfOrderShellHierarchy(rootBounds, 2));
+
+        VegetationValidationResult result = prototype.Validate();
+
+        AssertHasError(result, "child block order must follow ascending octant-bit order from childMask");
+    }
+
+    [Test]
     public void BranchPrototype_WoodTriangleOrder_SourceAndL1MustNotIncreaseTowardL2()
     {
         BranchPrototypeSO prototype = CreateValidBranchPrototype(includeShells: true);
@@ -277,8 +293,8 @@ public sealed class AuthoringValidationTests
                 new[] { CreateShellNodeForLevel(0, -1, 0, 7, new Bounds(Vector3.zero, Vector3.one), 0) },
                 new[] { CreateShellNodeForLevel(0, -1, 0, 5, new Bounds(Vector3.zero, Vector3.one), 1) },
                 new[] { CreateShellNodeForLevel(0, -1, 0, 3, new Bounds(Vector3.zero, Vector3.one), 2) });
-            SetPrivateField(prototype, "shellL1WoodMesh", CreateMesh("ShellL1Wood", 2, new Bounds(Vector3.zero, Vector3.one * 0.5f)));
-            SetPrivateField(prototype, "shellL2WoodMesh", CreateMesh("ShellL2Wood", 1, new Bounds(Vector3.zero, Vector3.one * 0.3f)));
+            SetPrivateField(prototype, "shellL1WoodMesh", CreateMesh("ShellL1Wood", 2, new Bounds(new Vector3(-0.5f, 0f, 0f), new Vector3(0.5f, 1f, 0.5f))));
+            SetPrivateField(prototype, "shellL2WoodMesh", CreateMesh("ShellL2Wood", 1, new Bounds(new Vector3(-0.5f, 0f, 0f), new Vector3(0.25f, 0.5f, 0.25f))));
             SetPrivateField(prototype, "shellMaterial", CreateOpaqueMaterial("ShellMaterial"));
         }
 
@@ -322,7 +338,6 @@ public sealed class AuthoringValidationTests
         SetPrivateField(lodProfile, "l0Distance", 5f);
         SetPrivateField(lodProfile, "l1Distance", 15f);
         SetPrivateField(lodProfile, "l2Distance", 30f);
-        SetPrivateField(lodProfile, "l3Distance", 60f);
         SetPrivateField(lodProfile, "impostorDistance", 120f);
         SetPrivateField(lodProfile, "absoluteCullDistance", 200f);
         return lodProfile;
@@ -367,6 +382,32 @@ public sealed class AuthoringValidationTests
         SetPrivateField(prototype, "shellNodesL0", shellNodesL0);
         SetPrivateField(prototype, "shellNodesL1", shellNodesL1);
         SetPrivateField(prototype, "shellNodesL2", shellNodesL2);
+    }
+
+    private BranchShellNode[] CreateOutOfOrderShellHierarchy(Bounds rootBounds, int shellLevel)
+    {
+        return new[]
+        {
+            CreateShellNodeForLevel(0, 1, 5, 6, rootBounds, shellLevel),
+            CreateShellNodeForLevel(1, -1, 0, 3, CreateChildBoundsForOctant(rootBounds, 2), shellLevel),
+            CreateShellNodeForLevel(1, -1, 0, 3, CreateChildBoundsForOctant(rootBounds, 0), shellLevel)
+        };
+    }
+
+    private static Bounds CreateChildBoundsForOctant(Bounds parentBounds, int octant)
+    {
+        Vector3 parentMin = parentBounds.min;
+        Vector3 parentMax = parentBounds.max;
+        Vector3 center = parentBounds.center;
+        Vector3 childMin = new Vector3(
+            (octant & 1) == 0 ? parentMin.x : center.x,
+            (octant & 2) == 0 ? parentMin.y : center.y,
+            (octant & 4) == 0 ? parentMin.z : center.z);
+        Vector3 childMax = new Vector3(
+            (octant & 1) == 0 ? center.x : parentMax.x,
+            (octant & 2) == 0 ? center.y : parentMax.y,
+            (octant & 4) == 0 ? center.z : parentMax.z);
+        return new Bounds((childMin + childMax) * 0.5f, childMax - childMin);
     }
 
     private T CreateScriptableObject<T>() where T : ScriptableObject

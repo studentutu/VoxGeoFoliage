@@ -38,7 +38,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             string assetPath = AssetDatabase.GetAssetPath(ownerAsset);
             if (string.IsNullOrEmpty(assetPath))
             {
-                return generatedMesh;
+                return CreateDetachedMeshCopy(generatedMesh);
             }
 
             string meshFolderPath = ResolveWritableMeshFolderPath(assetPath, relativeFolderToSave);
@@ -334,6 +334,17 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             destinationMesh.RecalculateBounds();
+        }
+
+        private static Mesh CreateDetachedMeshCopy(Mesh sourceMesh)
+        {
+            Mesh detachedMesh = new Mesh
+            {
+                name = sourceMesh.name
+            };
+
+            CopyMeshData(sourceMesh, detachedMesh);
+            return detachedMesh;
         }
     }
 }

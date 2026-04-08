@@ -139,11 +139,6 @@ This summary is intentionally short. The fields listed under "runtime-facing" ar
 - `TreeBlueprintSO`: `generatedImpostorMeshesRelativeFolder`, `ImpostorBakeSettings`
 - editor preview state, validation state, and any `AssetDatabase` persistence helpers
 
-### Legacy compatibility data
-
-- `LODProfileSO.l3Distance` remains serialized in the current asset schema but is dead data for Milestone 1.
-- Milestone 1 runtime classification, preview labeling, validation rules, and new code must ignore `l3Distance`.
-
 ---
 
 # 2. Representation Model
@@ -168,12 +163,13 @@ Only surviving near and mid trees enter `Expanded`. Far trees stay as one far me
 | `L3` | Surviving frontier from authored `shellNodesL2` | `shellL2WoodMesh` | Simplified `trunkL3Mesh` |
 
 Notes:
-- `L0` is branch-placement granularity because the source asset contract stores one reusable source branch, not source geometry split by shell node.
+- `L0` is branch-placement granularity because the source asset contract stores one reusable source branch, not source geometry split by shell node. Front facing `L0 visibility` will use source mesh branch for runtime, but we still treat `L0` distance for backside simplification with `L1` shell.
 - `L1/L2/L3` use hierarchy-frontier granularity, so only surviving node meshes are emitted.
 - `Impostor` is tree-level only. It does not expand into branch parts.
 - Expanded-tree trunk draw is selected once per tree after branch classification:
 - if any surviving branch placement is `L0` or `L1`, draw full `trunkMesh`
 - otherwise draw `trunkL3Mesh`
+- persisted shell-node `localBounds` are authored octant ownership bounds; emitted shell meshes stay inside those bounds
 
 ## 2.3 `LODProfileSO` Authority
 
@@ -185,9 +181,6 @@ Expected authored thresholds:
 - `l2Distance`
 - `impostorDistance`
 - `absoluteCullDistance`
-
-Legacy compatibility field:
-- `l3Distance` exists in the current serialized asset layout but is ignored by Milestone 1 runtime logic
 
 Rules:
 - the active Milestone 1 authored thresholds must satisfy `0 < l0Distance < l1Distance < l2Distance < impostorDistance < absoluteCullDistance`
@@ -222,6 +215,7 @@ Branch reconstruction rules:
 - Branch reconstruction always starts at the hierarchy root and traverses downward.
 - Parent bounds are tested before descendants.
 - If a branch placement enters runtime `L0`, emit the source branch meshes and skip shell frontier emission for that branch in that frame.
+- At `L0/L1/L2/L3` always try to simplify backside when obscured by higher level.
 - If a branch placement enters runtime `L1/L2/L3`, choose exactly one hierarchy tier for that branch in that frame and emit the surviving frontier from that tier.
 
 ## 2.5 MVP BFS Hierarchy Contract
@@ -297,7 +291,7 @@ Per branch prototype:
 
 Per tree blueprint:
 1. Read the source `trunkMesh` plus all placed source branch `woodMesh` and `foliageMesh` in tree space.
-2. Bake bounded `trunkL3Mesh` from the source `trunkMesh`.
+2. Bake bounded `trunkL3Mesh` from the source `trunkMesh`, clipping every voxel candidate, lower-resolution retry, and fallback mesh back to the original `trunkMesh.bounds`.
 3. Bake one bounded `impostorMesh` from the combined tree-space source geometry.
 4. Optionally simplify `impostorMesh` further down to a front-side-only surface when that still preserves the intended far silhouette.
 5. Persist `trunkL3Mesh` and `impostorMesh`.
@@ -369,6 +363,7 @@ Runtime `L3` requires a separate simplified trunk mesh.
 Rules:
 - generate `trunkL3Mesh` from `trunkMesh`
 - use the same bounded reduction policy used elsewhere
+- clip every candidate back to the original `trunkMesh.bounds`, including lower-resolution retries and fallback meshes
 - keep it inside authoritative trunk bounds
 - triangle count must be strictly lower than the source `trunkMesh`
 

@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -66,6 +67,8 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             EditorGUILayout.Space();
             DrawSummary(authoring, validationResult, validationExceptionMessage);
             EditorGUILayout.Space();
+            DrawRuntimePreparationGate(authoring, validationResult, validationExceptionMessage);
+            EditorGUILayout.Space();
             DrawValidation(validationResult, validationExceptionMessage);
             EditorGUILayout.Space();
             DrawPreviewControls(authoring);
@@ -121,6 +124,41 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             EditorGUILayout.LabelField(
                 "Validation Warnings",
                 GetIssueCount(validationResult, VegetationValidationSeverity.Warning).ToString());
+        }
+
+        private static void DrawRuntimePreparationGate(
+            VegetationTreeAuthoring authoring,
+            VegetationValidationResult? validationResult,
+            string? validationExceptionMessage)
+        {
+            EditorGUILayout.LabelField("Phase C.5 Gate", EditorStyles.boldLabel);
+
+            if (authoring.Blueprint == null)
+            {
+                EditorGUILayout.HelpBox("Assign a TreeBlueprintSO before using the runtime preparation gate.", MessageType.Info);
+                return;
+            }
+
+            EditorGUILayout.LabelField("Trunk L3 Mesh", authoring.Blueprint.TrunkL3Mesh == null ? "Missing" : "Assigned");
+            EditorGUILayout.LabelField("Manual Rebake", "Required on package sample and repo-local mirror assets");
+
+            if (!string.IsNullOrEmpty(validationExceptionMessage))
+            {
+                EditorGUILayout.HelpBox(validationExceptionMessage, MessageType.Warning);
+                return;
+            }
+
+            List<string> blockers = CollectRuntimePreparationBlockers(validationResult);
+            EditorGUILayout.LabelField("Blocking Issues", blockers.Count.ToString());
+            if (blockers.Count == 0)
+            {
+                EditorGUILayout.HelpBox(
+                    "Code-side Phase C.5 blockers are clear. Manual rebake, preview checks, silhouette comparison, and compile/test verification are still required.",
+                    MessageType.Info);
+                return;
+            }
+
+            EditorGUILayout.HelpBox(BuildMessageBlock(blockers), MessageType.Error);
         }
 
         private static void DrawValidation(
@@ -225,17 +263,22 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                         TryRun("Regenerate Shells", () => VegetationTreeAuthoringEditorUtility.BakeCanopyShells(authoring));
                     }
 
+                    if (GUILayout.Button("Regenerate Trunk L3"))
+                    {
+                        TryRun("Regenerate Trunk L3", () => VegetationTreeAuthoringEditorUtility.BakeTrunkL3(authoring));
+                    }
+
                     if (GUILayout.Button("Regenerate Impostor"))
                     {
                         TryRun("Regenerate Impostor", () => VegetationTreeAuthoringEditorUtility.BakeImpostor(authoring));
                     }
                 }
 
-                if (GUILayout.Button("Regenerate Shells And Impostor"))
+                if (GUILayout.Button("Regenerate All Generated Meshes"))
                 {
                     TryRun(
-                        "Regenerate Shells And Impostor",
-                        () => VegetationTreeAuthoringEditorUtility.BakeCanopyShellsAndImpostor(authoring));
+                        "Regenerate All Generated Meshes",
+                        () => VegetationTreeAuthoringEditorUtility.BakeAllGeneratedMeshes(authoring));
                 }
             }
         }
@@ -268,6 +311,53 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             return builder.ToString();
+        }
+
+        private static string BuildMessageBlock(IReadOnlyList<string> messages)
+        {
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < messages.Count; i++)
+            {
+                if (builder.Length > 0)
+                {
+                    builder.AppendLine();
+                }
+
+                builder.Append("- ");
+                builder.Append(messages[i]);
+            }
+
+            return builder.ToString();
+        }
+
+        private static List<string> CollectRuntimePreparationBlockers(VegetationValidationResult? validationResult)
+        {
+            List<string> blockers = new List<string>();
+            if (validationResult == null)
+            {
+                return blockers;
+            }
+
+            AddMatchingIssues(blockers, validationResult, "trunkL3Mesh");
+            AddMatchingIssues(blockers, validationResult, "octant-bit order");
+            AddMatchingIssues(blockers, validationResult, "octant for BFS validation");
+            return blockers;
+        }
+
+        private static void AddMatchingIssues(List<string> blockers, VegetationValidationResult validationResult, string matchText)
+        {
+            for (int i = 0; i < validationResult.Issues.Count; i++)
+            {
+                VegetationValidationIssue issue = validationResult.Issues[i];
+                if (issue.Severity != VegetationValidationSeverity.Error ||
+                    issue.Message.IndexOf(matchText, StringComparison.Ordinal) < 0 ||
+                    blockers.Contains(issue.Message))
+                {
+                    continue;
+                }
+
+                blockers.Add(issue.Message);
+            }
         }
 
         private static int GetIssueCount(

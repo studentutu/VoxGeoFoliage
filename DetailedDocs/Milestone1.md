@@ -36,7 +36,7 @@ The authoritative Milestone 1 runtime contract is now:
 - GPU owns tree visibility, branch tier selection, shell-node survival rules, and the primary MVP frontier decode path
 - CPU fallback exists only as a temporary MVP backup path and may only consume completed non-blocking async GPU readback results
 - rendering uses multiple indirect calls grouped by exact mesh/material slots, not one literal global draw call
-- `LODProfileSO` now uses authored distance bands `l0Distance`, `l1Distance`, `l2Distance`, `impostorDistance`, and `absoluteCullDistance`; legacy `l3Distance` is dead data for Milestone 1 and must be ignored
+- `LODProfileSO` now uses authored distance bands `l0Distance`, `l1Distance`, `l2Distance`, `impostorDistance`, and `absoluteCullDistance`;
 - `Impostor` is one baked `impostorMesh` only; it combines the trunk plus all placed source branch `woodMesh` and `foliageMesh`, and bake may optionally reduce it to a front-side-only surface
 - trunk selection for expanded trees is strict:
   - if any surviving branch placement is `L0` or `L1`, draw full `trunkMesh`
@@ -122,7 +122,8 @@ This system does not use Unity `LODGroup`. LOD selection is owned by:
 
 - Base authoring assets, validation, and branch/tree authoring are implemented under `Packages/com.voxgeofol.vegetation/Runtime/Authoring/`.
 - `LODProfileSO` now uses authored distance bands, `TreeBlueprintSO` now exposes `trunkL3Mesh`, and editor preview/summary naming is aligned to `L0/L1/L2/L3/Impostor`.
-- Remaining authoring follow-up is generation/persistence of `trunkL3Mesh`; remaining runtime follow-up is the GPU-primary decode path with the temporary CPU fallback bridge.
+- `trunkL3Mesh` generation/persistence, the Phase C.5 inspector gate summary, 5-band LOD validation, trunk-L3 validation, and BFS octant-order validation/tests are landed.
+- Remaining authoring follow-up is manual rebake/preview verification of the two authoritative tree-blueprint assets; remaining runtime follow-up is the GPU-primary decode path with the temporary CPU fallback bridge.
 - The data contract below is authoritative for follow-up work.
 
 ### 1.1 ScriptableObjects
@@ -180,7 +181,6 @@ Field inventory only:
 - float l0Distance
 - float l1Distance
 - float l2Distance
-- float l3Distance               // legacy serialized compatibility field; ignored by Milestone 1 runtime logic
 - float impostorDistance
 - float absoluteCullDistance
 ```
@@ -196,7 +196,8 @@ Field inventory only:
 - `shellL1WoodMesh`, `shellL2WoodMesh`, `trunkL3Mesh`, and `impostorMesh` must stay inside their authoritative source bounds.
 - Branch scale must be exactly in steps of `0.25`.
 - Milestone 1 active LOD distances must be monotonically increasing: `l0 < l1 < l2 < impostor < absoluteCull`.
-- Legacy `l3Distance` must not affect runtime classification, preview labeling, or new validation logic.
+- `trunkL3Mesh` triangle count must be strictly lower than `trunkMesh`.
+- Shell hierarchy BFS child blocks must follow ascending octant-bit order from `childMask`.
 - Over-budget generated meshes must persist, but validation must still fail and mark the authoring asset invalid.
 
 ---
@@ -253,6 +254,12 @@ Required behavior:
 - validation marks the owner invalid when budgets or rules are violated
 - preview and runtime keep using the latest generated outputs
 - no automatic rollback to the previous valid bake
+
+Current editor entry points:
+- `Regenerate Shells`
+- `Regenerate Trunk L3`
+- `Regenerate Impostor`
+- `Regenerate All Generated Meshes`
 
 ---
 
@@ -328,7 +335,6 @@ Output buffers:
    - else if branchDistance < l1Distance -> `L1`
    - else if branchDistance < l2Distance -> `L2`
    - else -> `L3`
-   - ignore legacy `l3Distance`
 8. FOR each shell-tier branch:
    - evaluate the selected authored BFS hierarchy
    - emit `NodeDecisionGPU` records with `Reject`, `EmitSelf`, or `ExpandChildren`
@@ -468,7 +474,7 @@ Required verification:
 
 ## Phase C.5: Runtime Readiness Gate
 
-This gate is mandatory. Do not start Phase D or Phase E until every item below is closed.
+Code-side C.5 items landed on `2026-04-05`.
 
 Required gate checklist:
 - `trunkL3Mesh` generation and persistence are implemented and exposed through the editor bake flow
@@ -478,7 +484,7 @@ Required gate checklist:
 - baked `L1/L2` compact hierarchies are compared against `Assets/Tree/Raw/branch_leaves_quadcards.obj` as the current silhouette reference input
 - `ShellBakeSettings` and `ImpostorBakeSettings` on both exact tree-blueprint assets pass validation without depending on last-resort `MeshLodUtility` fallback
 - validator/tests verify BFS child ordering against ascending octant-bit order, not only contiguous child blocks, depth, and bounds
-- runtime flattening contract is frozen: branch placement runtime data must carry authored bounds center plus bounding sphere radius, runtime branch classification uses per-placement sphere-surface distance, shell-node visibility keeps authored node bounds, and legacy `l3Distance` is ignored
+- runtime flattening contract is frozen: branch placement runtime data must carry authored bounds center plus bounding sphere radius, runtime branch classification uses per-placement sphere-surface distance, shell-node visibility keeps authored node bounds, and `LODProfileSO` uses the 5-band `l0/l1/l2/impostor/absoluteCull` contract
 - runtime submission contract is frozen: use scene-wide per exact draw slot with per-slot bounds rebuilt from visible data; fixed whole-scene bounds are forbidden
 - compile validation is rerun and the Unity EditMode vegetation suite is rerun once the long Unity path is available
 
@@ -535,7 +541,6 @@ Blocked until Phase C.5 is closed and Phase D emits the required runtime data.
 - Authored shell `L0/L1/L2` are auto-generated from branch foliage geometry
 - `trunkL3Mesh` is auto-generated and bounded
 - `impostorMesh` is auto-generated from the original assembled tree
-- The Phase C.5 runtime readiness gate is closed before runtime MVP implementation proceeds
 - Editor preview shows runtime `L0/L1/L2/L3/Impostor` correctly
 - Runtime tree classification selects `Expanded` or `Impostor` correctly
 - GPU emits branch tier and node survival records

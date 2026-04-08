@@ -13,28 +13,29 @@ Purpose: track immediate tasks and current milestone status.
 ## Status Snapshot
 
 - `Phase A` is complete: package layout, authoring ScriptableObjects, validation, demo source assets, and authoring EditMode tests are in place.
-- `Phase B` core bake path is complete: hierarchical shell authoring, bounded generated outputs, impostor extraction, generated mesh persistence, and simplification/fallback handling are landed. `trunkL3Mesh` generation is still pending.
+- `Phase B` core bake path is complete: hierarchical shell authoring, bounded generated outputs, `trunkL3Mesh` generation, impostor extraction, generated mesh persistence, and simplification/fallback handling are landed.
 - `Phase C` editor tooling is complete: editor-side bake entry points, inspector/window preview flow, preview naming alignment, and validation UI cleanup are landed.
-- Contract/doc sync was completed on `2026-04-05`: `UnityAssembledVegetation_FULL.md` is the single runtime/data authority, `Milestone1.md` owns scope/gates/done criteria, `Impostor` is one baked mesh only, and legacy `l3Distance` is dead data for Milestone 1.
+- `Phase C.5` code-side gate work landed on `2026-04-05`: `TrunkL3MeshGenerator`, explicit tree bake actions, the `VegetationTreeAuthoringEditorPanel` C.5 blocker summary, 5-band LOD validation, trunk-L3 reduction/bounds validation, BFS octant-order validation, and the two planned BFS EditMode tests are in place.
+- Contract/doc sync was completed on `2026-04-05`: `UnityAssembledVegetation_FULL.md` is the single runtime/data authority, `Milestone1.md` owns scope/gates/done criteria, `Impostor` is one baked mesh only, and `LODProfileSO` now uses the 5-band `l0/l1/l2/impostor/absoluteCull` contract. 
 
 ## Active Gate
 
 ### Phase C.5 - Runtime MVP Preparation Gate
 
-- [ ] `C5-01` Add `trunkL3Mesh` generation and persistence and expose it through the editor bake flow. Legacy `l3Distance` is ignored by Milestone 1 runtime logic and should be removed.
+- [x] `C5-01` Add `trunkL3Mesh` generation and persistence and expose it through the editor bake flow. `LODProfileSO` now uses only `l0Distance`, `l1Distance`, `l2Distance`, `impostorDistance`, and `absoluteCullDistance`.
 - [ ] `C5-02` Re-bake `Packages/com.voxgeofol.vegetation/Samples~/Vegetation Demo/VoxFoliage/TreeBlueprint_branch_leaves_fullgeo.asset` and confirm assigned `trunkL3Mesh`.
 - [ ] `C5-03` Re-bake `Assets/Tree/VoxFoliage/TreeBlueprint_branch_leaves_fullgeo.asset` and confirm assigned `trunkL3Mesh`.
 - [ ] `C5-04` Run manual in-Editor visual verification on both exact tree-blueprint assets for `L0`, `L1`, `L2`, `L3`, shell-only `L1`, shell-only `L2`, shell-only `L3`, and `Impostor`.
 - [ ] `C5-05` Compare baked `L1/L2` compact hierarchies against `Assets/Tree/Raw/branch_leaves_quadcards.obj` as the current silhouette reference input.
 - [ ] `C5-06` Tune `ShellBakeSettings` and `ImpostorBakeSettings` on both exact tree-blueprint assets until validation passes without `MeshLodUtility` fallback.
-- [ ] `C5-07` Add validator/test coverage for BFS child ordering in ascending octant-bit order.
-- [ ] `C5-08` Rerun compile validation and the Unity EditMode vegetation suite once the Unity Editor can be closed for the long runner path.
+- [x] `C5-07` Add validator/test coverage for BFS child ordering in ascending octant-bit order.
+- [x] `C5-08` Rerun compile validation and the Unity EditMode vegetation suite once the Unity Editor can be closed for the long runner path.
 
 ## Current Blockers
 
-- `trunkL3Mesh` bake/persistence is not landed yet, so the shipped sample and repo-local mirror cannot satisfy the current runtime contract.
 - Exact-asset rebake and manual verification are still missing on the two authoritative demo tree-blueprint assets.
-- BFS child-order coverage and refreshed long-path validation evidence are still missing.
+- The package sample and repo-local demo mirror still need manual rebake/resave to populate `trunkL3Mesh` and clear obsolete serialized `l3Distance` data from the asset YAML.
+- Phase D and Phase E remain blocked until the manual C.5 checklist closes on both authoritative tree-blueprint assets.
 
 
 ### Phase D: Spatial Grid + MVP Visibility/Decode Mirror

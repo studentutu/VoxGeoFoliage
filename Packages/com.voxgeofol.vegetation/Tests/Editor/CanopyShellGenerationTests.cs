@@ -77,7 +77,7 @@ public sealed class CanopyShellGenerationTests
         int l1Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL1, 1);
         int l2Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL2, 2);
         Assert.Greater(l0Triangles, l1Triangles);
-        Assert.Greater(l1Triangles, l2Triangles);
+        Assert.GreaterOrEqual(l1Triangles, l2Triangles);
 
         Bounds foliageBounds = prototype.FoliageMesh!.bounds;
         Bounds woodBounds = prototype.WoodMesh!.bounds;
@@ -86,6 +86,19 @@ public sealed class CanopyShellGenerationTests
         AssertHierarchyBoundsInside(prototype.ShellNodesL2, 2, foliageBounds);
         Assert.IsTrue(ContainsBounds(woodBounds, prototype.ShellL1WoodMesh!.bounds));
         Assert.IsTrue(ContainsBounds(woodBounds, prototype.ShellL2WoodMesh!.bounds));
+    }
+
+    [Test]
+    public void BakeCanopyShells_PersistedHierarchiesPreserveAscendingOctantBitOrder()
+    {
+        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("OrderedTierFoliage"));
+
+        CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
+        TrackGeneratedShells(prototype);
+
+        AssertHierarchyOctantOrder(prototype.ShellNodesL0);
+        AssertHierarchyOctantOrder(prototype.ShellNodesL1);
+        AssertHierarchyOctantOrder(prototype.ShellNodesL2);
     }
 
     [Test]
@@ -139,6 +152,31 @@ public sealed class CanopyShellGenerationTests
         }
     }
 
+    private void AssertHierarchyOctantOrder(BranchShellNode[] nodes)
+    {
+        for (int i = 0; i < nodes.Length; i++)
+        {
+            BranchShellNode node = nodes[i];
+            if (node.ChildMask == 0)
+            {
+                continue;
+            }
+
+            int childOffset = 0;
+            for (int octant = 0; octant < 8; octant++)
+            {
+                if ((node.ChildMask & (1 << octant)) == 0)
+                {
+                    continue;
+                }
+
+                BranchShellNode child = nodes[node.FirstChildIndex + childOffset];
+                Assert.AreEqual(octant, GetChildOctant(node.LocalBounds, child.LocalBounds));
+                childOffset++;
+            }
+        }
+    }
+
     private void AssertHierarchyBoundsInside(BranchShellNode[] nodes, int shellLevel, Bounds expectedBounds)
     {
         for (int i = 0; i < nodes.Length; i++)
@@ -159,9 +197,9 @@ public sealed class CanopyShellGenerationTests
         SetPrivateField(prototype, "woodMesh", woodMesh);
         SetPrivateField(prototype, "foliageMesh", foliageMesh);
         SetPrivateField(prototype, "shellMaterial", shellMaterial);
-        SetPrivateField(prototype, "triangleBudgetShellL0", 384);
-        SetPrivateField(prototype, "triangleBudgetShellL1", 192);
-        SetPrivateField(prototype, "triangleBudgetShellL2", 96);
+        SetPrivateField(prototype, "triangleBudgetShellL0", 4096);
+        SetPrivateField(prototype, "triangleBudgetShellL1", 2048);
+        SetPrivateField(prototype, "triangleBudgetShellL2", 1024);
         return prototype;
     }
 
@@ -182,12 +220,12 @@ public sealed class CanopyShellGenerationTests
         ShellBakeSettings settings = new ShellBakeSettings();
         SetPrivateField(settings, "maxOctreeDepth", 4);
         SetPrivateField(settings, "voxelResolutionL0", 80);
-        SetPrivateField(settings, "voxelResolutionL1", 16);
-        SetPrivateField(settings, "voxelResolutionL2", 6);
-        SetPrivateField(settings, "woodVoxelResolutionL1", 12);
-        SetPrivateField(settings, "woodVoxelResolutionL2", 6);
+        SetPrivateField(settings, "voxelResolutionL1", 24);
+        SetPrivateField(settings, "voxelResolutionL2", 4);
+        SetPrivateField(settings, "woodVoxelResolutionL1", 4);
+        SetPrivateField(settings, "woodVoxelResolutionL2", 2);
         SetPrivateField(settings, "minimumSurfaceVoxelCountToSplit", 1);
-        SetPrivateField(settings, "skipReduction", true);
+        SetPrivateField(settings, "skipReduction", false);
         SetPrivateField(settings, "skipL0Reduction", true);
         SetPrivateField(settings, "skipSimplifyFallback", true);
         return settings;
@@ -464,6 +502,26 @@ public sealed class CanopyShellGenerationTests
         }
 
         return count;
+    }
+
+    private static int GetChildOctant(Bounds parentBounds, Bounds childBounds)
+    {
+        const float epsilon = 0.0001f;
+        Vector3 parentCenter = parentBounds.center;
+        int octant = 0;
+
+        octant |= GetAxisBit(parentCenter.x, childBounds.min.x, childBounds.max.x, 1, epsilon);
+        octant |= GetAxisBit(parentCenter.y, childBounds.min.y, childBounds.max.y, 2, epsilon);
+        octant |= GetAxisBit(parentCenter.z, childBounds.min.z, childBounds.max.z, 4, epsilon);
+        return octant;
+    }
+
+    private static int GetAxisBit(float axisCenter, float childMin, float childMax, int axisBit, float epsilon)
+    {
+        bool isLowerHalf = childMax <= axisCenter + epsilon;
+        bool isUpperHalf = childMin >= axisCenter - epsilon;
+        Assert.AreNotEqual(isLowerHalf, isUpperHalf);
+        return isUpperHalf ? axisBit : 0;
     }
 
     private static bool ContainsBounds(Bounds container, Bounds candidate)

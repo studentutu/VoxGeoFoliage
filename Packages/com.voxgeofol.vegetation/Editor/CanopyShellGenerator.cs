@@ -391,7 +391,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 }
 
                 persistedNodes[i] = new BranchShellNode(
-                    levelMeshes[i].bounds,
+                    node.LocalBounds,
                     node.Depth,
                     node.FirstChildIndex,
                     node.ChildMask,

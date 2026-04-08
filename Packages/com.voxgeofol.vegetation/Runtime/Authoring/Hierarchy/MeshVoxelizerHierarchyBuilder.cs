@@ -177,7 +177,7 @@ namespace MeshVoxelizerProject
                 buildOptions);
             HierarchyTreeNode node = new HierarchyTreeNode(
                 ownershipBounds,
-                GetMeshBounds(shellMesh, ownershipBounds),
+                ownershipBounds,
                 depth,
                 shellMesh);
 
@@ -253,7 +253,7 @@ namespace MeshVoxelizerProject
                 shellLevel);
             HierarchyTreeNode compactNode = new HierarchyTreeNode(
                 canonicalNode.OwnershipBounds,
-                GetMeshBounds(compactMesh, canonicalNode.LocalBounds),
+                canonicalNode.OwnershipBounds,
                 canonicalNode.Depth,
                 compactMesh);
 
@@ -547,11 +547,6 @@ namespace MeshVoxelizerProject
         private static int GetTriangleCount(Mesh? mesh)
         {
             return mesh == null ? 0 : checked((int)(mesh.GetIndexCount(0) / 3L));
-        }
-
-        private static Bounds GetMeshBounds(Mesh mesh, Bounds fallbackBounds)
-        {
-            return GetTriangleCount(mesh) > 0 ? mesh.bounds : fallbackBounds;
         }
 
         private static bool TryIntersectBounds(Bounds a, Bounds b, out Bounds intersection)

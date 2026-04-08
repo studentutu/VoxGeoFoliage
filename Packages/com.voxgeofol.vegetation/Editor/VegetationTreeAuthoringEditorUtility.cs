@@ -25,20 +25,23 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
-            BranchPlacement[] placements = GetRequiredPlacements(blueprint);
-            HashSet<BranchPrototypeSO> bakedPrototypes = new HashSet<BranchPrototypeSO>();
+            BakeCanopyShellsWithoutSave(blueprint);
+            SaveAuthoringChanges(authoring, blueprint);
+        }
 
-            for (int i = 0; i < placements.Length; i++)
+        /// <summary>
+        /// [INTEGRATION] Bakes the simplified runtime L3 trunk mesh for one tree blueprint referenced by the authoring component.
+        /// </summary>
+        public static void BakeTrunkL3(VegetationTreeAuthoring authoring)
+        {
+            // Range: requires a valid blueprint with a readable trunk mesh. Condition: trunk simplification clips every candidate back to the source trunk bounds before persistence. Output: the blueprint receives a refreshed trunkL3Mesh asset.
+            if (authoring == null)
             {
-                BranchPrototypeSO prototype = placements[i].Prototype ??
-                                              throw new InvalidOperationException($"branches[{i}] is missing prototype.");
-                if (bakedPrototypes.Add(prototype))
-                {
-                    // Generate one per branchPrototype 
-                    CanopyShellGenerator.BakeCanopyShells(prototype);
-                }
+                throw new ArgumentNullException(nameof(authoring));
             }
 
+            TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
+            BakeTrunkL3WithoutSave(blueprint);
             SaveAuthoringChanges(authoring, blueprint);
         }
 
@@ -54,19 +57,26 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
-            GetRequiredPlacements(blueprint);
-            ImpostorMeshGenerator.BakeImpostorMesh(blueprint, blueprint.ImposterSettings);
+            BakeImpostorWithoutSave(blueprint);
             SaveAuthoringChanges(authoring, blueprint);
         }
 
         /// <summary>
-        /// [INTEGRATION] Refreshes shells first and then refreshes the far impostor mesh.
+        /// [INTEGRATION] Refreshes shells, trunkL3Mesh, and far impostor mesh in one editor operation.
         /// </summary>
-        public static void BakeCanopyShellsAndImpostor(VegetationTreeAuthoring authoring)
+        public static void BakeAllGeneratedMeshes(VegetationTreeAuthoring authoring)
         {
-            // Range: requires the same authoring data as the shell and impostor bake steps. Condition: shells are refreshed first for convenience, then the impostor is rebuilt directly from the original tree meshes. Output: referenced prototypes and the blueprint are updated in one command.
-            BakeCanopyShells(authoring);
-            BakeImpostor(authoring);
+            // Range: requires the same authoring data as the individual shell, trunk, and impostor bake steps. Condition: all generated meshes are refreshed before one final asset save/refresh. Output: referenced prototypes and the blueprint are updated in one command.
+            if (authoring == null)
+            {
+                throw new ArgumentNullException(nameof(authoring));
+            }
+
+            TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
+            BakeCanopyShellsWithoutSave(blueprint);
+            BakeTrunkL3WithoutSave(blueprint);
+            BakeImpostorWithoutSave(blueprint);
+            SaveAuthoringChanges(authoring, blueprint);
         }
 
         /// <summary>
@@ -180,6 +190,33 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         internal static GameObject GetRequiredBranchRoot(VegetationTreeAuthoring authoring)
         {
             return authoring.BranchRoot ?? throw new InvalidOperationException($"{authoring.name} is missing _rootForBranches.");
+        }
+
+        private static void BakeCanopyShellsWithoutSave(TreeBlueprintSO blueprint)
+        {
+            BranchPlacement[] placements = GetRequiredPlacements(blueprint);
+            HashSet<BranchPrototypeSO> bakedPrototypes = new HashSet<BranchPrototypeSO>();
+
+            for (int i = 0; i < placements.Length; i++)
+            {
+                BranchPrototypeSO prototype = placements[i].Prototype ??
+                                              throw new InvalidOperationException($"branches[{i}] is missing prototype.");
+                if (bakedPrototypes.Add(prototype))
+                {
+                    CanopyShellGenerator.BakeCanopyShells(prototype);
+                }
+            }
+        }
+
+        private static void BakeTrunkL3WithoutSave(TreeBlueprintSO blueprint)
+        {
+            TrunkL3MeshGenerator.BakeTrunkL3Mesh(blueprint, blueprint.ImposterSettings);
+        }
+
+        private static void BakeImpostorWithoutSave(TreeBlueprintSO blueprint)
+        {
+            GetRequiredPlacements(blueprint);
+            ImpostorMeshGenerator.BakeImpostorMesh(blueprint, blueprint.ImposterSettings);
         }
 
         private static void SaveAuthoringChanges(VegetationTreeAuthoring authoring, TreeBlueprintSO blueprint)

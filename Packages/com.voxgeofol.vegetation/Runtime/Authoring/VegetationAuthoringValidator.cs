@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -83,7 +84,6 @@ public static class VegetationAuthoringValidator
         if (lodProfile.L0Distance <= 0f ||
             lodProfile.L1Distance <= 0f ||
             lodProfile.L2Distance <= 0f ||
-            lodProfile.L3Distance <= 0f ||
             lodProfile.ImpostorDistance <= 0f ||
             lodProfile.AbsoluteCullDistance <= 0f)
         {
@@ -92,11 +92,10 @@ public static class VegetationAuthoringValidator
 
         if (!(lodProfile.L0Distance < lodProfile.L1Distance &&
               lodProfile.L1Distance < lodProfile.L2Distance &&
-              lodProfile.L2Distance < lodProfile.L3Distance &&
-              lodProfile.L3Distance < lodProfile.ImpostorDistance &&
+              lodProfile.L2Distance < lodProfile.ImpostorDistance &&
               lodProfile.ImpostorDistance < lodProfile.AbsoluteCullDistance))
         {
-            result.AddError("LOD distances must strictly increase: l0 < l1 < l2 < l3 < impostor < absoluteCull.");
+            result.AddError("LOD distances must strictly increase: l0 < l1 < l2 < impostor < absoluteCull.");
         }
 
         return result;
@@ -267,7 +266,7 @@ public static class VegetationAuthoringValidator
 
             if (node.FirstChildIndex >= 0 && node.FirstChildIndex <= i)
             {
-                    result.AddError($"{fieldPrefix}[{i}] firstChildIndex must point to a later node index in the flattened hierarchy.");
+                result.AddError($"{fieldPrefix}[{i}] firstChildIndex must point to a later node index in the flattened hierarchy.");
             }
 
             if (node.ChildMask == 0)
@@ -307,6 +306,18 @@ public static class VegetationAuthoringValidator
                         if (!ContainsBounds(node.LocalBounds, childNode.LocalBounds))
                         {
                             result.AddError($"{fieldPrefix}[{i}] child bounds must stay inside parent bounds.");
+                        }
+
+                        int expectedOctant = GetExpectedChildOctant(node.ChildMask, childOffset);
+                        if (!TryGetChildOctant(node.LocalBounds, childNode.LocalBounds, out int actualOctant))
+                        {
+                            result.AddError($"{fieldPrefix}[{i}] child bounds must resolve to exactly one octant for BFS validation.");
+                            continue;
+                        }
+
+                        if (actualOctant != expectedOctant)
+                        {
+                            result.AddError($"{fieldPrefix}[{i}] child block order must follow ascending octant-bit order from childMask.");
                         }
                     }
                 }
@@ -470,6 +481,11 @@ public static class VegetationAuthoringValidator
         {
             result.AddError("trunkL3Mesh bounds must stay inside treeBounds.");
         }
+
+        if (GetTriangleCount(trunkL3Mesh) >= GetTriangleCount(trunkMesh))
+        {
+            result.AddError("trunkL3Mesh triangle count must be strictly lower than trunkMesh triangle count.");
+        }
     }
 
     private static void ValidateRequiredReadableMesh(Mesh? mesh, string fieldName, VegetationValidationResult result)
@@ -584,6 +600,57 @@ public static class VegetationAuthoringValidator
         return count;
     }
 
+    private static int GetExpectedChildOctant(byte childMask, int childOffset)
+    {
+        int currentChild = 0;
+        for (int octant = 0; octant < 8; octant++)
+        {
+            if ((childMask & (1 << octant)) == 0)
+            {
+                continue;
+            }
+
+            if (currentChild == childOffset)
+            {
+                return octant;
+            }
+
+            currentChild++;
+        }
+
+        throw new InvalidOperationException($"childOffset {childOffset} exceeds childMask {childMask}.");
+    }
+
+    private static bool TryGetChildOctant(Bounds parentBounds, Bounds childBounds, out int octant)
+    {
+        Vector3 parentCenter = parentBounds.center;
+        octant = 0;
+
+        if (!TryGetAxisOctantBit(parentCenter.x, childBounds.min.x, childBounds.max.x, 1, out int xBit) ||
+            !TryGetAxisOctantBit(parentCenter.y, childBounds.min.y, childBounds.max.y, 2, out int yBit) ||
+            !TryGetAxisOctantBit(parentCenter.z, childBounds.min.z, childBounds.max.z, 4, out int zBit))
+        {
+            return false;
+        }
+
+        octant = xBit | yBit | zBit;
+        return true;
+    }
+
+    private static bool TryGetAxisOctantBit(float axisCenter, float childMin, float childMax, int axisBit, out int value)
+    {
+        bool isLowerHalf = childMax <= axisCenter + BoundsContainmentEpsilon;
+        bool isUpperHalf = childMin >= axisCenter - BoundsContainmentEpsilon;
+        if (isLowerHalf == isUpperHalf)
+        {
+            value = 0;
+            return false;
+        }
+
+        value = isUpperHalf ? axisBit : 0;
+        return true;
+    }
+
     private static bool IsScaleOnQuarterStep(float scale)
     {
         if (scale <= 0f)
@@ -610,7 +677,7 @@ public static class VegetationAuthoringValidator
                candidateMax.z <= containerMax.z;
     }
 
-private static Bounds TransformBounds(Bounds bounds, Matrix4x4 matrix)
+    private static Bounds TransformBounds(Bounds bounds, Matrix4x4 matrix)
     {
         // Range: input bounds are branch-local authoring bounds. Condition: matrix contains the placement TRS only. Output: transformed AABB in tree-local space.
         Vector3 center = bounds.center;
