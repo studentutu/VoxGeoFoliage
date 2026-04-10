@@ -59,11 +59,11 @@ PrefabInstance:
     - target: {fileID: -2096592491135808723, guid: e5a8eb051d3fffc45afb91196e47f1ae, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 72a7df46ac0cce54a91695e1898ab6bb, type: 2}
+      objectReference: {fileID: 2100000, guid: ecaffefaa3a08ce43b2fb6c79d1b2bb4, type: 2}
     - target: {fileID: -1494055939781403960, guid: e5a8eb051d3fffc45afb91196e47f1ae, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 72a7df46ac0cce54a91695e1898ab6bb, type: 2}
+      objectReference: {fileID: 2100000, guid: 678118c1e1511a248a05ba4414ececf4, type: 2}
     - target: {fileID: 919132149155446097, guid: e5a8eb051d3fffc45afb91196e47f1ae, type: 3}
       propertyPath: m_Name
       value: pine_branch_dense_needles

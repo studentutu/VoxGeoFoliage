@@ -39,9 +39,12 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         /// <summary>
         /// [INTEGRATION] Validates the scene binding and the referenced tree blueprint contract.
         /// </summary>
-        public VegetationValidationResult Validate()
+        [ContextMenu("Validate tree authoring.")]
+        public void Validate()
         {
-            return VegetationAuthoringValidator.ValidateTreeAuthoring(this);
+            var result = VegetationAuthoringValidator.ValidateTreeAuthoring(this);
+            
+            UnityEngine.Debug.LogWarning($"VegetationAuthoringValidator : {result}");
         }
     }
 }

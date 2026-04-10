@@ -15,7 +15,7 @@ MonoBehaviour:
   woodMesh: {fileID: 8242496408859003367, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
   woodMaterial: {fileID: 2100000, guid: 72a7df46ac0cce54a91695e1898ab6bb, type: 2}
   foliageMesh: {fileID: -6062578164958778753, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
-  foliageMaterial: {fileID: 2100000, guid: ecaffefaa3a08ce43b2fb6c79d1b2bb4, type: 2}
+  foliageMaterial: {fileID: 2100000, guid: 1e8b3c0229b50f94bab471853295c8d5, type: 2}
   leafColorTint: {r: 0.5867785, g: 0.9547169, b: 0.38008535, a: 1}
   generatedCanopyShellsRelativeFolder: Tree/VoxFoliage/GeneratedMeshes/Branch_leaves
   shellNodesL0:

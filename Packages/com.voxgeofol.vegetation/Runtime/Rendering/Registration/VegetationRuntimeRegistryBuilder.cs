@@ -204,9 +204,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 LodProfileIndex = RegisterLodProfile(lodProfile),
                 BranchPlacementStartIndex = branchPlacementStart,
                 BranchPlacementCount = blueprint.Branches.Length,
-                TrunkFullDrawSlot = RegisterDrawSlot(trunkMesh, trunkMaterial, $"{blueprint.name}:TrunkFull"),
-                TrunkL3DrawSlot = RegisterDrawSlot(trunkL3Mesh, trunkMaterial, $"{blueprint.name}:TrunkL3"),
-                ImpostorDrawSlot = RegisterDrawSlot(impostorMesh, impostorMaterial, $"{blueprint.name}:Impostor")
+                TrunkFullDrawSlot = RegisterDrawSlot(trunkMesh, trunkMaterial, VegetationRenderMaterialKind.Trunk, $"{blueprint.name}:TrunkFull"),
+                TrunkL3DrawSlot = RegisterDrawSlot(trunkL3Mesh, trunkMaterial, VegetationRenderMaterialKind.Trunk, $"{blueprint.name}:TrunkL3"),
+                ImpostorDrawSlot = RegisterDrawSlot(impostorMesh, impostorMaterial, VegetationRenderMaterialKind.FarMesh, $"{blueprint.name}:Impostor")
             });
 
             blueprintIndices.Add(blueprint, blueprintIndex);
@@ -245,11 +245,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             branchPrototypes.Add(new VegetationBranchPrototypeRuntime
             {
-                WoodDrawSlotL0 = RegisterDrawSlot(woodMesh, woodMaterial, $"{prototype.name}:WoodL0"),
-                WoodDrawSlotL1 = RegisterDrawSlot(woodMesh, woodMaterial, $"{prototype.name}:WoodL1"),
-                WoodDrawSlotL2 = RegisterDrawSlot(shellL1WoodMesh, woodMaterial, $"{prototype.name}:WoodL2"),
-                WoodDrawSlotL3 = RegisterDrawSlot(shellL2WoodMesh, woodMaterial, $"{prototype.name}:WoodL3"),
-                FoliageDrawSlotL0 = RegisterDrawSlot(foliageMesh, foliageMaterial, $"{prototype.name}:FoliageL0"),
+                WoodDrawSlotL0 = RegisterDrawSlot(woodMesh, woodMaterial, VegetationRenderMaterialKind.Trunk, $"{prototype.name}:WoodL0"),
+                WoodDrawSlotL1 = RegisterDrawSlot(woodMesh, woodMaterial, VegetationRenderMaterialKind.Trunk, $"{prototype.name}:WoodL1"),
+                WoodDrawSlotL2 = RegisterDrawSlot(shellL1WoodMesh, woodMaterial, VegetationRenderMaterialKind.Trunk, $"{prototype.name}:WoodL2"),
+                WoodDrawSlotL3 = RegisterDrawSlot(shellL2WoodMesh, woodMaterial, VegetationRenderMaterialKind.Trunk, $"{prototype.name}:WoodL3"),
+                FoliageDrawSlotL0 = RegisterDrawSlot(foliageMesh, foliageMaterial, VegetationRenderMaterialKind.CanopyFoliage, $"{prototype.name}:FoliageL0"),
                 ShellNodeStartIndexL1 = shellStartL1,
                 ShellNodeCountL1 = prototype.ShellNodesL0.Length,
                 ShellNodeStartIndexL2 = shellStartL2,
@@ -289,21 +289,21 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     LocalExtents = sourceNode.LocalBounds.extents,
                     FirstChildIndex = sourceNode.FirstChildIndex,
                     ChildMask = sourceNode.ChildMask,
-                    ShellDrawSlot = RegisterDrawSlot(shellMesh, shellMaterial, $"{debugLabelPrefix}[{i}]")
+                    ShellDrawSlot = RegisterDrawSlot(shellMesh, shellMaterial, VegetationRenderMaterialKind.CanopyShell, $"{debugLabelPrefix}[{i}]")
                 });
             }
         }
 
-        private int RegisterDrawSlot(Mesh mesh, Material material, string debugLabel)
+        private int RegisterDrawSlot(Mesh mesh, Material material, VegetationRenderMaterialKind materialKind, string debugLabel)
         {
-            DrawSlotKey key = new DrawSlotKey(mesh.GetInstanceID(), material.GetInstanceID());
+            DrawSlotKey key = new DrawSlotKey(mesh.GetInstanceID(), material.GetInstanceID(), materialKind);
             if (drawSlotIndices.TryGetValue(key, out int existingIndex))
             {
                 return existingIndex;
             }
 
             int slotIndex = drawSlots.Count;
-            drawSlots.Add(new VegetationDrawSlot(slotIndex, mesh, material, debugLabel));
+            drawSlots.Add(new VegetationDrawSlot(slotIndex, mesh, material, materialKind, debugLabel));
             drawSlotIndices.Add(key, slotIndex);
             return slotIndex;
         }
@@ -344,19 +344,24 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private readonly struct DrawSlotKey : IEquatable<DrawSlotKey>
         {
-            public DrawSlotKey(int meshInstanceId, int materialInstanceId)
+            public DrawSlotKey(int meshInstanceId, int materialInstanceId, VegetationRenderMaterialKind materialKind)
             {
                 MeshInstanceId = meshInstanceId;
                 MaterialInstanceId = materialInstanceId;
+                MaterialKind = materialKind;
             }
 
             public int MeshInstanceId { get; }
 
             public int MaterialInstanceId { get; }
 
+            public VegetationRenderMaterialKind MaterialKind { get; }
+
             public bool Equals(DrawSlotKey other)
             {
-                return MeshInstanceId == other.MeshInstanceId && MaterialInstanceId == other.MaterialInstanceId;
+                return MeshInstanceId == other.MeshInstanceId &&
+                       MaterialInstanceId == other.MaterialInstanceId &&
+                       MaterialKind == other.MaterialKind;
             }
 
             public override bool Equals(object? obj)
@@ -368,7 +373,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             {
                 unchecked
                 {
-                    return (MeshInstanceId * 397) ^ MaterialInstanceId;
+                    int hash = (MeshInstanceId * 397) ^ MaterialInstanceId;
+                    return (hash * 397) ^ (int)MaterialKind;
                 }
             }
         }

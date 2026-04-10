@@ -111,6 +111,56 @@ public sealed class VegetationRuntimeFoundationTests
     }
 
     [Test]
+    public void IndirectRenderer_UploadFrameOutput_PreservesPerSlotCountsAndBounds()
+    {
+        VegetationTreeAuthoring authoring = CreateAuthoring("RuntimeTree", new Vector3(0f, 0f, 10f));
+        VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
+            .Build(new[] { authoring });
+
+        Camera camera = CreateCamera("RuntimeCamera", Vector3.zero, Quaternion.identity);
+        VegetationFrameDecisionState decisionState = new VegetationFrameDecisionState(registry);
+        VegetationFrameOutput frameOutput = registry.CreateFrameOutput();
+        new VegetationCpuReferenceEvaluator().EvaluateFrame(
+            registry,
+            camera.transform.position,
+            GeometryUtility.CalculateFrustumPlanes(camera),
+            decisionState,
+            frameOutput);
+
+        using (VegetationIndirectRenderer indirectRenderer = new VegetationIndirectRenderer(registry, 7))
+        {
+            indirectRenderer.UploadFrameOutput(frameOutput);
+
+            List<VegetationIndirectDrawBatchSnapshot> snapshots = new List<VegetationIndirectDrawBatchSnapshot>();
+            indirectRenderer.GetDebugSnapshots(snapshots);
+            Assert.AreEqual(frameOutput.ActiveSlotIndices.Count, snapshots.Count);
+
+            Dictionary<string, VegetationIndirectDrawBatchSnapshot> snapshotsByLabel = new Dictionary<string, VegetationIndirectDrawBatchSnapshot>(StringComparer.Ordinal);
+            for (int i = 0; i < snapshots.Count; i++)
+            {
+                snapshotsByLabel.Add(snapshots[i].DebugLabel, snapshots[i]);
+            }
+
+            Assert.AreEqual(1, snapshotsByLabel["RuntimeTree_Blueprint:TrunkFull"].InstanceCount);
+            Assert.AreEqual(1, snapshotsByLabel["RuntimeTree_Prototype:WoodL0"].InstanceCount);
+            Assert.AreEqual(1, snapshotsByLabel["RuntimeTree_Prototype:ShellL1[1]"].InstanceCount);
+
+            AssertBoundsEqual(
+                frameOutput,
+                "RuntimeTree_Blueprint:TrunkFull",
+                snapshotsByLabel["RuntimeTree_Blueprint:TrunkFull"].WorldBounds);
+            AssertBoundsEqual(
+                frameOutput,
+                "RuntimeTree_Prototype:WoodL0",
+                snapshotsByLabel["RuntimeTree_Prototype:WoodL0"].WorldBounds);
+            AssertBoundsEqual(
+                frameOutput,
+                "RuntimeTree_Prototype:ShellL1[1]",
+                snapshotsByLabel["RuntimeTree_Prototype:ShellL1[1]"].WorldBounds);
+        }
+    }
+
+    [Test]
     public void GpuDecisionPipeline_MatchesCpuReferenceForL1ShellBranch()
     {
         if (!SystemInfo.supportsComputeShaders)
@@ -354,6 +404,27 @@ public sealed class VegetationRuntimeFoundationTests
         }
 
         return counts;
+    }
+
+    private void AssertBoundsEqual(VegetationFrameOutput frameOutput, string drawLabel, Bounds actualBounds)
+    {
+        for (int i = 0; i < frameOutput.ActiveSlotIndices.Count; i++)
+        {
+            int slotIndex = frameOutput.ActiveSlotIndices[i];
+            VegetationVisibleSlotOutput slotOutput = frameOutput.SlotOutputs[slotIndex];
+            if (slotOutput.DrawSlot.DebugLabel == drawLabel)
+            {
+                Assert.That(actualBounds.center.x, Is.EqualTo(slotOutput.VisibleBounds.center.x).Within(0.0001f));
+                Assert.That(actualBounds.center.y, Is.EqualTo(slotOutput.VisibleBounds.center.y).Within(0.0001f));
+                Assert.That(actualBounds.center.z, Is.EqualTo(slotOutput.VisibleBounds.center.z).Within(0.0001f));
+                Assert.That(actualBounds.size.x, Is.EqualTo(slotOutput.VisibleBounds.size.x).Within(0.0001f));
+                Assert.That(actualBounds.size.y, Is.EqualTo(slotOutput.VisibleBounds.size.y).Within(0.0001f));
+                Assert.That(actualBounds.size.z, Is.EqualTo(slotOutput.VisibleBounds.size.z).Within(0.0001f));
+                return;
+            }
+        }
+
+        Assert.Fail($"Visible slot '{drawLabel}' was not found in the current frame output.");
     }
 
     private static void SetPrivateField(object target, string fieldName, object? value)

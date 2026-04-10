@@ -1,8 +1,11 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using Unity.Collections;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
@@ -29,13 +32,20 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly ComputeBuffer branchDecisionBuffer;
         private readonly ComputeBuffer nodeDecisionBuffer;
         private readonly Vector4[] frustumPlaneVectors = new Vector4[6];
+        private AsyncGPUReadbackRequest cellVisibilityReadback;
+        private AsyncGPUReadbackRequest treeModesReadback;
+        private AsyncGPUReadbackRequest branchDecisionsReadback;
+        private AsyncGPUReadbackRequest nodeDecisionsReadback;
+        private VegetationFrameDecisionState? completedReadbackState;
+        private bool readbackPending;
         private bool disposed;
 
         public VegetationGpuDecisionPipeline(ComputeShader classifyShader, VegetationRuntimeRegistry registry)
         {
             if (!SystemInfo.supportsComputeShaders)
             {
-                throw new NotSupportedException("This runtime does not support compute shaders, so the Phase D GPU decision path is unavailable.");
+                throw new NotSupportedException(
+                    "This runtime does not support compute shaders, so the Phase D GPU decision path is unavailable.");
             }
 
             this.classifyShader = classifyShader ?? throw new ArgumentNullException(nameof(classifyShader));
@@ -64,8 +74,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             shellNodesL3Buffer = CreateStructuredBuffer<ShellNodeGpu>(Mathf.Max(1, registry.ShellNodesL3.Count));
             cellVisibilityBuffer = CreateStructuredBuffer<uint>(Mathf.Max(1, registry.SpatialGrid.Cells.Count));
             treeModesBuffer = CreateStructuredBuffer<int>(Mathf.Max(1, registry.TreeInstances.Count));
-            branchDecisionBuffer = CreateStructuredBuffer<VegetationBranchDecisionRecord>(Mathf.Max(1, registry.SceneBranches.Count));
-            nodeDecisionBuffer = CreateStructuredBuffer<VegetationNodeDecisionRecord>(Mathf.Max(1, registry.TotalNodeDecisionCapacity));
+            branchDecisionBuffer =
+                CreateStructuredBuffer<VegetationBranchDecisionRecord>(Mathf.Max(1, registry.SceneBranches.Count));
+            nodeDecisionBuffer =
+                CreateStructuredBuffer<VegetationNodeDecisionRecord>(Mathf.Max(1, registry.TotalNodeDecisionCapacity));
 
             UploadStaticData();
             BindBuffers();
@@ -88,7 +100,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             if (frustumPlanes.Length < 6)
             {
-                throw new ArgumentException("Phase D GPU frustum classification requires six frustum planes.", nameof(frustumPlanes));
+                throw new ArgumentException("Phase D GPU frustum classification requires six frustum planes.",
+                    nameof(frustumPlanes));
             }
 
             UploadDynamicFrameData(cameraWorldPosition, frustumPlanes);
@@ -111,6 +124,123 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             branchDecisionBuffer.GetData(state.BranchDecisions, 0, 0, registry.SceneBranches.Count);
             nodeDecisionBuffer.GetData(state.NodeDecisions, 0, 0, registry.TotalNodeDecisionCapacity);
             return state;
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Schedules one non-blocking GPU readback of the current Phase D decision buffers for Phase E fallback decode.
+        /// </summary>
+        public void ScheduleFrameReadback(Vector3 cameraWorldPosition, Plane[] frustumPlanes)
+        {
+            if (disposed)
+            {
+                throw new ObjectDisposedException(nameof(VegetationGpuDecisionPipeline));
+            }
+
+            if (!SystemInfo.supportsAsyncGPUReadback)
+            {
+                throw new NotSupportedException(
+                    "This runtime does not support AsyncGPUReadback, so the Phase E GPU decision readback bridge is unavailable.");
+            }
+
+            if (readbackPending)
+            {
+                return;
+            }
+
+            if (frustumPlanes == null)
+            {
+                throw new ArgumentNullException(nameof(frustumPlanes));
+            }
+
+            if (frustumPlanes.Length < 6)
+            {
+                throw new ArgumentException("Phase D GPU frustum classification requires six frustum planes.",
+                    nameof(frustumPlanes));
+            }
+
+            UploadDynamicFrameData(cameraWorldPosition, frustumPlanes);
+            DispatchKernel(classifyCellsKernel, registry.SpatialGrid.Cells.Count);
+            DispatchKernel(classifyTreesKernel, registry.TreeInstances.Count);
+            DispatchKernel(classifyBranchesAndNodesKernel, registry.SceneBranches.Count);
+
+            cellVisibilityReadback = AsyncGPUReadback.Request(cellVisibilityBuffer);
+            treeModesReadback = AsyncGPUReadback.Request(treeModesBuffer);
+            branchDecisionsReadback = AsyncGPUReadback.Request(branchDecisionBuffer);
+            nodeDecisionsReadback = AsyncGPUReadback.Request(nodeDecisionBuffer);
+            readbackPending = true;
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Tries to consume the latest completed GPU decision readback without blocking the frame.
+        /// </summary>
+        public bool TryConsumeCompletedReadback(out VegetationFrameDecisionState? state)
+        {
+            if (disposed)
+            {
+                throw new ObjectDisposedException(nameof(VegetationGpuDecisionPipeline));
+            }
+
+            if (!readbackPending)
+            {
+                state = null;
+                return false;
+            }
+
+            if (!cellVisibilityReadback.done ||
+                !treeModesReadback.done ||
+                !branchDecisionsReadback.done ||
+                !nodeDecisionsReadback.done)
+            {
+                state = null;
+                return false;
+            }
+
+            readbackPending = false;
+            if (cellVisibilityReadback.hasError ||
+                treeModesReadback.hasError ||
+                branchDecisionsReadback.hasError ||
+                nodeDecisionsReadback.hasError)
+            {
+                if (cellVisibilityReadback.hasError)
+                    UnityEngine.Debug.LogError(
+                        $"VegetationGpuDecisionPipeline GPU decision cellVisibilityReadback error.");
+                if (treeModesReadback.hasError)
+                    UnityEngine.Debug.LogError($"VegetationGpuDecisionPipeline GPU decision treeModesReadback error.");
+                if (branchDecisionsReadback.hasError)
+                    UnityEngine.Debug.LogError(
+                        $"VegetationGpuDecisionPipeline GPU decision branchDecisionsReadback error.");
+                if (nodeDecisionsReadback.hasError)
+                    UnityEngine.Debug.LogError(
+                        $"VegetationGpuDecisionPipeline GPU decision nodeDecisionsReadback error.");
+                
+                state = null;
+                return false;
+            }
+
+            completedReadbackState ??= new VegetationFrameDecisionState(registry);
+            completedReadbackState.Reset(registry);
+
+            NativeArray<uint> cellVisibility = cellVisibilityReadback.GetData<uint>();
+            for (int i = 0; i < registry.SpatialGrid.Cells.Count; i++)
+            {
+                completedReadbackState.CellVisibilityMask[i] = cellVisibility[i];
+            }
+
+            completedReadbackState.RefreshVisibleCellIndices(
+                BuildVisibleCellIndices(completedReadbackState.CellVisibilityMask));
+
+            NativeArray<int> treeModes = treeModesReadback.GetData<int>();
+            for (int i = 0; i < registry.TreeInstances.Count; i++)
+            {
+                completedReadbackState.TreeModes[i] = (VegetationTreeRenderMode)treeModes[i];
+            }
+
+            branchDecisionsReadback.GetData<VegetationBranchDecisionRecord>()
+                .CopyTo(completedReadbackState.BranchDecisions);
+            nodeDecisionsReadback.GetData<VegetationNodeDecisionRecord>().CopyTo(completedReadbackState.NodeDecisions);
+
+            state = completedReadbackState;
+            return true;
         }
 
         public void Dispose()
@@ -228,7 +358,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             UploadShellNodes(shellNodesL3Buffer, registry.ShellNodesL3);
         }
 
-        private void UploadShellNodes(ComputeBuffer targetBuffer, System.Collections.Generic.IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> source)
+        private void UploadShellNodes(ComputeBuffer targetBuffer,
+            IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> source)
         {
             ShellNodeGpu[] nodes = new ShellNodeGpu[Mathf.Max(1, source.Count)];
             for (int i = 0; i < source.Count; i++)
@@ -277,7 +408,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 frustumPlaneVectors[i] = new Vector4(plane.normal.x, plane.normal.y, plane.normal.z, plane.distance);
             }
 
-            classifyShader.SetVector("_CameraWorldPosition", new Vector4(cameraWorldPosition.x, cameraWorldPosition.y, cameraWorldPosition.z, 0f));
+            classifyShader.SetVector("_CameraWorldPosition",
+                new Vector4(cameraWorldPosition.x, cameraWorldPosition.y, cameraWorldPosition.z, 0f));
             classifyShader.SetVectorArray("_FrustumPlanes", frustumPlaneVectors);
             classifyShader.SetInt("_CellCount", registry.SpatialGrid.Cells.Count);
             classifyShader.SetInt("_TreeCount", registry.TreeInstances.Count);
@@ -297,10 +429,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             return new ComputeBuffer(count, Marshal.SizeOf<T>());
         }
 
-        private static int[] BuildVisibleCellIndices(uint[] mask)
+        private static int[] BuildVisibleCellIndices(IReadOnlyList<uint> mask)
         {
             int visibleCount = 0;
-            for (int i = 0; i < mask.Length; i++)
+            for (int i = 0; i < mask.Count; i++)
             {
                 if (mask[i] != 0u)
                 {
@@ -310,7 +442,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             int[] result = new int[visibleCount];
             int targetIndex = 0;
-            for (int i = 0; i < mask.Length; i++)
+            for (int i = 0; i < mask.Count; i++)
             {
                 if (mask[i] != 0u)
                 {

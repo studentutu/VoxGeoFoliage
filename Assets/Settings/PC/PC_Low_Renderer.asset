@@ -27,11 +27,15 @@ MonoBehaviour:
   m_RendererFeatures:
   - {fileID: 375584857543697397}
   - {fileID: 6921628297578724829}
-  m_RendererFeatureMap: f563e82070583605ddbd78a843900e60
+  - {fileID: 868101068678784476}
+  m_RendererFeatureMap: f563e82070583605ddbd78a843900e60dc65bc93521d0c0c
   m_UseNativeRenderPass: 0
   xrSystemData: {fileID: 11400000, guid: 60e1133243b97e347b653163a8c01b64, type: 2}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}
-  m_AssetVersion: 2
+  m_AssetVersion: 3
+  m_PrepassLayerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
   m_OpaqueLayerMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -49,6 +53,8 @@ MonoBehaviour:
   m_RenderingMode: 1
   m_DepthPrimingMode: 0
   m_CopyDepthMode: 0
+  m_DepthAttachmentFormat: 0
+  m_DepthTextureFormat: 0
   m_AccurateGbufferNormals: 0
   m_IntermediateTextureMode: 0
 --- !u!114 &375584857543697397
@@ -72,6 +78,24 @@ MonoBehaviour:
       surfaceData: 2
     screenSpaceSettings:
       normalBlend: 0
+--- !u!114 &868101068678784476
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f7a725f8d0729fc4e818a24cdae37f84, type: 3}
+  m_Name: VegetationRendererFeature
+  m_EditorClassIdentifier: Vegetation::VoxGeoFol.Features.Vegetation.Rendering.VegetationRendererFeature
+  m_Active: 1
+  settings:
+    DepthPassEvent: 250
+    ColorPassEvent: 300
+    RenderGameCameras: 1
+    RenderSceneViewCameras: 0
 --- !u!114 &6921628297578724829
 MonoBehaviour:
   m_ObjectHideFlags: 0

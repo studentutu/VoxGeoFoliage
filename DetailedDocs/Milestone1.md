@@ -499,6 +499,26 @@ Validation status:
 - Unity EditMode tests passed on `2026-04-09`
 - current batch-mode Unity environment imports `VegetationClassify.compute` without exposing the expected kernels, so the GPU parity test is intentionally ignored there and the runtime GPU hook throws explicit `NotSupportedException` instead of pretending GPU success
 
+## Phase E Implementation Update (`2026-04-10`)
+
+Phase E now has a working runtime render path with the following concrete implementation:
+- render-side ownership is frozen between `VegetationRuntimeManager`, `VegetationIndirectRenderer`, and `VegetationRendererFeature`
+- `VegetationIndirectRenderer` uploads exact draw-slot instance payloads, indirect args, and rebuilt per-slot `worldBounds`
+- runtime shader suite is implemented: `VegetationCanopyLit.shader`, `VegetationTrunkLit.shader`, `VegetationFarMeshLit.shader`, `VegetationDepthOnly.shader`, and shared `VegetationIndirectCommon.hlsl`
+- `VegetationRuntimeManager` now prepares one per-camera frame snapshot for Phase E consumption and exposes an optional non-blocking GPU decision readback bridge beside the existing CPU reference path
+- `VegetationRendererFeature` schedules indirect depth and color submission
+- `DebugVegetationDemo` landed under `Packages/com.voxgeofol.vegetation/Runtime/Rendering/Debug` to inspect decoded visible instances and uploaded indirect batches directly in Scene view
+- EditMode coverage now includes the indirect-renderer upload boundary for per-slot counts and rebuilt bounds
+
+Current implementation caveats:
+- CPU reference output is still the default prepared-frame source; the optional GPU mode is a delayed decision-readback bridge, not a fully GPU-decoded frontier yet
+- the batch-mode kernel-import issue on `VegetationClassify.compute` is still open
+- end-to-end scene verification for expanded trees, impostors, per-slot counts, and rebuilt `worldBounds` is still pending
+
+Validation status:
+- `Fully Compile by Unity` succeeded on `2026-04-10`
+- Unity EditMode tests were not rerun after Phase E because the long Unity test path is still intentionally user-triggered in this repo
+
 ---
 
 ## Implementation Order
@@ -567,7 +587,14 @@ Validation status:
 Current caveat:
 - the compute shader parity hook exists and is wired, but Unity batch-mode currently imports the shader without exposing its kernels; Phase E must investigate that environment issue while replacing the parity hook with the real renderer-facing GPU bridge (low priority, as developer will verify actual end product with a full solution in editor)
 
-### Phase E: Hybrid Decode Rendering Pipeline
+### Phase E: Hybrid Decode Rendering Pipeline [IN PROGRESS]
+
+Status clarification (`2026-04-10`):
+- Code-side render infrastructure for `E1` through `E5` is implemented.
+- `Phase E` is not complete as a milestone phase.
+- `E6` end-to-end demo-scene verification is still pending.
+- `E7` compile check is done, but the manual verification part is still pending.
+- Current runtime still defaults to CPU-prepared visible output, so the milestone's intended GPU-primary decode ownership is not fully satisfied yet.
 
 1. `E1` Freeze render-side ownership and pass contracts before implementation:
    - `VegetationIndirectRenderer` owns per-slot visible buffers, indirect args, and visible-data `worldBounds`

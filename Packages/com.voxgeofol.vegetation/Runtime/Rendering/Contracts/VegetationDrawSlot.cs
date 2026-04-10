@@ -9,11 +9,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     /// </summary>
     public sealed class VegetationDrawSlot
     {
-        public VegetationDrawSlot(int slotIndex, Mesh mesh, Material material, string debugLabel)
+        public VegetationDrawSlot(int slotIndex, Mesh mesh, Material material, VegetationRenderMaterialKind materialKind, string debugLabel)
         {
             SlotIndex = slotIndex;
             Mesh = mesh;
             Material = material;
+            MaterialKind = materialKind;
             DebugLabel = debugLabel;
             IndexCountPerInstance = (uint)mesh.GetIndexCount(0);
             StartIndexLocation = (uint)mesh.GetIndexStart(0);
@@ -26,6 +27,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public Mesh Mesh { get; }
 
         public Material Material { get; }
+
+        public VegetationRenderMaterialKind MaterialKind { get; }
 
         public string DebugLabel { get; }
 
