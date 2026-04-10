@@ -2,6 +2,8 @@
 #pragma kernel ClassifyTrees
 #pragma kernel ClassifyBranchesAndNodes
 
+#include "UnityCG.cginc"
+
 struct CellGpu
 {
     float3 center;

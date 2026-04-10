@@ -27,7 +27,6 @@ Purpose: track immediate tasks and current milestone status.
 
 ## Next Up
 
-- `Phase E` starts only after Phase D outputs are stable.
 - `E-01` Freeze renderer ownership between `VegetationRuntimeManager`, `VegetationIndirectRenderer`, and `VegetationRendererFeature`.
 - `E-02` Implement the four-shader render suite with one consistent instance payload contract.
 - `E-03` Implement per-slot indirect renderer upload, indirect args, and visible-data bounds rebuild.
