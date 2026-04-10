@@ -19,6 +19,9 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - indirect
   - RenderMeshIndirect
   - classification
+  - classify debug
+  - debug classify
+  - scene gizmo
   - LOD
   - spatial grid
 - Read:

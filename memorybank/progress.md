@@ -12,6 +12,7 @@ Purpose: track immediate tasks and current milestone status.
 
 - `Phase A` through `Phase D` are implemented. Phase D landed on `2026-04-09` with runtime registration/flattening, deterministic spatial-grid registration, CPU reference classification/decode, renderer-neutral per-slot visible outputs, and a GPU parity hook.
 - Current runtime shell-node rule is explicit and conservative: visible internal nodes expand, visible leaves emit, and finer intra-tier collapse is deferred.
+- `2026-04-10`: added `DebugVegentationClassifyDemo` under `Packages/com.voxgeofol.vegetation/Runtime/Rendering/Debug` so the Playground scene can inspect real `VegetationClassify.compute` GPU output in Scene view on a selected live tree authoring.
 - Compile validation succeeded through `Fully Compile by Unity`.
 - Unity EditMode tests passed with one intentional ignore: `VegetationRuntimeFoundationTests.GpuDecisionPipeline_MatchesCpuReferenceForL1ShellBranch` is skipped when the batch environment imports `VegetationClassify.compute` without exposing the expected kernels. The runtime path throws explicit `NotSupportedException` in that case instead of silently faking GPU success.
 

@@ -33,6 +33,7 @@ Repo-used libraries and plugins:
 - `Packages/com.voxgeofol.vegetation/Runtime`
   - runtime-side authoring data and shared vegetation code, including tier-specific `BranchShellNode` canopy hierarchies persisted as `shellNodesL0`, `shellNodesL1`, and `shellNodesL2`
   - `Runtime/Rendering/` now holds the Phase D runtime foundation: contracts, runtime flattening, deterministic spatial-grid registration, CPU reference decode, GPU parity hooks, and the renderer-neutral per-slot visible-output handoff for Phase E
+  - `Runtime/Rendering/Debug/DebugVegentationClassifyDemo.cs` is the live Scene-view gizmo inspector for `VegetationClassify.compute`; it rebuilds the runtime registry in edit mode, runs the real GPU classification path, decodes the resulting visible frontier, and draws target-tree tree/branch/node output without needing a custom editor window
   - `Runtime/Shaders/VegetationClassify.compute` is the Phase D compute entry point used by the GPU decision-path parity hook
   - `MeshVoxelizerV1/` hosts the compatibility hierarchy API plus legacy voxelizer reference/demo code; the hierarchy builder in this folder is now CPU-volume-backed
   - `VoxelizerV2/` hosts the CPU/GPU voxel utilities; the production canopy, generated branch wood, simplified trunk, and impostor bake paths now use the CPU volume + bounded surface mesh path from this folder, including optional coplanar-face reduction through `CpuVoxelSurfaceMeshBuilder`
