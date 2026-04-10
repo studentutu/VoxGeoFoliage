@@ -59,6 +59,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                 int blueprintIndex = RegisterBlueprint(blueprint);
                 Matrix4x4 treeMatrix = authoring.transform.localToWorldMatrix;
+                Matrix4x4 treeWorldToObject = treeMatrix.inverse;
                 Bounds treeWorldBounds = VegetationRuntimeMathUtility.TransformBounds(blueprint.TreeBounds, treeMatrix);
                 Vector3 treeSphereCenter = treeWorldBounds.center;
                 float treeSphereRadius = treeWorldBounds.extents.magnitude;
@@ -77,6 +78,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         placement.LocalRotation,
                         Vector3.one * placement.Scale);
                     Matrix4x4 branchWorldMatrix = treeMatrix * branchLocalMatrix;
+                    Matrix4x4 branchWorldToObject = branchWorldMatrix.inverse;
                     Bounds branchWorldBounds = VegetationRuntimeMathUtility.TransformBounds(prototype.LocalBounds, branchWorldMatrix);
                     Vector3 branchSphereCenter = branchWorldBounds.center;
                     float branchSphereRadius = branchWorldBounds.extents.magnitude;
@@ -88,6 +90,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         BranchPlacementIndex = branchPlacementIndex,
                         PrototypeIndex = prototypeIndex,
                         LocalToWorld = branchWorldMatrix,
+                        WorldToObject = branchWorldToObject,
                         WorldBounds = branchWorldBounds,
                         SphereCenterWorld = branchSphereCenter,
                         BoundingSphereRadius = branchSphereRadius,
@@ -109,6 +112,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 {
                     Authoring = authoring,
                     LocalToWorld = treeMatrix,
+                    WorldToObject = treeWorldToObject,
                     WorldBounds = treeWorldBounds,
                     SphereCenterWorld = treeSphereCenter,
                     BoundingSphereRadius = treeSphereRadius,

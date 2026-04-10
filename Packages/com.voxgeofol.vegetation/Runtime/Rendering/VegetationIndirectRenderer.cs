@@ -14,7 +14,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     /// </summary>
     public sealed class VegetationIndirectRenderer : IDisposable
     {
-        private readonly int renderLayer;
+        private readonly bool diagnosticsEnabled;
         private readonly SlotResources[] slotResources;
         private readonly List<int> activeSlotIndices = new List<int>();
         private string lastUploadDiagnostics = string.Empty;
@@ -22,21 +22,24 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private string lastColorRenderDiagnostics = string.Empty;
         private bool disposed;
 
-        public VegetationIndirectRenderer(VegetationRuntimeRegistry registry, int renderLayer)
+        public VegetationIndirectRenderer(VegetationRuntimeRegistry registry, int renderLayer, bool diagnosticsEnabled = false)
         {
             if (registry == null)
             {
                 throw new ArgumentNullException(nameof(registry));
             }
 
-            this.renderLayer = renderLayer;
+            this.diagnosticsEnabled = diagnosticsEnabled;
             slotResources = new SlotResources[registry.DrawSlots.Count];
             for (int i = 0; i < slotResources.Length; i++)
             {
                 slotResources[i] = new SlotResources(registry.DrawSlots[i]);
             }
 
-            UnityEngine.Debug.Log($"VegetationIndirectRenderer created renderLayer={renderLayer} slotCount={slotResources.Length}");
+            if (diagnosticsEnabled)
+            {
+                UnityEngine.Debug.Log($"VegetationIndirectRenderer created renderLayer={renderLayer} slotCount={slotResources.Length}");
+            }
         }
 
         public IReadOnlyList<int> ActiveSlotIndices => activeSlotIndices;
@@ -234,7 +237,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     uploadCache[instanceIndex] = new VegetationIndirectInstanceData
                     {
                         ObjectToWorld = instance.LocalToWorld,
-                        WorldToObject = instance.LocalToWorld.inverse,
+                        WorldToObject = instance.WorldToObject,
                         PackedLeafTint = instance.PackedLeafTint
                     };
                 }
@@ -299,6 +302,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private void LogUploadDiagnostics(VegetationFrameOutput frameOutput)
         {
+            if (!diagnosticsEnabled)
+            {
+                return;
+            }
+
             int totalVisibleInstances = 0;
             StringBuilder builder = new StringBuilder(256);
             int slotsToLog = Mathf.Min(activeSlotIndices.Count, 6);
@@ -340,6 +348,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private void LogRenderDiagnostics(Camera camera, VegetationRenderPassMode passMode, int renderedSlotCount, int renderedInstanceCount)
         {
+            if (!diagnosticsEnabled)
+            {
+                return;
+            }
+
             StringBuilder builder = new StringBuilder(256);
             int slotsToLog = Mathf.Min(activeSlotIndices.Count, 6);
             for (int activeSlotOffset = 0; activeSlotOffset < slotsToLog; activeSlotOffset++)

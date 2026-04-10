@@ -12,6 +12,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     {
         public VegetationTreeAuthoring Authoring;
         public Matrix4x4 LocalToWorld;
+        public Matrix4x4 WorldToObject;
         public Bounds WorldBounds;
         public Vector3 SphereCenterWorld;
         public float BoundingSphereRadius;

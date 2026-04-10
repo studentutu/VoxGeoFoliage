@@ -1,6 +1,8 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
@@ -11,6 +13,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     {
         private readonly List<int> activeSlotIndices = new List<int>();
         private readonly VegetationVisibleSlotOutput[] slotOutputs;
+        private int[] shellDecodeQueue = Array.Empty<int>();
 
         public VegetationFrameOutput(IReadOnlyList<VegetationDrawSlot> drawSlots)
         {
@@ -49,6 +52,23 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             slotOutput.AddInstance(instance);
+        }
+
+        internal int[] GetShellDecodeQueue(int requiredCapacity)
+        {
+            if (shellDecodeQueue.Length >= requiredCapacity)
+            {
+                return shellDecodeQueue;
+            }
+
+            int newCapacity = Mathf.Max(1, shellDecodeQueue.Length);
+            while (newCapacity < requiredCapacity)
+            {
+                newCapacity <<= 1;
+            }
+
+            shellDecodeQueue = new int[newCapacity];
+            return shellDecodeQueue;
         }
     }
 }

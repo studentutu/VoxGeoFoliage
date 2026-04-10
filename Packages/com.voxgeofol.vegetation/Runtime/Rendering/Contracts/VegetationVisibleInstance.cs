@@ -15,6 +15,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public int DrawSlotIndex;
         public uint PackedLeafTint;
         public Matrix4x4 LocalToWorld;
+        public Matrix4x4 WorldToObject;
         public Bounds WorldBounds;
     }
 }

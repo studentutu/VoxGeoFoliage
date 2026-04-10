@@ -54,7 +54,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     case VegetationTreeRenderMode.Impostor:
                         if (GeometryUtility.TestPlanesAABB(frustumPlanes, treeInstance.WorldBounds))
                         {
-                            EmitVisibleInstance(frameOutput, registry.DrawSlots[blueprint.ImpostorDrawSlot], treeIndex, -1, -1, 0u, treeInstance.LocalToWorld);
+                            EmitVisibleInstance(frameOutput, registry.DrawSlots[blueprint.ImpostorDrawSlot], treeIndex, -1, -1, 0u, treeInstance.LocalToWorld, treeInstance.WorldToObject);
                         }
 
                         continue;
@@ -102,13 +102,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                             continue;
                         }
 
-                        EmitVisibleInstance(frameOutput, registry.DrawSlots[prototype.WoodDrawSlotL0], treeIndex, branchIndex, -1, 0u, sceneBranch.LocalToWorld);
-                        EmitVisibleInstance(frameOutput, registry.DrawSlots[prototype.FoliageDrawSlotL0], treeIndex, branchIndex, -1, prototype.PackedLeafTint, sceneBranch.LocalToWorld);
+                        EmitVisibleInstance(frameOutput, registry.DrawSlots[prototype.WoodDrawSlotL0], treeIndex, branchIndex, -1, 0u, sceneBranch.LocalToWorld, sceneBranch.WorldToObject);
+                        EmitVisibleInstance(frameOutput, registry.DrawSlots[prototype.FoliageDrawSlotL0], treeIndex, branchIndex, -1, prototype.PackedLeafTint, sceneBranch.LocalToWorld, sceneBranch.WorldToObject);
                         break;
                     case VegetationRuntimeBranchTier.L1:
                         if (GeometryUtility.TestPlanesAABB(frustumPlanes, sceneBranch.WorldBounds))
                         {
-                            EmitVisibleInstance(frameOutput, registry.DrawSlots[prototype.WoodDrawSlotL1], treeIndex, branchIndex, -1, 0u, sceneBranch.LocalToWorld);
+                            EmitVisibleInstance(frameOutput, registry.DrawSlots[prototype.WoodDrawSlotL1], treeIndex, branchIndex, -1, 0u, sceneBranch.LocalToWorld, sceneBranch.WorldToObject);
                         }
 
                         DecodeShellFrontier(registry, decisionState, frameOutput, treeIndex, branchIndex, sceneBranch, runtimeTier, prototype.PackedLeafTint);
@@ -116,7 +116,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     case VegetationRuntimeBranchTier.L2:
                         if (GeometryUtility.TestPlanesAABB(frustumPlanes, sceneBranch.WorldBounds))
                         {
-                            EmitVisibleInstance(frameOutput, registry.DrawSlots[prototype.WoodDrawSlotL2], treeIndex, branchIndex, -1, 0u, sceneBranch.LocalToWorld);
+                            EmitVisibleInstance(frameOutput, registry.DrawSlots[prototype.WoodDrawSlotL2], treeIndex, branchIndex, -1, 0u, sceneBranch.LocalToWorld, sceneBranch.WorldToObject);
                         }
 
                         DecodeShellFrontier(registry, decisionState, frameOutput, treeIndex, branchIndex, sceneBranch, runtimeTier, prototype.PackedLeafTint);
@@ -124,7 +124,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     case VegetationRuntimeBranchTier.L3:
                         if (GeometryUtility.TestPlanesAABB(frustumPlanes, sceneBranch.WorldBounds))
                         {
-                            EmitVisibleInstance(frameOutput, registry.DrawSlots[prototype.WoodDrawSlotL3], treeIndex, branchIndex, -1, 0u, sceneBranch.LocalToWorld);
+                            EmitVisibleInstance(frameOutput, registry.DrawSlots[prototype.WoodDrawSlotL3], treeIndex, branchIndex, -1, 0u, sceneBranch.LocalToWorld, sceneBranch.WorldToObject);
                         }
 
                         DecodeShellFrontier(registry, decisionState, frameOutput, treeIndex, branchIndex, sceneBranch, runtimeTier, prototype.PackedLeafTint);
@@ -137,7 +137,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             if (GeometryUtility.TestPlanesAABB(frustumPlanes, treeInstance.WorldBounds))
             {
                 int trunkSlot = useFullTrunk ? blueprint.TrunkFullDrawSlot : blueprint.TrunkL3DrawSlot;
-                EmitVisibleInstance(frameOutput, registry.DrawSlots[trunkSlot], treeIndex, -1, -1, 0u, treeInstance.LocalToWorld);
+                EmitVisibleInstance(frameOutput, registry.DrawSlots[trunkSlot], treeIndex, -1, -1, 0u, treeInstance.LocalToWorld, treeInstance.WorldToObject);
             }
         }
 
@@ -167,7 +167,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             };
 
             IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> shellNodes = registry.GetShellNodes(runtimeTier);
-            int[] queue = new int[decisionCount];
+            int[] queue = frameOutput.GetShellDecodeQueue(decisionCount);
             int queueHead = 0;
             int queueTail = 0;
             queue[queueTail++] = 0;
@@ -182,7 +182,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         continue;
                     case VegetationNodeDecision.EmitSelf:
                         VegetationBranchShellNodeRuntimeBfs node = shellNodes[shellStartIndex + localNodeIndex];
-                        EmitVisibleInstance(frameOutput, registry.DrawSlots[node.ShellDrawSlot], treeIndex, branchIndex, localNodeIndex, packedLeafTint, sceneBranch.LocalToWorld);
+                        EmitVisibleInstance(frameOutput, registry.DrawSlots[node.ShellDrawSlot], treeIndex, branchIndex, localNodeIndex, packedLeafTint, sceneBranch.LocalToWorld, sceneBranch.WorldToObject);
                         continue;
                     case VegetationNodeDecision.ExpandChildren:
                         VegetationBranchShellNodeRuntimeBfs parentNode = shellNodes[shellStartIndex + localNodeIndex];
@@ -206,7 +206,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             int branchIndex,
             int nodeIndex,
             uint packedLeafTint,
-            Matrix4x4 localToWorld)
+            Matrix4x4 localToWorld,
+            Matrix4x4 worldToObject)
         {
             frameOutput.AddVisibleInstance(new VegetationVisibleInstance
             {
@@ -216,6 +217,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 DrawSlotIndex = drawSlot.SlotIndex,
                 PackedLeafTint = packedLeafTint,
                 LocalToWorld = localToWorld,
+                WorldToObject = worldToObject,
                 WorldBounds = VegetationRuntimeMathUtility.TransformBounds(drawSlot.LocalBounds, localToWorld)
             });
         }

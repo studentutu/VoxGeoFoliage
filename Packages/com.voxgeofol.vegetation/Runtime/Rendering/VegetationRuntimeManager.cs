@@ -22,8 +22,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         [SerializeField] private ComputeShader? vegetationClassifyShader;
         [SerializeField] private VegetationRuntimeFrameSource frameSource = VegetationRuntimeFrameSource.CpuReference;
         [SerializeField] private bool bootstrapCpuReferenceWhileGpuReadbackPending = true;
+        [SerializeField] private bool enableDiagnostics;
 
         private readonly VegetationCpuReferenceEvaluator cpuReferenceEvaluator = new VegetationCpuReferenceEvaluator();
+        private readonly Plane[] reusableFrustumPlanes = new Plane[6];
         private readonly Plane[] pendingGpuReadbackFrustumPlanes = new Plane[6];
         private VegetationRuntimeRegistry? registry;
         private VegetationFrameDecisionState? lastDecisionState;
@@ -48,6 +50,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public VegetationRuntimeFrameSource LastPreparedFrameSource => lastPreparedFrameSource;
 
         public bool HasPreparedFrame => indirectRenderer != null && indirectRenderer.HasUploadedFrame;
+
+        internal bool DiagnosticsEnabled => enableDiagnostics;
 
         public static void GetActiveManagers(List<VegetationRuntimeManager> target)
         {
@@ -80,7 +84,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             lastDecisionState = new VegetationFrameDecisionState(registry);
             lastFrameOutput = registry.CreateFrameOutput();
             indirectRenderer?.Dispose();
-            indirectRenderer = new VegetationIndirectRenderer(registry, gameObject.layer);
+            indirectRenderer = new VegetationIndirectRenderer(registry, gameObject.layer, enableDiagnostics);
 
             for (int treeIndex = 0; treeIndex < registry.TreeInstances.Count; treeIndex++)
             {
@@ -124,7 +128,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 throw new ArgumentNullException(nameof(camera));
             }
 
-            SimulateReferenceFrame(camera.transform.position, GeometryUtility.CalculateFrustumPlanes(camera));
+            GeometryUtility.CalculateFrustumPlanes(camera, reusableFrustumPlanes);
+            SimulateReferenceFrame(camera.transform.position, reusableFrustumPlanes);
         }
 
         /// <summary>
@@ -176,12 +181,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 return HasPreparedFrame;
             }
 
-            Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(camera);
+            GeometryUtility.CalculateFrustumPlanes(camera, reusableFrustumPlanes);
             Vector3 cameraWorldPosition = camera.transform.position;
 
             bool uploadedFrame = frameSource == VegetationRuntimeFrameSource.GpuDecisionReadback
-                ? PrepareGpuDecisionFrame(cameraWorldPosition, frustumPlanes)
-                : PrepareCpuReferenceFrame(cameraWorldPosition, frustumPlanes);
+                ? PrepareGpuDecisionFrame(cameraWorldPosition, reusableFrustumPlanes)
+                : PrepareCpuReferenceFrame(cameraWorldPosition, reusableFrustumPlanes);
 
             lastPreparedCameraInstanceId = cameraInstanceId;
             lastPreparedRenderFrame = renderFrame;
@@ -285,7 +290,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private void LogRegistrationDiagnostics(IReadOnlyList<VegetationTreeAuthoring> authorings)
         {
-            if (registry == null)
+            if (!enableDiagnostics || registry == null)
             {
                 return;
             }
@@ -335,6 +340,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private void LogPreparationDiagnostics(Camera camera, bool uploadedFrame)
         {
+            if (!enableDiagnostics)
+            {
+                return;
+            }
+
             if (registry == null || lastDecisionState == null || lastFrameOutput == null || indirectRenderer == null)
             {
                 string missingStateSummary =

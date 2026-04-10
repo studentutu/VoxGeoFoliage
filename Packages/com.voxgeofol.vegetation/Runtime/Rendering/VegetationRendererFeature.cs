@@ -97,6 +97,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 camera = targetCamera;
                 VegetationRuntimeManager.GetActiveManagers(managers);
 
+                if (!ShouldLogDiagnostics(managers))
+                {
+                    return;
+                }
+
                 string summary = $"VegetationRenderPass setup pass={passMode} camera={targetCamera.name} managers={managers.Count}";
                 if (summary != lastSetupDiagnostics)
                 {
@@ -202,7 +207,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     renderedManagerCount++;
                 }
 
-                LogExecutionDiagnostics(camera, passMode, activeManagerCount, preparedManagerCount, renderedManagerCount, missingRendererCount);
+                LogExecutionDiagnostics(camera, passMode, activeManagerCount, preparedManagerCount, renderedManagerCount, missingRendererCount, managers);
             }
 
             private static void DrawManagers(
@@ -240,7 +245,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     renderedManagerCount++;
                 }
 
-                LogExecutionDiagnostics(camera, passMode, activeManagerCount, preparedManagerCount, renderedManagerCount, missingRendererCount);
+                LogExecutionDiagnostics(camera, passMode, activeManagerCount, preparedManagerCount, renderedManagerCount, missingRendererCount, managers);
             }
 
             private static void LogExecutionDiagnostics(
@@ -249,8 +254,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 int activeManagerCount,
                 int preparedManagerCount,
                 int renderedManagerCount,
-                int missingRendererCount)
+                int missingRendererCount,
+                IReadOnlyList<VegetationRuntimeManager>? managers = null)
             {
+                if (managers != null && !ShouldLogDiagnostics(managers))
+                {
+                    return;
+                }
+
                 string summary =
                     $"VegetationRenderPass execute pass={passMode} camera={camera.name} activeManagers={activeManagerCount} preparedManagers={preparedManagerCount} renderedManagers={renderedManagerCount} missingRenderers={missingRendererCount}";
                 bool isDepthPass = passMode == VegetationRenderPassMode.Depth;
@@ -277,6 +288,20 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 {
                     UnityEngine.Debug.Log(summary);
                 }
+            }
+
+            private static bool ShouldLogDiagnostics(IReadOnlyList<VegetationRuntimeManager> managers)
+            {
+                for (int i = 0; i < managers.Count; i++)
+                {
+                    VegetationRuntimeManager manager = managers[i];
+                    if (manager != null && manager.DiagnosticsEnabled)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
             }
 
             private sealed class PassData
