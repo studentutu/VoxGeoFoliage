@@ -596,7 +596,7 @@ Current caveat:
    - indirect color pass submission
    - non-blocking CPU fallback handoff only when GPU-primary decode output is unavailable or explicitly disabled (do not implement, if GPU-primary decode output is in place!)
 6. `E6` End-to-end verification in a demo scene:
-   - add DebugVegetationDemo.cs under `Packages\com.voxgeofol.vegetation\Runtime\Rendering\Debug` in order to let developer verify full solution in editor with preview camera (same testing approach as with `DebugVegentationClassifyDemo.cs`)
+   - add `DebugVegetationDemo.cs` under `Packages\com.voxgeofol.vegetation\Runtime\Rendering\Debug` in order to let developer verify full solution in editor with preview camera (same testing approach as with `DebugVegentationClassifyDemo.cs`)
    - expanded trees render trunk, branch wood, source foliage, and shell tiers on the correct runtime bands
    - impostor trees render `impostorMesh` only
    - per-slot visible counts match uploaded indirect args and rebuilt `worldBounds`
