@@ -202,6 +202,12 @@ namespace VoxGeoFol.Features.Vegetation.Editor
 
             serializedObject.ApplyModifiedProperties();
             EditorUtility.SetDirty(container);
+            if (!container.isActiveAndEnabled)
+            {
+                container.ResetRuntimeState();
+                return;
+            }
+
             container.RefreshRuntimeRegistration();
         }
 
