@@ -28,23 +28,23 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly int emitTreesKernel;
         private readonly int emitBranchesKernel;
         private readonly int finalizeIndirectArgsKernel;
-        private readonly ComputeBuffer cellBuffer;
-        private readonly ComputeBuffer lodBuffer;
-        private readonly ComputeBuffer treeBuffer;
-        private readonly ComputeBuffer branchBuffer;
-        private readonly ComputeBuffer prototypeBuffer;
-        private readonly ComputeBuffer shellNodesL1Buffer;
-        private readonly ComputeBuffer shellNodesL2Buffer;
-        private readonly ComputeBuffer shellNodesL3Buffer;
-        private readonly ComputeBuffer nodeRenderBuffer;
-        private readonly ComputeBuffer slotMetadataBuffer;
-        private readonly ComputeBuffer slotInstanceCountBuffer;
-        private readonly ComputeBuffer cellVisibilityBuffer;
-        private readonly ComputeBuffer treeModesBuffer;
-        private readonly ComputeBuffer branchDecisionBuffer;
-        private readonly ComputeBuffer nodeDecisionBuffer;
-        private readonly GraphicsBuffer residentInstanceBuffer;
-        private readonly GraphicsBuffer residentArgsBuffer;
+        private ComputeBuffer cellBuffer = null!;
+        private ComputeBuffer lodBuffer = null!;
+        private ComputeBuffer treeBuffer = null!;
+        private ComputeBuffer branchBuffer = null!;
+        private ComputeBuffer prototypeBuffer = null!;
+        private ComputeBuffer shellNodesL1Buffer = null!;
+        private ComputeBuffer shellNodesL2Buffer = null!;
+        private ComputeBuffer shellNodesL3Buffer = null!;
+        private ComputeBuffer nodeRenderBuffer = null!;
+        private ComputeBuffer slotMetadataBuffer = null!;
+        private ComputeBuffer slotInstanceCountBuffer = null!;
+        private ComputeBuffer cellVisibilityBuffer = null!;
+        private ComputeBuffer treeModesBuffer = null!;
+        private ComputeBuffer branchDecisionBuffer = null!;
+        private ComputeBuffer nodeDecisionBuffer = null!;
+        private GraphicsBuffer residentInstanceBuffer = null!;
+        private GraphicsBuffer residentArgsBuffer = null!;
         private readonly Vector4[] frustumPlaneVectors = new Vector4[6];
         private readonly int residentInstanceCapacity;
         private bool residentFramePrepared;
@@ -84,35 +84,43 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     exception);
             }
 
-            cellBuffer = CreateStructuredBuffer<CellGpu>(Mathf.Max(1, registry.SpatialGrid.Cells.Count));
-            lodBuffer = CreateStructuredBuffer<LodProfileGpu>(Mathf.Max(1, registry.LodProfiles.Count));
-            treeBuffer = CreateStructuredBuffer<TreeGpu>(Mathf.Max(1, registry.TreeInstances.Count));
-            branchBuffer = CreateStructuredBuffer<BranchGpu>(Mathf.Max(1, registry.SceneBranches.Count));
-            prototypeBuffer = CreateStructuredBuffer<PrototypeGpu>(Mathf.Max(1, registry.BranchPrototypes.Count));
-            shellNodesL1Buffer = CreateStructuredBuffer<ShellNodeGpu>(Mathf.Max(1, registry.ShellNodesL1.Count));
-            shellNodesL2Buffer = CreateStructuredBuffer<ShellNodeGpu>(Mathf.Max(1, registry.ShellNodesL2.Count));
-            shellNodesL3Buffer = CreateStructuredBuffer<ShellNodeGpu>(Mathf.Max(1, registry.ShellNodesL3.Count));
-            nodeRenderBuffer = CreateStructuredBuffer<NodeRenderGpu>(Mathf.Max(1, registry.TotalNodeDecisionCapacity));
-            slotMetadataBuffer = CreateStructuredBuffer<SlotGpu>(Mathf.Max(1, registry.DrawSlots.Count));
-            slotInstanceCountBuffer = CreateStructuredBuffer<uint>(Mathf.Max(1, registry.DrawSlots.Count));
-            cellVisibilityBuffer = CreateStructuredBuffer<uint>(Mathf.Max(1, registry.SpatialGrid.Cells.Count));
-            treeModesBuffer = CreateStructuredBuffer<int>(Mathf.Max(1, registry.TreeInstances.Count));
-            branchDecisionBuffer =
-                CreateStructuredBuffer<VegetationBranchDecisionRecord>(Mathf.Max(1, registry.SceneBranches.Count));
-            nodeDecisionBuffer =
-                CreateStructuredBuffer<VegetationNodeDecisionRecord>(Mathf.Max(1, registry.TotalNodeDecisionCapacity));
             residentInstanceCapacity = ComputeResidentInstanceCapacity(registry.DrawSlotMaxInstanceCounts);
-            residentInstanceBuffer = new GraphicsBuffer(
-                GraphicsBuffer.Target.Structured,
-                Mathf.Max(1, residentInstanceCapacity),
-                Marshal.SizeOf<VegetationIndirectInstanceData>());
-            residentArgsBuffer = new GraphicsBuffer(
-                GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.IndirectArguments,
-                Mathf.Max(1, registry.DrawSlots.Count * (GraphicsBuffer.IndirectDrawIndexedArgs.size / sizeof(uint))),
-                sizeof(uint));
+            try
+            {
+                cellBuffer = CreateStructuredBuffer<CellGpu>(Mathf.Max(1, registry.SpatialGrid.Cells.Count));
+                lodBuffer = CreateStructuredBuffer<LodProfileGpu>(Mathf.Max(1, registry.LodProfiles.Count));
+                treeBuffer = CreateStructuredBuffer<TreeGpu>(Mathf.Max(1, registry.TreeInstances.Count));
+                branchBuffer = CreateStructuredBuffer<BranchGpu>(Mathf.Max(1, registry.SceneBranches.Count));
+                prototypeBuffer = CreateStructuredBuffer<PrototypeGpu>(Mathf.Max(1, registry.BranchPrototypes.Count));
+                shellNodesL1Buffer = CreateStructuredBuffer<ShellNodeGpu>(Mathf.Max(1, registry.ShellNodesL1.Count));
+                shellNodesL2Buffer = CreateStructuredBuffer<ShellNodeGpu>(Mathf.Max(1, registry.ShellNodesL2.Count));
+                shellNodesL3Buffer = CreateStructuredBuffer<ShellNodeGpu>(Mathf.Max(1, registry.ShellNodesL3.Count));
+                nodeRenderBuffer = CreateStructuredBuffer<NodeRenderGpu>(Mathf.Max(1, registry.TotalNodeDecisionCapacity));
+                slotMetadataBuffer = CreateStructuredBuffer<SlotGpu>(Mathf.Max(1, registry.DrawSlots.Count));
+                slotInstanceCountBuffer = CreateStructuredBuffer<uint>(Mathf.Max(1, registry.DrawSlots.Count));
+                cellVisibilityBuffer = CreateStructuredBuffer<uint>(Mathf.Max(1, registry.SpatialGrid.Cells.Count));
+                treeModesBuffer = CreateStructuredBuffer<int>(Mathf.Max(1, registry.TreeInstances.Count));
+                branchDecisionBuffer =
+                    CreateStructuredBuffer<VegetationBranchDecisionRecord>(Mathf.Max(1, registry.SceneBranches.Count));
+                nodeDecisionBuffer =
+                    CreateStructuredBuffer<VegetationNodeDecisionRecord>(Mathf.Max(1, registry.TotalNodeDecisionCapacity));
+                residentInstanceBuffer = new GraphicsBuffer(
+                    GraphicsBuffer.Target.Structured,
+                    Mathf.Max(1, residentInstanceCapacity),
+                    Marshal.SizeOf<VegetationIndirectInstanceData>());
+                residentArgsBuffer = new GraphicsBuffer(
+                    GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.IndirectArguments,
+                    Mathf.Max(1, registry.DrawSlots.Count * (GraphicsBuffer.IndirectDrawIndexedArgs.size / sizeof(uint))),
+                    sizeof(uint));
 
-            UploadStaticData();
-            BindBuffers();
+                UploadStaticData();
+                BindBuffers();
+            }
+            catch
+            {
+                ReleaseResources();
+                throw;
+            }
         }
 
         /// <summary>
@@ -174,23 +182,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             disposed = true;
-            cellBuffer.Release();
-            lodBuffer.Release();
-            treeBuffer.Release();
-            branchBuffer.Release();
-            prototypeBuffer.Release();
-            shellNodesL1Buffer.Release();
-            shellNodesL2Buffer.Release();
-            shellNodesL3Buffer.Release();
-            nodeRenderBuffer.Release();
-            slotMetadataBuffer.Release();
-            slotInstanceCountBuffer.Release();
-            cellVisibilityBuffer.Release();
-            treeModesBuffer.Release();
-            branchDecisionBuffer.Release();
-            nodeDecisionBuffer.Release();
-            residentInstanceBuffer.Release();
-            residentArgsBuffer.Release();
+            ReleaseResources();
         }
 
         private void UploadStaticData()
@@ -432,6 +424,49 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private static ComputeBuffer CreateStructuredBuffer<T>(int count) where T : struct
         {
             return new ComputeBuffer(count, Marshal.SizeOf<T>());
+        }
+
+        private void ReleaseResources()
+        {
+            ReleaseComputeBuffer(ref cellBuffer);
+            ReleaseComputeBuffer(ref lodBuffer);
+            ReleaseComputeBuffer(ref treeBuffer);
+            ReleaseComputeBuffer(ref branchBuffer);
+            ReleaseComputeBuffer(ref prototypeBuffer);
+            ReleaseComputeBuffer(ref shellNodesL1Buffer);
+            ReleaseComputeBuffer(ref shellNodesL2Buffer);
+            ReleaseComputeBuffer(ref shellNodesL3Buffer);
+            ReleaseComputeBuffer(ref nodeRenderBuffer);
+            ReleaseComputeBuffer(ref slotMetadataBuffer);
+            ReleaseComputeBuffer(ref slotInstanceCountBuffer);
+            ReleaseComputeBuffer(ref cellVisibilityBuffer);
+            ReleaseComputeBuffer(ref treeModesBuffer);
+            ReleaseComputeBuffer(ref branchDecisionBuffer);
+            ReleaseComputeBuffer(ref nodeDecisionBuffer);
+            ReleaseGraphicsBuffer(ref residentInstanceBuffer);
+            ReleaseGraphicsBuffer(ref residentArgsBuffer);
+        }
+
+        private static void ReleaseComputeBuffer(ref ComputeBuffer buffer)
+        {
+            if (buffer == null)
+            {
+                return;
+            }
+
+            buffer.Release();
+            buffer = null!;
+        }
+
+        private static void ReleaseGraphicsBuffer(ref GraphicsBuffer buffer)
+        {
+            if (buffer == null)
+            {
+                return;
+            }
+
+            buffer.Release();
+            buffer = null!;
         }
 
         private static int ComputeResidentInstanceCapacity(IReadOnlyList<int> slotCounts)

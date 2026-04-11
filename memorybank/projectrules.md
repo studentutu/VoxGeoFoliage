@@ -58,6 +58,7 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 27. `VegetationRuntimeContainer` has no production CPU fallback. Missing compute support, missing `VegetationClassify.compute`, or shader-import failures are hard blockers that must fail explicitly.
 28. Production `VegetationRuntimeContainer` flow does not expose exact CPU-visible instance mirrors; available runtime diagnostics are profiler markers plus conservative uploaded indirect-batch snapshots with unknown exact per-slot instance counts.
 29. Runtime diagnostics ownership is renderer-feature scoped, not container scoped. `VegetationFoliageFeatureSettings.EnableDiagnostics` affects every active `VegetationRuntimeContainer` rendered by that feature.
+30. Runtime rendering resource owners must be exception-safe on partial construction. If material copies, compute buffers, or graphics buffers are allocated and later setup fails, the constructor path must release everything already created before rethrowing. Diagnostics in render prep/submission must not allocate in the steady-state loop; deduplicate on scalar state before building strings.
 
 ## Wiring Hubs
 

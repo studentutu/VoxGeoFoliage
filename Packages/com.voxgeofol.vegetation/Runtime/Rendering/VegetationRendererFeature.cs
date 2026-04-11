@@ -15,6 +15,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     /// </summary>
     public sealed class VegetationRendererFeature : ScriptableRendererFeature
     {
+        [Tooltip("Shared runtime settings for all vegetation containers rendered by this URP renderer feature.")]
         [SerializeField] private VegetationFoliageFeatureSettings settings = new VegetationFoliageFeatureSettings();
 
         private VegetationRenderPass? depthPass;
@@ -92,9 +93,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             private ComputeShader? classifyShader;
             private bool diagnosticsEnabled;
             private int containerSnapshotCount;
-            private string lastSetupDiagnostics = string.Empty;
-            private static string lastDepthExecutionDiagnostics = string.Empty;
-            private static string lastColorExecutionDiagnostics = string.Empty;
+            private int lastSetupCameraInstanceId = -1;
+            private int lastSetupContainerCount = -1;
+            private int lastSetupShaderInstanceId = -1;
+            private int lastExecutionCameraInstanceId = -1;
+            private int lastExecutionActiveContainerCount = -1;
+            private int lastExecutionPreparedContainerCount = -1;
+            private int lastExecutionRenderedContainerCount = -1;
+            private int lastExecutionMissingRendererCount = -1;
 
             public VegetationRenderPass(VegetationRenderPassMode passMode)
             {
@@ -124,13 +130,20 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         return;
                     }
 
-                    string summary =
-                        $"VegetationRenderPass setup pass={passMode} camera={targetCamera.name} containers={containers.Count} classifyShader={(targetClassifyShader != null ? targetClassifyShader.name : "<none>")} diagnostics={targetDiagnosticsEnabled}";
-                    if (summary != lastSetupDiagnostics)
+                    int cameraInstanceId = targetCamera.GetInstanceID();
+                    int shaderInstanceId = targetClassifyShader != null ? targetClassifyShader.GetInstanceID() : 0;
+                    if (cameraInstanceId == lastSetupCameraInstanceId &&
+                        containers.Count == lastSetupContainerCount &&
+                        shaderInstanceId == lastSetupShaderInstanceId)
                     {
-                        lastSetupDiagnostics = summary;
-                        UnityEngine.Debug.Log(summary);
+                        return;
                     }
+
+                    lastSetupCameraInstanceId = cameraInstanceId;
+                    lastSetupContainerCount = containers.Count;
+                    lastSetupShaderInstanceId = shaderInstanceId;
+                    UnityEngine.Debug.Log(
+                        $"VegetationRenderPass setup pass={passMode} camera={targetCamera.name} containers={containers.Count} classifyShader={(targetClassifyShader != null ? targetClassifyShader.name : "<none>")} diagnostics={targetDiagnosticsEnabled}");
                 }
             }
 
@@ -176,6 +189,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                                : "Vegetation Color Pass",
                            out PassData passData))
                 {
+                    passData.RenderPass = this;
                     passData.Camera = camera;
                     passData.ClassifyShader = classifyShader;
                     passData.DiagnosticsEnabled = diagnosticsEnabled;
@@ -196,13 +210,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     builder.AllowPassCulling(false);
                     builder.SetRenderFunc(static (PassData data, RasterGraphContext context) =>
                     {
-                        DrawContainers(data.Containers, data.ContainerCount, data.Camera, data.ClassifyShader,
+                        data.RenderPass.DrawContainers(data.Containers, data.ContainerCount, data.Camera, data.ClassifyShader,
                             data.DiagnosticsEnabled, data.PassMode, context.cmd);
                     });
                 }
             }
 
-            private static void DrawContainers(
+            private void DrawContainers(
                 IReadOnlyList<VegetationRuntimeContainer> containers,
                 int containerCount,
                 Camera camera,
@@ -247,7 +261,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
             }
 
-            private static void DrawContainers(
+            private void DrawContainers(
                 IReadOnlyList<VegetationRuntimeContainer> containers,
                 int containerCount,
                 Camera camera,
@@ -292,7 +306,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
             }
 
-            private static void LogExecutionDiagnostics(
+            private void LogExecutionDiagnostics(
                 Camera camera,
                 VegetationRenderPassMode passMode,
                 int activeContainerCount,
@@ -306,23 +320,24 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     return;
                 }
 
-                string summary =
-                    $"VegetationRenderPass execute pass={passMode} camera={camera.name} activeContainers={activeContainerCount} preparedContainers={preparedContainerCount} renderedContainers={renderedContainerCount} missingRenderers={missingRendererCount}";
-                bool isDepthPass = passMode == VegetationRenderPassMode.Depth;
-                string previousSummary = isDepthPass ? lastDepthExecutionDiagnostics : lastColorExecutionDiagnostics;
-                if (summary == previousSummary)
+                int cameraInstanceId = camera.GetInstanceID();
+                if (cameraInstanceId == lastExecutionCameraInstanceId &&
+                    activeContainerCount == lastExecutionActiveContainerCount &&
+                    preparedContainerCount == lastExecutionPreparedContainerCount &&
+                    renderedContainerCount == lastExecutionRenderedContainerCount &&
+                    missingRendererCount == lastExecutionMissingRendererCount)
                 {
                     return;
                 }
 
-                if (isDepthPass)
-                {
-                    lastDepthExecutionDiagnostics = summary;
-                }
-                else
-                {
-                    lastColorExecutionDiagnostics = summary;
-                }
+                lastExecutionCameraInstanceId = cameraInstanceId;
+                lastExecutionActiveContainerCount = activeContainerCount;
+                lastExecutionPreparedContainerCount = preparedContainerCount;
+                lastExecutionRenderedContainerCount = renderedContainerCount;
+                lastExecutionMissingRendererCount = missingRendererCount;
+
+                string summary =
+                    $"VegetationRenderPass execute pass={passMode} camera={camera.name} activeContainers={activeContainerCount} preparedContainers={preparedContainerCount} renderedContainers={renderedContainerCount} missingRenderers={missingRendererCount}";
 
                 if (renderedContainerCount == 0)
                 {
@@ -352,6 +367,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             private sealed class PassData
             {
+                public VegetationRenderPass RenderPass = null!;
                 public Camera Camera = null!;
                 public ComputeShader? ClassifyShader;
                 public bool DiagnosticsEnabled;

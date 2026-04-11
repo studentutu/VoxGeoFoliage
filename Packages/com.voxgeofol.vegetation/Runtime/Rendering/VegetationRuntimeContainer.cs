@@ -28,9 +28,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private static readonly List<VegetationRuntimeContainer> ActiveContainersInternal =
             new List<VegetationRuntimeContainer>();
 
+        [Tooltip("World-space origin of the frozen spatial grid built during runtime registration.")]
         [SerializeField] private Vector3 gridOrigin = Vector3.zero;
+
+        [Tooltip("World-space cell size of the frozen spatial grid. Changes require RefreshRuntimeRegistration().")]
         [SerializeField] private Vector3 cellSize = new Vector3(32f, 32f, 32f);
 
+        [Tooltip("Explicit authoring list owned by this container. Rebuild it with Fill Registered Authorings after hierarchy ownership changes.")]
         [SerializeField]
         private List<VegetationTreeAuthoring> registeredAuthorings = new List<VegetationTreeAuthoring>();
 
@@ -42,9 +46,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private int gpuPipelineShaderInstanceId = -1;
         private int lastPreparedCameraInstanceId = -1;
         private int lastPreparedRenderFrame = -1;
-        private string lastRegistrationDiagnostics = string.Empty;
-        private string lastPreparationDiagnostics = string.Empty;
-        private string lastPreparationWarning = string.Empty;
+        private bool registrationDiagnosticsDirty = true;
+        private int lastPreparationDiagnosticsCameraInstanceId = -1;
+        private int lastPreparationDiagnosticsDrawSlotCount = -1;
+        private bool lastPreparationDiagnosticsUploadedFrame;
+        private int lastPreparationMissingStateCameraInstanceId = -1;
+        private int lastPreparationWarningCameraInstanceId = -1;
+        private int lastPreparationWarningDrawSlotCount = -1;
+        private bool lastPreparationWarningUploadedFrame;
 
         public VegetationRuntimeRegistry? Registry => registry;
 
@@ -91,8 +100,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
 
                 ResetGpuDecisionPipeline();
+                registrationDiagnosticsDirty = true;
                 lastPreparedCameraInstanceId = -1;
                 lastPreparedRenderFrame = -1;
+                lastPreparationMissingStateCameraInstanceId = -1;
+                lastPreparationWarningCameraInstanceId = -1;
+                lastPreparationWarningDrawSlotCount = -1;
             }
         }
 
@@ -106,8 +119,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             indirectRenderer?.Dispose();
             indirectRenderer = null;
             registry = null;
+            registrationDiagnosticsDirty = true;
             lastPreparedCameraInstanceId = -1;
             lastPreparedRenderFrame = -1;
+            lastPreparationDiagnosticsCameraInstanceId = -1;
+            lastPreparationDiagnosticsDrawSlotCount = -1;
+            lastPreparationMissingStateCameraInstanceId = -1;
+            lastPreparationWarningCameraInstanceId = -1;
+            lastPreparationWarningDrawSlotCount = -1;
         }
 
         /// <summary>
@@ -286,7 +305,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private void LogRegistrationDiagnostics(IReadOnlyList<VegetationTreeAuthoring> authorings, bool diagnosticsEnabled)
         {
-            if (!diagnosticsEnabled || registry == null)
+            if (!diagnosticsEnabled || registry == null || !registrationDiagnosticsDirty)
             {
                 return;
             }
@@ -323,14 +342,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 builder.Append(']');
             }
 
-            string summary = builder.ToString();
-            if (summary == lastRegistrationDiagnostics)
-            {
-                return;
-            }
-
-            lastRegistrationDiagnostics = summary;
-            UnityEngine.Debug.Log(summary, this);
+            registrationDiagnosticsDirty = false;
+            UnityEngine.Debug.Log(builder.ToString(), this);
         }
 
         private void LogPreparationDiagnostics(Camera camera, bool uploadedFrame, bool diagnosticsEnabled)
@@ -340,44 +353,65 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 return;
             }
 
+            int cameraInstanceId = camera.GetInstanceID();
             if (registry == null || indirectRenderer == null)
             {
-                string missingStateSummary =
-                    $"VegetationRuntimeContainer prepare failed container={name} camera={camera.name} reason=missing-runtime-state";
-                if (missingStateSummary != lastPreparationWarning)
+                if (cameraInstanceId != lastPreparationMissingStateCameraInstanceId)
                 {
-                    lastPreparationWarning = missingStateSummary;
-                    UnityEngine.Debug.LogWarning(missingStateSummary, this);
+                    lastPreparationMissingStateCameraInstanceId = cameraInstanceId;
+                    UnityEngine.Debug.LogWarning(
+                        $"VegetationRuntimeContainer prepare failed container={name} camera={camera.name} reason=missing-runtime-state",
+                        this);
                 }
 
                 return;
             }
 
-            string summary = string.Format(
-                "VegetationRuntimeContainer prepare container={0} camera={1} uploaded={2} source=GpuResident drawSlots={3}",
-                name,
-                camera.name,
-                uploadedFrame,
-                indirectRenderer.ActiveSlotIndices.Count);
-
-            if (uploadedFrame && indirectRenderer.ActiveSlotIndices.Count > 0)
+            lastPreparationMissingStateCameraInstanceId = -1;
+            int drawSlotCount = indirectRenderer.ActiveSlotIndices.Count;
+            if (uploadedFrame && drawSlotCount > 0)
             {
-                if (summary != lastPreparationDiagnostics)
+                if (cameraInstanceId == lastPreparationDiagnosticsCameraInstanceId &&
+                    uploadedFrame == lastPreparationDiagnosticsUploadedFrame &&
+                    drawSlotCount == lastPreparationDiagnosticsDrawSlotCount)
                 {
-                    lastPreparationDiagnostics = summary;
-                    UnityEngine.Debug.Log(summary, this);
+                    return;
                 }
 
-                lastPreparationWarning = string.Empty;
+                lastPreparationDiagnosticsCameraInstanceId = cameraInstanceId;
+                lastPreparationDiagnosticsUploadedFrame = uploadedFrame;
+                lastPreparationDiagnosticsDrawSlotCount = drawSlotCount;
+                lastPreparationWarningCameraInstanceId = -1;
+                lastPreparationWarningDrawSlotCount = -1;
+                UnityEngine.Debug.Log(
+                    string.Format(
+                        "VegetationRuntimeContainer prepare container={0} camera={1} uploaded={2} source=GpuResident drawSlots={3}",
+                        name,
+                        camera.name,
+                        uploadedFrame,
+                        drawSlotCount),
+                    this);
                 return;
             }
 
-            string warningSummary = summary + " reason=no-bound-gpu-resident-draw-slots";
-            if (warningSummary != lastPreparationWarning)
+            if (cameraInstanceId == lastPreparationWarningCameraInstanceId &&
+                uploadedFrame == lastPreparationWarningUploadedFrame &&
+                drawSlotCount == lastPreparationWarningDrawSlotCount)
             {
-                lastPreparationWarning = warningSummary;
-                UnityEngine.Debug.LogWarning(warningSummary, this);
+                return;
             }
+
+            lastPreparationWarningCameraInstanceId = cameraInstanceId;
+            lastPreparationWarningUploadedFrame = uploadedFrame;
+            lastPreparationWarningDrawSlotCount = drawSlotCount;
+            UnityEngine.Debug.LogWarning(
+                string.Format(
+                    "VegetationRuntimeContainer prepare container={0} camera={1} uploaded={2} source=GpuResident drawSlots={3} reason=no-bound-gpu-resident-draw-slots",
+                    name,
+                    camera.name,
+                    uploadedFrame,
+                    drawSlotCount),
+                this);
         }
     }
 }
