@@ -1,12 +1,24 @@
-# Unity Foliage Assembly and voxel-based rendering with agentic workflow
+# Unity Foliage Assembly And Voxel-Based Rendering
 
-Primary purpose is re-integrate into Unity new Unreal 5.7 Foliage assembly workflow (based on nanites and heavy reuse of meshes).
+![UnityPreview](PreviewForReadme.png)
+
+## Overview
+
+This repository hosts the authoritative vegetation package, repo-local docs and scenes, and the agentic development workflow around them outside of Unity Editor.
+
+The feature goal is a Unity-side foliage-assembly workflow inspired by reusable branch modules, explicit voxel-derived shell tiers, opaque far meshes, and GPU-driven indirect rendering instead of masked foliage cards.
 
 Inspired by Unreal Engine 5.7 foliage innovations (Assemblies, voxelized LOD, and hierarchical wind animation).
 
-Also includes full agentic workflow outside of Unity Editor.
+## Start Here
 
-![UnityPreview](PreviewForReadme.png)
+- Package readme: [Packages/com.voxgeofol.vegetation/README.md](Packages/com.voxgeofol.vegetation/README.md)
+- Architecture authority: [DetailedDocs/UnityAssembledVegetation_FULL.md](DetailedDocs/UnityAssembledVegetation_FULL.md)
+- Embedded package: [Packages/com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation)
+- Playground scene: [Assets/Scenes/Playground.unity](Assets/Scenes/Playground.unity)
+- Repo-local sample mirror: [Assets/Tree](Assets/VegetationDemo)
+- demo terrain with mass-placement, see scene [BigPineForest.unity](Assets/Scenes/PineForest/BigPineForest.unity)
+
 
 ## What is Foliage Assembly and voxel-based rendering?
 
@@ -23,7 +35,7 @@ Short summary:
 - last level of detail (imposter) is fully opaque based on the minimum requirements
 - Nanite opaque rendering if very fast if no shader movement exists, thus wind is animated per branch bone (wind is animation, compute shader based)
 
-## Limitation of Unity
+### Limitation of Unity
 
 We can't make it one-to-one right now, but we still have options:
 - Unity doesn't have Nanite alternative, closest to it is an experimental virtual mesh package [VirtualMeshPackage](https://github.com/Unity-Technologies/com.unity.virtualmesh)
@@ -31,37 +43,28 @@ We can't make it one-to-one right now, but we still have options:
 - Reduced geometry at all levels in SRP (custom lods) needs to be explicit for the manual render batch approach
 - to keep SRP-friendly batching and allow variation we can use Unity API Renderer Shader User Value (RSUV) which is a tightly pack `uint` that is manually unpacked in shader for any form of variation for the instances.
 
-## Details
+## Feature Snapshot
 
-1. See proposed plan [UnityVegetationAssemblyPlan](DetailedDocs/UnityAssembledVegetation_FULL.md)
-2. See embedded package [com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation)
-3. See playground scene [Playground.unity](Assets/Scenes/Playground.unity)
+- One `VegetationTreeAuthoring` references one `TreeBlueprintSO`.
+  - meaning that grass can be a single instance of vegetation authority with multiple different branches (e.g. actual instances of the foliage grass blades or flowers).
+- One `TreeBlueprintSO` contains trunk and far-mesh (geometry-imposter) data plus `BranchPlacement[]`.
+- One `BranchPlacement` references one `BranchPrototypeSO`.
+- Many authorings can share one blueprint, and one blueprint can mix different prototypes or reuse the same prototype many times.
+- Runtime batching is by draw slot `mesh + material + material kind`, not by tree count or blueprint identity.
+- Runtime is container-scoped, snapshot-based, GPU-resident, URP-only, and opaque-only.
 
-Runtime setup is container-based: a scene can host any number of `VegetationRuntimeContainer` instances, including streamed chunks or addressable prefabs. Each container registers only active `VegetationTreeAuthoring` components inside its own hierarchy, and nested child containers own their own descendants.
+For the full support matrix, batching rules, setup, settings, runtime pipeline, and constraints, use the package README above as the source of truth.
 
-## Current `VegetationRuntimeContainer` limitations
+## Agentic Workflow
 
-- Runtime registration is a frozen snapshot. After `VegetationRuntimeContainer` is enabled, moving, rotating, or scaling `VegetationTreeAuthoring` instances is not synced automatically, including editor transform edits done after enable. Call `RefreshRuntimeRegistration()` or re-enable the container after those changes.
-- Registration-affecting scene and authoring changes are also not live-synced. Adding or removing `VegetationTreeAuthoring` instances, changing blueprint or placement data, or swapping generated meshes after enable requires `RefreshRuntimeRegistration()`.
-- Each `VegetationRuntimeContainer` only registers active `VegetationTreeAuthoring` components in its own hierarchy. Nested child containers claim their own descendants, which is the intended setup for streaming/addressable chunks.
-- The container is GPU-resident only. It requires compute-shader support plus a valid `VegetationClassify.compute` import; there is no runtime CPU fallback or async-readback bridge in the production path anymore.
-- Production output is GPU-only. Exact CPU-side visible-instance lists do not exist anymore, and diagnostics are limited to profiler markers plus conservative uploaded batch snapshots from the runtime renderer.
-
-Includes:
-- distributable sample assets, prefabs, and baked meshes under [Samples~/Vegetation Demo](Packages/com.voxgeofol.vegetation/Samples~/Vegetation%20Demo)
-- local workspace mirror of those demo assets under [Assets/Tree](Assets/Tree) so repo scenes continue to function
-- sample mesh very hight poly pine tree, see [ChristmasTree](Assets/Tree/Raw/ChristmasTree.fbx) with separate trunk and branches mesh from the leaves mesh (pines)
-- sample high poly single Fern leaf, see [fern_foliage_dense](Assets/Tree/Raw/fern_foliage_dense_fullgeo.obj)
-- sample branch for standard tree, see [branch_leaves](Assets/Tree/Raw/branch_leaves_fullgeo.obj)
-- demo terrain with mass-placement, see scene [BigPineForest.unity](Assets/Scenes/PineForest/BigPineForest.unity)
-
-## Prerequisites (developer repo, not the vegetation package)
-
-### Required
-
-- Unity Hub with unity Editor 6.3+
-- git + git bash
-- Rider ( or MSBuild required, version 14+ )
+- Read [AGENTS.md](AGENTS.md) before repo work.
+- For feature work, read [memorybank/techContext.md](memorybank/techContext.md), [memorybank/projectrules.md](memorybank/projectrules.md), and [memorybank/FeatureRouter.md](memorybank/FeatureRouter.md), then follow the routed detailed docs.
+- Ask to `read memory bank` before deep repo work and `update memory bank` when a task finishes or documentation/state changes.
+- Fast compile: `./rebuildSolutionWithRiderMsBuild.sh`
+- Full Unity compile and solution refresh: `./rebuildSolutionFromUnityItself.sh`
+- Run Unity tests: `./runTestsFromRoot.sh`
+- Parse Unity test output: `./runParsetests.sh`
+- If Unity, Rider, or Git Bash are installed in different locations, update the hardcoded paths in those scripts and in [.vscode/tasks.json](.vscode/tasks.json).
 
 ## What to change in order to get full agentic workflow
 
@@ -70,38 +73,21 @@ Includes:
   - change solution for quick MSBuild (take solution that is generated by Unity Editor) change solution field 'SOLUTION_UNIX="$PROJECT_PATH/LightECS.sln"' in [rebuildSolutionWithRiderMsBuild](./rebuildSolutionWithRiderMsBuild.sh)
 - VScode tasks use system git bash path: "C:\\Program Files\\Git\\bin\\bash.exe" (windows path, properly escaped)
 
-### Optional
+## Repo Requirements
 
-- Agentic CLI/VSCode Extension
-- VSCode  (make sure to set terminal to bash per extension settings)
-
-## Agentic workflow
-
-Uses recommended Unity package workflow with explicit separation of editor/runtime and non-essential samples.
-
-- Milestones
-  - ask to generate but first provide specific a full Design document
-  - ask to breakdown chosen Milestone into implementation tasks in a separate progress.md
-- Memory bank
-  - ask to read memory bank
-  - ask to update memory bank
-  - no default progress, ask to create and maintain (preferable per milestone/feature).
-- Tests + compilation without Unity (using MSBuild with provided unity generated solution)
-  - ask run unity tests
-  - ask parse unity tests
-  - ask fast-recompile project
+- Unity Hub with a Unity `6000.3+` editor installation.
+- Git and Git Bash.
+- Rider or an equivalent MSBuild-capable setup.
+- VS Code is optional, but the repo task wrappers are configured there.
 
 ## Verification
 
-- Tests, Compilation, Editor Runtime
-  - verified
-- Build (Mono, IL2Cpp)
-  - verified
+- Fast compile output: `CI/RiderMsBuild.log`
+- Unity compile output: `CI/CompileErrorsAfterUnityRun.txt`
+- Unity test output: `CI/CITestOutput.xml`
+- Unity test log: `CI/UnityLogs.log`
 
 ## License
 
-This repository is licensed under the MIT License.
-
 - Root repository license: [LICENSE](LICENSE)
 - Package license: [Packages/com.voxgeofol.vegetation/LICENSE.md](Packages/com.voxgeofol.vegetation/LICENSE.md)
-
