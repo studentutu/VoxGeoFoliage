@@ -1,9 +1,6 @@
 #ifndef VOXGEOFOL_VEGETATION_INDIRECT_COMMON_INCLUDED
 #define VOXGEOFOL_VEGETATION_INDIRECT_COMMON_INCLUDED
 
-#define UNITY_INDIRECT_DRAW_ARGS IndirectDrawIndexedArgs
-#include "UnityIndirect.cginc"
-
 struct VegetationInstanceData
 {
     float4x4 objectToWorld;
@@ -15,13 +12,11 @@ struct VegetationInstanceData
 };
 
 StructuredBuffer<VegetationInstanceData> _VegetationInstanceData;
+uint _VegetationInstanceStart;
 
 VegetationInstanceData LoadVegetationInstance(uint svInstanceId)
 {
-    // Phase E currently submits exactly one indirect command per draw slot,
-    // so draw-command selection is constant and does not need SV_DrawID.
-    InitIndirectDrawArgs(0u);
-    return _VegetationInstanceData[GetIndirectInstanceID(svInstanceId)];
+    return _VegetationInstanceData[_VegetationInstanceStart + svInstanceId];
 }
 
 float3 TransformVegetationPosition(float3 positionOS, VegetationInstanceData instanceData)

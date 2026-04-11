@@ -13,6 +13,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public string DebugLabel;
         public VegetationRenderMaterialKind MaterialKind;
         public int InstanceCount;
+        public bool HasExactInstanceCount;
         public Bounds WorldBounds;
     }
 }

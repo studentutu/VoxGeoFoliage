@@ -8,6 +8,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     public enum VegetationRuntimeFrameSource
     {
         CpuReference = 0,
-        GpuDecisionReadback = 1
+        GpuDecisionReadback = 1,
+        GpuResident = 2
     }
 }

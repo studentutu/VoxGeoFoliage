@@ -15,5 +15,5 @@ MonoBehaviour:
   l0Distance: 5
   l1Distance: 10
   l2Distance: 30
-  impostorDistance: 120
+  impostorDistance: 65
   absoluteCullDistance: 10000

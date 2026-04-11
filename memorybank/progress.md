@@ -16,8 +16,9 @@ Purpose: track immediate tasks and current milestone status.
 - `2026-04-11`: Removed the wasted full `VegetationFrameDecisionState.Reset()` on completed GPU readback consume, replaced temporary visible-cell array rebuilds with in-place mask expansion, changed decode output to write `VegetationIndirectInstanceData` directly into slot outputs, and removed the per-slot CPU repack loop in `VegetationIndirectRenderer`. New markers now split GPU readback consume, decode, instance-buffer upload, and args upload.
 - `2026-04-11`: Reworked `VegetationDecisionDecoder.DecodeTrees` so it rejects whole trees before branch traversal, rejects whole shell tiers before scanning node decisions, and consumes precomputed per-tree/per-branch/per-node world bounds from runtime registration instead of recomputing transformed draw-slot bounds in the decode hot loop.
 - `2026-04-11`: Removed more decode hot-path payload churn by caching per-tree/per-branch `VegetationIndirectInstanceData` at registration time, switching frame-output append calls to readonly-ref payload/bounds flow, and disabling per-instance debug capture on the runtime-manager frame output unless diagnostics are enabled.
+- `2026-04-11`: Replaced the runtime prepared-frame hot path with a GPU-resident decode/emission path. `VegetationGpuDecisionPipeline` now classifies, emits exact indirect instance payloads into a shared GPU instance buffer, writes one indirect-args record per draw slot, and `VegetationIndirectRenderer` consumes those GPU-written buffers directly through per-slot args offsets. `DecodeTrees` is no longer part of the normal `GpuResident` render path.
 - Current runtime shell-node rule is explicit and conservative: visible internal nodes expand, visible leaves emit, and finer intra-tier collapse is deferred.
-- Current prepared-frame reality is not the final target architecture yet: CPU reference output is still the default render source, while the optional GPU mode is a delayed non-blocking decision-readback bridge rather than a fully GPU-decoded frontier.
+- Current prepared-frame reality changed materially: `GpuResident` is now the intended runtime path, while CPU reference remains as a fallback/parity path and `GpuDecisionReadback` remains an optional delayed debug/validation bridge.
 - `VegetationRuntimeManager` registration is currently snapshot-based, not live-synced: transform edits on registered `VegetationTreeAuthoring` instances, plus other registration-affecting authoring or scene changes after manager enable, require explicit `RefreshRuntimeRegistration()` or a disable/enable cycle.
 - Current `GpuDecisionReadback` manager behavior has another hard caveat: CPU bootstrap while async readback is pending is intentionally disabled, so startup and pending-readback frames can reuse stale uploaded data or show nothing until the first completed readback is available.
 - `LastFrameOutput` detailed per-instance debug capture is diagnostics-gated now; with diagnostics disabled the runtime manager keeps upload-ready slot payloads only.
@@ -28,7 +29,7 @@ Purpose: track immediate tasks and current milestone status.
 - Milestone 1 `Phase E` implementation work is only partially complete against [Milestone1.md](../DetailedDocs/Milestone1.md).
 - Code-side render infrastructure from Milestone `E1` through `E5` exists in the repo.
 - `Phase E` is not accepted complete.
-- There is also an architectural gap versus the milestone target: the current shipped path still defaults to CPU-prepared visible output, so the intended GPU-primary decode ownership is not fully satisfied yet.
+- The previous CPU-decode ownership gap is closed for the main runtime path, but `Phase E` still needs manual Playground validation and hardening of the GPU-resident path before it can be called accepted complete.
 
 ## Known `VegetationRuntimeManager` Limitations
 
@@ -41,16 +42,17 @@ Purpose: track immediate tasks and current milestone status.
 
 ### Low hanging fruits
 
-- Validate in Playground that the fixed `TransformBounds`/render-pass GC spike is actually gone under `GpuDecisionReadback`.
-- Capture a new Playground profile and compare `VegetationRuntimeManager.TryConsumeGpuReadback`, `VegetationRuntimeManager.DecodeGpuReadback`, `VegetationRuntimeManager.UploadGpuReadback`, `VegetationGpuDecisionPipeline.CopyDecisionBuffers`, and `VegetationIndirectRenderer.SlotResources.UploadInstanceBuffer`.
-- Capture a new Playground profile and compare `VegetationDecisionDecoder.DecodeTrees` against `VegetationDecisionDecoder.Decode` overall to confirm the tree-level and shell-tier rejects actually removed the hot path.
-- If `UploadInstanceBuffer` still dominates with hundreds of active slots, stop pretending the bottleneck is decode and investigate slot-count reduction or shared-buffer upload architecture.
+- Validate in Playground that `VegetationRuntimeManager.PrepareGpuResidentFrame` removed `VegetationDecisionDecoder.DecodeTrees` from the runtime hot path and that the CPU spike is gone in practice.
+- Capture a new Playground profile and compare `VegetationGpuDecisionPipeline.ResetIndirectArgs`, `VegetationGpuDecisionPipeline.EmitTreeInstances`, `VegetationGpuDecisionPipeline.EmitBranchInstances`, and `VegetationGpuDecisionPipeline.FinalizeIndirectArgs`.
+- Validate that indirect draws consume the GPU-written shared instance/args buffers correctly for expanded trees, trunks, shells, and impostors in both depth and color passes.
+- If the GPU-resident path still misses budget, investigate slot-count pressure and draw-count pressure next instead of returning to CPU decode work.
 
 ### Phase E: Hybrid Decode Rendering Pipeline
 
 - `E-05` End-to-end demo-scene verification in the Playground scene with `DebugVegetationDemo`.
 - Investigate the batch-mode kernel-import issue on `VegetationClassify.compute` so the optional GPU decision-readback mode stops being editor-only confidence work.
-- Decide whether CPU should remain the default prepared-frame source or whether the delayed GPU readback bridge is acceptable as the default MVP path after manual scene validation.
+- Decide whether the shared-slot GPU-resident path needs double buffering / one-frame latency to improve GPU scheduling, or whether same-frame compute-to-indirect submission is sufficient for MVP.
+- Add diagnostics or validation for GPU-resident exact per-slot counts if Scene-view inspection needs more than conservative batch bounds and unknown counts.
 - `Phase F` remains optional follow-up work. Texture-driven voxelization is still parked and should not dilute current Phase D/E delivery.
 
 ## Deferred

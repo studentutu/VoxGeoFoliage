@@ -16,6 +16,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     public sealed class VegetationIndirectRenderer : IDisposable
     {
         private static readonly ProfilerMarker UploadFrameOutputMarker = new ProfilerMarker("VoxGeoFol.VegetationIndirectRenderer.UploadFrameOutput");
+        private static readonly ProfilerMarker BindGpuResidentFrameMarker = new ProfilerMarker("VoxGeoFol.VegetationIndirectRenderer.BindGpuResidentFrame");
         private static readonly ProfilerMarker RenderMarker = new ProfilerMarker("VoxGeoFol.VegetationIndirectRenderer.Render");
         private static readonly ProfilerMarker SlotUploadMarker = new ProfilerMarker("VoxGeoFol.VegetationIndirectRenderer.SlotResources.Upload");
         private static readonly ProfilerMarker EnsureCapacityMarker = new ProfilerMarker("VoxGeoFol.VegetationIndirectRenderer.SlotResources.EnsureCapacity");
@@ -24,9 +25,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly bool diagnosticsEnabled;
         private readonly SlotResources[] slotResources;
         private readonly List<int> activeSlotIndices = new List<int>();
+        private readonly GraphicsBuffer.IndirectDrawIndexedArgs[] sharedArgsSeeds;
         private string lastUploadDiagnostics = string.Empty;
         private string lastDepthRenderDiagnostics = string.Empty;
         private string lastColorRenderDiagnostics = string.Empty;
+        private GraphicsBuffer? gpuResidentInstanceBuffer;
+        private GraphicsBuffer? gpuResidentArgsBuffer;
+        private bool hasGpuResidentFrame;
         private bool disposed;
 
         public VegetationIndirectRenderer(VegetationRuntimeRegistry registry, int renderLayer, bool diagnosticsEnabled = false)
@@ -38,9 +43,17 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             this.diagnosticsEnabled = diagnosticsEnabled;
             slotResources = new SlotResources[registry.DrawSlots.Count];
+            sharedArgsSeeds = new GraphicsBuffer.IndirectDrawIndexedArgs[registry.DrawSlots.Count];
+            int sharedStartInstance = 0;
             for (int i = 0; i < slotResources.Length; i++)
             {
-                slotResources[i] = new SlotResources(registry.DrawSlots[i]);
+                slotResources[i] = new SlotResources(
+                    registry.DrawSlots[i],
+                    registry.DrawSlotMaxInstanceCounts[i],
+                    registry.DrawSlotConservativeWorldBounds[i],
+                    sharedStartInstance);
+                sharedArgsSeeds[i] = slotResources[i].BuildSharedArgsSeed();
+                sharedStartInstance += registry.DrawSlotMaxInstanceCounts[i];
             }
 
             if (diagnosticsEnabled)
@@ -51,7 +64,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         public IReadOnlyList<int> ActiveSlotIndices => activeSlotIndices;
 
-        public bool HasUploadedFrame => activeSlotIndices.Count > 0;
+        public bool HasUploadedFrame => hasGpuResidentFrame || activeSlotIndices.Count > 0;
 
         /// <summary>
         /// [INTEGRATION] Uploads the latest Phase D visible-slot outputs into exact Phase E draw-slot GPU resources.
@@ -70,6 +83,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     throw new ArgumentNullException(nameof(frameOutput));
                 }
 
+                hasGpuResidentFrame = false;
+                gpuResidentInstanceBuffer = null;
+                gpuResidentArgsBuffer = null;
                 activeSlotIndices.Clear();
                 for (int activeSlotOffset = 0; activeSlotOffset < frameOutput.ActiveSlotIndices.Count; activeSlotOffset++)
                 {
@@ -80,6 +96,46 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
 
                 LogUploadDiagnostics(frameOutput);
+            }
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Binds GPU-resident indirect resources prepared by the compute classification/decode path.
+        /// </summary>
+        public void BindGpuResidentFrame(GraphicsBuffer instanceBuffer, GraphicsBuffer argsBuffer)
+        {
+            using (BindGpuResidentFrameMarker.Auto())
+            {
+                if (disposed)
+                {
+                    throw new ObjectDisposedException(nameof(VegetationIndirectRenderer));
+                }
+
+                if (instanceBuffer == null)
+                {
+                    throw new ArgumentNullException(nameof(instanceBuffer));
+                }
+
+                if (argsBuffer == null)
+                {
+                    throw new ArgumentNullException(nameof(argsBuffer));
+                }
+
+                gpuResidentInstanceBuffer = instanceBuffer;
+                gpuResidentArgsBuffer = argsBuffer;
+                hasGpuResidentFrame = true;
+                activeSlotIndices.Clear();
+                for (int slotIndex = 0; slotIndex < slotResources.Length; slotIndex++)
+                {
+                    SlotResources slot = slotResources[slotIndex];
+                    if (slot.MaxInstanceCapacity <= 0)
+                    {
+                        continue;
+                    }
+
+                    slot.BindSharedInstanceBuffer(instanceBuffer);
+                    activeSlotIndices.Add(slotIndex);
+                }
             }
         }
 
@@ -100,7 +156,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             RenderInternal(camera, passMode, (slot, material) =>
             {
-                commandBuffer.DrawMeshInstancedIndirect(slot.DrawSlot.Mesh, 0, material, 0, slot.ArgsBuffer);
+                commandBuffer.DrawMeshInstancedIndirect(
+                    slot.DrawSlot.Mesh,
+                    0,
+                    material,
+                    0,
+                    ResolveArgsBuffer(slot),
+                    slot.ResolveArgsBufferOffset(hasGpuResidentFrame));
             });
         }
 
@@ -121,7 +183,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             RenderInternal(camera, passMode, (slot, material) =>
             {
-                commandBuffer.DrawMeshInstancedIndirect(slot.DrawSlot.Mesh, 0, material, 0, slot.ArgsBuffer);
+                commandBuffer.DrawMeshInstancedIndirect(
+                    slot.DrawSlot.Mesh,
+                    0,
+                    material,
+                    0,
+                    ResolveArgsBuffer(slot),
+                    slot.ResolveArgsBufferOffset(hasGpuResidentFrame));
             });
         }
 
@@ -139,7 +207,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 for (int activeSlotOffset = 0; activeSlotOffset < activeSlotIndices.Count; activeSlotOffset++)
                 {
                     SlotResources slot = slotResources[activeSlotIndices[activeSlotOffset]];
-                    if (!slot.HasVisibleData)
+                    if (!slot.ShouldRender(hasGpuResidentFrame))
                     {
                         continue;
                     }
@@ -168,7 +236,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             for (int activeSlotOffset = 0; activeSlotOffset < activeSlotIndices.Count; activeSlotOffset++)
             {
                 SlotResources slot = slotResources[activeSlotIndices[activeSlotOffset]];
-                if (!slot.HasVisibleData)
+                if (!slot.ShouldRender(hasGpuResidentFrame))
                 {
                     continue;
                 }
@@ -178,8 +246,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     SlotIndex = slot.DrawSlot.SlotIndex,
                     DebugLabel = slot.DrawSlot.DebugLabel,
                     MaterialKind = slot.DrawSlot.MaterialKind,
-                    InstanceCount = slot.InstanceCount,
-                    WorldBounds = slot.WorldBounds
+                    InstanceCount = hasGpuResidentFrame ? 0 : slot.InstanceCount,
+                    HasExactInstanceCount = !hasGpuResidentFrame,
+                    WorldBounds = hasGpuResidentFrame ? slot.ConservativeWorldBounds : slot.WorldBounds
                 });
             }
         }
@@ -200,28 +269,67 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             activeSlotIndices.Clear();
         }
 
+        public void SeedGpuResidentArgs(GraphicsBuffer argsBuffer)
+        {
+            if (argsBuffer == null)
+            {
+                throw new ArgumentNullException(nameof(argsBuffer));
+            }
+
+            argsBuffer.SetData(sharedArgsSeeds);
+        }
+
+        private GraphicsBuffer ResolveArgsBuffer(SlotResources slot)
+        {
+            if (hasGpuResidentFrame)
+            {
+                return gpuResidentArgsBuffer ?? throw new InvalidOperationException("GPU-resident args buffer has not been bound.");
+            }
+
+            return slot.ArgsBuffer;
+        }
+
         private sealed class SlotResources : IDisposable
         {
             private static readonly int InstanceBufferId = Shader.PropertyToID("_VegetationInstanceData");
+            private static readonly int InstanceStartId = Shader.PropertyToID("_VegetationInstanceStart");
             private GraphicsBuffer? instanceBuffer;
             private GraphicsBuffer? argsBuffer;
             private readonly GraphicsBuffer.IndirectDrawIndexedArgs[] argsUpload = new GraphicsBuffer.IndirectDrawIndexedArgs[1];
             private int instanceBufferCapacity;
 
-            public SlotResources(VegetationDrawSlot drawSlot)
+            public SlotResources(
+                VegetationDrawSlot drawSlot,
+                int maxInstanceCapacity,
+                Bounds conservativeWorldBounds,
+                int sharedStartInstance)
             {
                 DrawSlot = drawSlot;
+                MaxInstanceCapacity = maxInstanceCapacity;
+                ConservativeWorldBounds = conservativeWorldBounds;
+                SharedStartInstance = checked((uint)Mathf.Max(0, sharedStartInstance));
+                SharedArgsBufferOffset = checked(GraphicsBuffer.IndirectDrawIndexedArgs.size * drawSlot.SlotIndex);
                 ColorMaterial = VegetationIndirectMaterialFactory.CreateColorMaterial(drawSlot);
                 DepthMaterial = VegetationIndirectMaterialFactory.CreateDepthMaterial(drawSlot);
+                ColorMaterial.SetInteger(InstanceStartId, 0);
+                DepthMaterial.SetInteger(InstanceStartId, 0);
             }
 
             public VegetationDrawSlot DrawSlot { get; }
+
+            public int MaxInstanceCapacity { get; }
+
+            public Bounds ConservativeWorldBounds { get; }
 
             public Material ColorMaterial { get; }
 
             public Material DepthMaterial { get; }
 
             public GraphicsBuffer ArgsBuffer => argsBuffer ?? throw new InvalidOperationException("Indirect args buffer has not been created.");
+
+            public int SharedArgsBufferOffset { get; }
+
+            public uint SharedStartInstance { get; }
 
             public int InstanceCount { get; private set; }
 
@@ -246,6 +354,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     }
 
                     EnsureCapacity(slotOutput.InstanceCount);
+                    ColorMaterial.SetBuffer(InstanceBufferId, instanceBuffer);
+                    DepthMaterial.SetBuffer(InstanceBufferId, instanceBuffer);
+                    ColorMaterial.SetInteger(InstanceStartId, 0);
+                    DepthMaterial.SetInteger(InstanceStartId, 0);
                     using (InstanceBufferUploadMarker.Auto())
                     {
                         instanceBuffer!.SetData(slotOutput.UploadInstances, 0, 0, slotOutput.InstanceCount);
@@ -269,6 +381,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     WorldBounds = slotOutput.VisibleBounds;
                     HasVisibleData = true;
                 }
+            }
+
+            public void BindSharedInstanceBuffer(GraphicsBuffer sharedInstanceBuffer)
+            {
+                ColorMaterial.SetBuffer(InstanceBufferId, sharedInstanceBuffer);
+                DepthMaterial.SetBuffer(InstanceBufferId, sharedInstanceBuffer);
+                ColorMaterial.SetInteger(InstanceStartId, checked((int)SharedStartInstance));
+                DepthMaterial.SetInteger(InstanceStartId, checked((int)SharedStartInstance));
             }
 
             public void Dispose()
@@ -311,6 +431,28 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     DepthMaterial.SetBuffer(InstanceBufferId, instanceBuffer);
                     instanceBufferCapacity = newCapacity;
                 }
+            }
+
+            public GraphicsBuffer.IndirectDrawIndexedArgs BuildSharedArgsSeed()
+            {
+                return new GraphicsBuffer.IndirectDrawIndexedArgs
+                {
+                    indexCountPerInstance = DrawSlot.IndexCountPerInstance,
+                    instanceCount = 0u,
+                    startIndex = DrawSlot.StartIndexLocation,
+                    baseVertexIndex = checked((uint)DrawSlot.BaseVertexLocation),
+                    startInstance = 0u
+                };
+            }
+
+            public bool ShouldRender(bool gpuResidentFrameBound)
+            {
+                return gpuResidentFrameBound ? MaxInstanceCapacity > 0 : HasVisibleData;
+            }
+
+            public int ResolveArgsBufferOffset(bool gpuResidentFrameBound)
+            {
+                return gpuResidentFrameBound ? SharedArgsBufferOffset : 0;
             }
         }
 

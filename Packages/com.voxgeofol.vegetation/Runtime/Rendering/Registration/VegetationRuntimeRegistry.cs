@@ -13,6 +13,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     {
         public VegetationRuntimeRegistry(
             VegetationDrawSlot[] drawSlots,
+            int[] drawSlotMaxInstanceCounts,
+            Bounds[] drawSlotConservativeWorldBounds,
             VegetationLodProfileRuntime[] lodProfiles,
             VegetationTreeBlueprintRuntime[] treeBlueprints,
             VegetationBlueprintBranchPlacementRuntime[] blueprintBranchPlacements,
@@ -28,6 +30,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             int totalNodeDecisionCapacity)
         {
             this.drawSlots = drawSlots;
+            this.drawSlotMaxInstanceCounts = drawSlotMaxInstanceCounts;
+            this.drawSlotConservativeWorldBounds = drawSlotConservativeWorldBounds;
             this.lodProfiles = lodProfiles;
             this.treeBlueprints = treeBlueprints;
             this.blueprintBranchPlacements = blueprintBranchPlacements;
@@ -44,6 +48,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         }
 
         private readonly VegetationDrawSlot[] drawSlots;
+        private readonly int[] drawSlotMaxInstanceCounts;
+        private readonly Bounds[] drawSlotConservativeWorldBounds;
         private readonly VegetationLodProfileRuntime[] lodProfiles;
         private readonly VegetationTreeBlueprintRuntime[] treeBlueprints;
         private readonly VegetationBlueprintBranchPlacementRuntime[] blueprintBranchPlacements;
@@ -57,6 +63,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly Bounds[] nodeWorldBounds;
 
         public IReadOnlyList<VegetationDrawSlot> DrawSlots => drawSlots;
+
+        public IReadOnlyList<int> DrawSlotMaxInstanceCounts => drawSlotMaxInstanceCounts;
+
+        public IReadOnlyList<Bounds> DrawSlotConservativeWorldBounds => drawSlotConservativeWorldBounds;
 
         public IReadOnlyList<VegetationLodProfileRuntime> LodProfiles => lodProfiles;
 
@@ -81,6 +91,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public int TotalNodeDecisionCapacity { get; }
 
         internal VegetationDrawSlot[] DrawSlotsArray => drawSlots;
+
+        internal int[] DrawSlotMaxInstanceCountsArray => drawSlotMaxInstanceCounts;
+
+        internal Bounds[] DrawSlotConservativeWorldBoundsArray => drawSlotConservativeWorldBounds;
 
         internal VegetationTreeBlueprintRuntime[] TreeBlueprintsArray => treeBlueprints;
 

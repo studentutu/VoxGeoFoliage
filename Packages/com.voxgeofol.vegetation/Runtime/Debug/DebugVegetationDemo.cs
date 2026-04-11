@@ -159,7 +159,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             {
                 VegetationIndirectDrawBatchSnapshot batch = uploadedBatches[batchIndex];
                 Gizmos.DrawWireCube(batch.WorldBounds.center, batch.WorldBounds.size);
-                DrawLabel(batch.WorldBounds.center, $"{batch.DebugLabel} x{batch.InstanceCount}");
+                string countLabel = batch.HasExactInstanceCount ? batch.InstanceCount.ToString() : "?";
+                DrawLabel(batch.WorldBounds.center, $"{batch.DebugLabel} x{countLabel}");
             }
         }
 

@@ -20,6 +20,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private static readonly ProfilerMarker PrepareFrameForCameraMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.PrepareFrameForCamera");
         private static readonly ProfilerMarker PrepareCpuReferenceFrameMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.PrepareCpuReferenceFrame");
         private static readonly ProfilerMarker PrepareGpuDecisionFrameMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.PrepareGpuDecisionFrame");
+        private static readonly ProfilerMarker PrepareGpuResidentFrameMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.PrepareGpuResidentFrame");
         private static readonly ProfilerMarker TryConsumeGpuReadbackMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.TryConsumeGpuReadback");
         private static readonly ProfilerMarker DecodeGpuReadbackMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.DecodeGpuReadback");
         private static readonly ProfilerMarker UploadGpuReadbackMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.UploadGpuReadback");
@@ -28,7 +29,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         [SerializeField] private Vector3 gridOrigin = Vector3.zero;
         [SerializeField] private Vector3 cellSize = new Vector3(32f, 32f, 32f);
         [SerializeField] private ComputeShader? vegetationClassifyShader;
-        [SerializeField] private VegetationRuntimeFrameSource frameSource = VegetationRuntimeFrameSource.CpuReference;
+        [SerializeField] private VegetationRuntimeFrameSource frameSource = VegetationRuntimeFrameSource.GpuResident;
         [SerializeField] private bool bootstrapCpuReferenceWhileGpuReadbackPending = true;
         [SerializeField] private bool enableDiagnostics;
 
@@ -197,9 +198,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 GeometryUtility.CalculateFrustumPlanes(camera, reusableFrustumPlanes);
                 Vector3 cameraWorldPosition = camera.transform.position;
 
-                bool uploadedFrame = frameSource == VegetationRuntimeFrameSource.GpuDecisionReadback
-                    ? PrepareGpuDecisionFrame(cameraWorldPosition, reusableFrustumPlanes)
-                    : PrepareCpuReferenceFrame(cameraWorldPosition, reusableFrustumPlanes);
+                bool uploadedFrame = frameSource switch
+                {
+                    VegetationRuntimeFrameSource.GpuDecisionReadback => PrepareGpuDecisionFrame(cameraWorldPosition, reusableFrustumPlanes),
+                    VegetationRuntimeFrameSource.GpuResident => PrepareGpuResidentFrame(cameraWorldPosition, reusableFrustumPlanes),
+                    _ => PrepareCpuReferenceFrame(cameraWorldPosition, reusableFrustumPlanes)
+                };
 
                 lastPreparedCameraInstanceId = cameraInstanceId;
                 lastPreparedRenderFrame = renderFrame;
@@ -298,6 +302,24 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
         }
 
+        private bool PrepareGpuResidentFrame(Vector3 cameraWorldPosition, Plane[] frustumPlanes)
+        {
+            using (PrepareGpuResidentFrameMarker.Auto())
+            {
+                if (gpuDecisionPipeline == null)
+                {
+                    return PrepareCpuReferenceFrame(cameraWorldPosition, frustumPlanes);
+                }
+
+                gpuDecisionPipeline.PrepareResidentFrame(cameraWorldPosition, frustumPlanes);
+                indirectRenderer!.BindGpuResidentFrame(
+                    gpuDecisionPipeline.ResidentInstanceBuffer,
+                    gpuDecisionPipeline.ResidentArgsBuffer);
+                lastPreparedFrameSource = VegetationRuntimeFrameSource.GpuResident;
+                return indirectRenderer.HasUploadedFrame;
+            }
+        }
+
         private static void CopyFrustumPlanes(IReadOnlyList<Plane> source, Plane[] destination)
         {
             int count = Mathf.Min(source.Count, destination.Length);
@@ -381,7 +403,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 return;
             }
 
-            if (registry == null || lastDecisionState == null || lastFrameOutput == null || indirectRenderer == null)
+            if (registry == null || indirectRenderer == null)
             {
                 string missingStateSummary =
                     $"VegetationRuntimeManager prepare failed manager={name} camera={camera.name} reason=missing-runtime-state";
@@ -389,6 +411,51 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 {
                     lastPreparationWarning = missingStateSummary;
                     UnityEngine.Debug.LogWarning(missingStateSummary, this);
+                }
+
+                return;
+            }
+
+            if (lastPreparedFrameSource == VegetationRuntimeFrameSource.GpuResident)
+            {
+                string residentSummary = string.Format(
+                    "VegetationRuntimeManager prepare manager={0} camera={1} uploaded={2} source={3} drawSlots={4} residentOutput=gpu-only",
+                    name,
+                    camera.name,
+                    uploadedFrame,
+                    lastPreparedFrameSource,
+                    indirectRenderer.ActiveSlotIndices.Count);
+
+                if (uploadedFrame && indirectRenderer.ActiveSlotIndices.Count > 0)
+                {
+                    if (residentSummary != lastPreparationDiagnostics)
+                    {
+                        lastPreparationDiagnostics = residentSummary;
+                        UnityEngine.Debug.Log(residentSummary, this);
+                    }
+
+                    lastPreparationWarning = string.Empty;
+                    return;
+                }
+
+                string residentWarning = residentSummary + " reason=no-bound-gpu-resident-draw-slots";
+                if (residentWarning != lastPreparationWarning)
+                {
+                    lastPreparationWarning = residentWarning;
+                    UnityEngine.Debug.LogWarning(residentWarning, this);
+                }
+
+                return;
+            }
+
+            if (lastDecisionState == null || lastFrameOutput == null)
+            {
+                string missingCpuSummary =
+                    $"VegetationRuntimeManager prepare failed manager={name} camera={camera.name} reason=missing-decode-state";
+                if (missingCpuSummary != lastPreparationWarning)
+                {
+                    lastPreparationWarning = missingCpuSummary;
+                    UnityEngine.Debug.LogWarning(missingCpuSummary, this);
                 }
 
                 return;

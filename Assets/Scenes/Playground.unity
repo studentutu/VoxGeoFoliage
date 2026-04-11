@@ -5812,7 +5812,7 @@ MonoBehaviour:
   gridOrigin: {x: 0, y: 0, z: 0}
   cellSize: {x: 32, y: 32, z: 32}
   vegetationClassifyShader: {fileID: 7200000, guid: 32ba8aa36e08ac740b444e38723d3153, type: 3}
-  frameSource: 1
+  frameSource: 2
   bootstrapCpuReferenceWhileGpuReadbackPending: 0
   enableDiagnostics: 0
 --- !u!114 &1889978186

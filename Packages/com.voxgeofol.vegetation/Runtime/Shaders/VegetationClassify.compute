@@ -1,8 +1,30 @@
 #pragma kernel ClassifyCells
 #pragma kernel ClassifyTrees
 #pragma kernel ClassifyBranchesAndNodes
+#pragma kernel ResetIndirectArgs
+#pragma kernel EmitTrees
+#pragma kernel EmitBranches
+#pragma kernel FinalizeIndirectArgs
 
 #include "UnityCG.cginc"
+
+struct BoundsGpu
+{
+    float3 center;
+    float padding0;
+    float3 extents;
+    float padding1;
+};
+
+struct VegetationInstanceData
+{
+    float4x4 objectToWorld;
+    float4x4 worldToObject;
+    uint packedLeafTint;
+    uint padding0;
+    uint padding1;
+    uint padding2;
+};
 
 struct CellGpu
 {
@@ -29,6 +51,15 @@ struct TreeGpu
     int lodProfileIndex;
     int sceneBranchStartIndex;
     int sceneBranchCount;
+    BoundsGpu worldBounds;
+    BoundsGpu trunkFullWorldBounds;
+    BoundsGpu trunkL3WorldBounds;
+    BoundsGpu impostorWorldBounds;
+    int trunkFullDrawSlot;
+    int trunkL3DrawSlot;
+    int impostorDrawSlot;
+    int padding0;
+    VegetationInstanceData uploadInstanceData;
 };
 
 struct BranchGpu
@@ -36,7 +67,7 @@ struct BranchGpu
     int treeIndex;
     int branchPlacementIndex;
     int prototypeIndex;
-    int padding0;
+    int woodDrawSlotL0;
     float3 sphereCenterWorld;
     float boundingSphereRadius;
     float4x4 localToWorld;
@@ -46,8 +77,18 @@ struct BranchGpu
     int decisionCountL2;
     int decisionStartL3;
     int decisionCountL3;
-    int padding1;
-    int padding2;
+    int woodDrawSlotL1;
+    int woodDrawSlotL2;
+    int woodDrawSlotL3;
+    int foliageDrawSlotL0;
+    BoundsGpu worldBounds;
+    BoundsGpu woodWorldBoundsL0;
+    BoundsGpu woodWorldBoundsL1;
+    BoundsGpu woodWorldBoundsL2;
+    BoundsGpu woodWorldBoundsL3;
+    BoundsGpu foliageWorldBoundsL0;
+    VegetationInstanceData woodUploadInstanceData;
+    VegetationInstanceData foliageUploadInstanceData;
 };
 
 struct PrototypeGpu
@@ -90,6 +131,27 @@ struct NodeDecisionGpu
     int decision;
 };
 
+struct NodeRenderGpu
+{
+    int drawSlotIndex;
+    int padding0;
+    int padding1;
+    int padding2;
+    BoundsGpu worldBounds;
+};
+
+struct SlotGpu
+{
+    uint startInstance;
+    uint maxInstanceCount;
+    uint indexCountPerInstance;
+    uint startIndexLocation;
+    uint baseVertexIndex;
+    uint padding0;
+    uint padding1;
+    uint padding2;
+};
+
 StructuredBuffer<CellGpu> _Cells;
 StructuredBuffer<LodProfileGpu> _LodProfiles;
 StructuredBuffer<TreeGpu> _Trees;
@@ -98,11 +160,16 @@ StructuredBuffer<PrototypeGpu> _Prototypes;
 StructuredBuffer<ShellNodeGpu> _ShellNodesL1;
 StructuredBuffer<ShellNodeGpu> _ShellNodesL2;
 StructuredBuffer<ShellNodeGpu> _ShellNodesL3;
+StructuredBuffer<NodeRenderGpu> _NodeRenderData;
+StructuredBuffer<SlotGpu> _Slots;
 
 RWStructuredBuffer<uint> _CellVisibility;
 RWStructuredBuffer<int> _TreeModes;
 RWStructuredBuffer<BranchDecisionGpu> _BranchDecisions;
 RWStructuredBuffer<NodeDecisionGpu> _NodeDecisions;
+RWStructuredBuffer<uint> _SlotInstanceCounts;
+RWStructuredBuffer<VegetationInstanceData> _VisibleInstances;
+RWByteAddressBuffer _IndirectArgs;
 
 float4 _CameraWorldPosition;
 float4 _FrustumPlanes[6];
@@ -110,6 +177,7 @@ int _CellCount;
 int _TreeCount;
 int _BranchCount;
 int _NodeDecisionCount;
+int _DrawSlotCount;
 
 static const int TreeModeCulled = 0;
 static const int TreeModeExpanded = 1;
@@ -139,6 +207,11 @@ bool TestFrustumAabb(float3 center, float3 extents)
     }
 
     return true;
+}
+
+bool TestFrustumBounds(BoundsGpu bounds)
+{
+    return TestFrustumAabb(bounds.center, bounds.extents);
 }
 
 float ComputeSphereSurfaceDistance(float3 centerWorld, float radiusWorld)
@@ -220,6 +293,79 @@ void WriteSelectedSlice(
         record.decision = decision;
         _NodeDecisions[decisionStart + nodeIndex] = record;
     }
+}
+
+void EmitInstance(uint slotIndex, VegetationInstanceData instanceData)
+{
+    SlotGpu slot = _Slots[slotIndex];
+    if (slot.maxInstanceCount == 0u)
+    {
+        return;
+    }
+
+    uint localOffset;
+    InterlockedAdd(_SlotInstanceCounts[slotIndex], 1u, localOffset);
+    if (localOffset >= slot.maxInstanceCount)
+    {
+        return;
+    }
+
+    _VisibleInstances[slot.startInstance + localOffset] = instanceData;
+}
+
+uint GetIndirectArgsByteOffset(uint slotIndex)
+{
+    return slotIndex * 20u;
+}
+
+int ResolveDecisionStart(BranchGpu branch, int runtimeTier)
+{
+    if (runtimeTier == BranchTierL1)
+    {
+        return branch.decisionStartL1;
+    }
+
+    if (runtimeTier == BranchTierL2)
+    {
+        return branch.decisionStartL2;
+    }
+
+    return branch.decisionStartL3;
+}
+
+int ResolveDecisionCount(BranchGpu branch, int runtimeTier)
+{
+    if (runtimeTier == BranchTierL1)
+    {
+        return branch.decisionCountL1;
+    }
+
+    if (runtimeTier == BranchTierL2)
+    {
+        return branch.decisionCountL2;
+    }
+
+    return branch.decisionCountL3;
+}
+
+int ResolveWoodDrawSlot(BranchGpu branch, int runtimeTier)
+{
+    if (runtimeTier == BranchTierL0)
+    {
+        return branch.woodDrawSlotL0;
+    }
+
+    if (runtimeTier == BranchTierL1)
+    {
+        return branch.woodDrawSlotL1;
+    }
+
+    if (runtimeTier == BranchTierL2)
+    {
+        return branch.woodDrawSlotL2;
+    }
+
+    return branch.woodDrawSlotL3;
 }
 
 [numthreads(64, 1, 1)]
@@ -338,4 +484,119 @@ void ClassifyBranchesAndNodes(uint3 dispatchThreadId : SV_DispatchThreadID)
             prototype.shellNodeStartIndexL3,
             branch.localToWorld);
     }
+}
+
+[numthreads(64, 1, 1)]
+void ResetIndirectArgs(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint slotIndex = dispatchThreadId.x;
+    if (slotIndex >= (uint)_DrawSlotCount)
+    {
+        return;
+    }
+
+    SlotGpu slot = _Slots[slotIndex];
+    _SlotInstanceCounts[slotIndex] = 0u;
+    uint argsOffset = GetIndirectArgsByteOffset(slotIndex);
+    _IndirectArgs.Store4(argsOffset, uint4(
+        slot.indexCountPerInstance,
+        0u,
+        slot.startIndexLocation,
+        slot.baseVertexIndex));
+    _IndirectArgs.Store(argsOffset + 16u, 0u);
+}
+
+[numthreads(64, 1, 1)]
+void EmitTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint treeIndex = dispatchThreadId.x;
+    if (treeIndex >= (uint)_TreeCount)
+    {
+        return;
+    }
+
+    TreeGpu tree = _Trees[treeIndex];
+    int treeMode = _TreeModes[treeIndex];
+    if (treeMode == TreeModeCulled || !TestFrustumBounds(tree.worldBounds))
+    {
+        return;
+    }
+
+    if (treeMode == TreeModeImpostor)
+    {
+        EmitInstance((uint)tree.impostorDrawSlot, tree.uploadInstanceData);
+        return;
+    }
+
+    bool useFullTrunk = false;
+    for (int branchOffset = 0; branchOffset < tree.sceneBranchCount; branchOffset++)
+    {
+        BranchDecisionGpu branchDecision = _BranchDecisions[tree.sceneBranchStartIndex + branchOffset];
+        if (branchDecision.runtimeTier == BranchTierL0 || branchDecision.runtimeTier == BranchTierL1)
+        {
+            useFullTrunk = true;
+            break;
+        }
+    }
+
+    EmitInstance(useFullTrunk ? (uint)tree.trunkFullDrawSlot : (uint)tree.trunkL3DrawSlot, tree.uploadInstanceData);
+}
+
+[numthreads(64, 1, 1)]
+void EmitBranches(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint branchIndex = dispatchThreadId.x;
+    if (branchIndex >= (uint)_BranchCount)
+    {
+        return;
+    }
+
+    BranchDecisionGpu branchDecision = _BranchDecisions[branchIndex];
+    if (branchDecision.runtimeTier == BranchTierInactive)
+    {
+        return;
+    }
+
+    BranchGpu branch = _Branches[branchIndex];
+    if (!TestFrustumBounds(branch.worldBounds))
+    {
+        return;
+    }
+
+    if (branchDecision.runtimeTier == BranchTierL0)
+    {
+        EmitInstance((uint)branch.woodDrawSlotL0, branch.woodUploadInstanceData);
+        EmitInstance((uint)branch.foliageDrawSlotL0, branch.foliageUploadInstanceData);
+        return;
+    }
+
+    EmitInstance((uint)ResolveWoodDrawSlot(branch, branchDecision.runtimeTier), branch.woodUploadInstanceData);
+
+    int decisionStart = ResolveDecisionStart(branch, branchDecision.runtimeTier);
+    int decisionCount = ResolveDecisionCount(branch, branchDecision.runtimeTier);
+    for (int localNodeIndex = 0; localNodeIndex < decisionCount; localNodeIndex++)
+    {
+        int decisionIndex = decisionStart + localNodeIndex;
+        if (_NodeDecisions[decisionIndex].decision != NodeDecisionEmitSelf)
+        {
+            continue;
+        }
+
+        NodeRenderGpu node = _NodeRenderData[decisionIndex];
+        EmitInstance((uint)node.drawSlotIndex, branch.foliageUploadInstanceData);
+    }
+}
+
+[numthreads(64, 1, 1)]
+void FinalizeIndirectArgs(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint slotIndex = dispatchThreadId.x;
+    if (slotIndex >= (uint)_DrawSlotCount)
+    {
+        return;
+    }
+
+    SlotGpu slot = _Slots[slotIndex];
+    uint clampedCount = min(_SlotInstanceCounts[slotIndex], slot.maxInstanceCount);
+    _IndirectArgs.Store(GetIndirectArgsByteOffset(slotIndex) + 4u, clampedCount);
 }

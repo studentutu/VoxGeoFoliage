@@ -520,9 +520,12 @@ Perf stabilization update (`2026-04-11`):
 - profiler markers now also split GPU readback consume, cell/tree/decision copies, and per-slot instance-buffer vs args-buffer upload so the remaining spike can be attributed to a specific substage
 - `VegetationDecisionDecoder.DecodeTrees` now rejects whole trees before branch traversal, rejects whole shell tiers before scanning node decisions, and consumes precomputed per-tree/per-branch/per-node world bounds from runtime registration instead of rebuilding transformed draw-slot bounds in the decode hot loop
 - runtime registration now also caches per-tree/per-branch upload payloads (`VegetationIndirectInstanceData`), and the runtime-manager frame output disables per-instance debug capture unless diagnostics are enabled so the decode path does not duplicate debug-visible payload on normal rendering frames
+- `VegetationGpuDecisionPipeline` now also owns the main runtime decode/emission path: after GPU classification it resets per-slot indirect args, emits exact visible instance payloads into one shared GPU instance buffer using fixed per-slot slices from runtime registration, finalizes one indirect-args record per draw slot, and `VegetationIndirectRenderer` consumes those GPU-written buffers directly
+- `VegetationRuntimeManager` now defaults to `GpuResident` and bypasses `VegetationDecisionDecoder.DecodeTrees` on the main runtime path; CPU reference decode remains available as fallback/parity tooling and `GpuDecisionReadback` remains an optional delayed debug bridge
 
 Current implementation caveats:
-- CPU reference output is still the default prepared-frame source; the optional GPU mode is a delayed decision-readback bridge, not a fully GPU-decoded frontier yet
+- GPU-resident decode is now the intended runtime path, but it still needs manual Playground validation and hardening
+- GPU-resident debug exposure is intentionally thinner than CPU decode today: uploaded batch bounds are conservative scene-level slot bounds and exact per-slot visible counts are not CPU-visible unless additional diagnostics are added
 - the batch-mode kernel-import issue on `VegetationClassify.compute` is still open
 - end-to-end scene verification for expanded trees, impostors, per-slot counts, and rebuilt `worldBounds` is still pending
 

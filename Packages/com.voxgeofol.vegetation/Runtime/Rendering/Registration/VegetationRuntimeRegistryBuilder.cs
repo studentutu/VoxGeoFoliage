@@ -171,8 +171,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             VegetationSpatialGrid spatialGrid = VegetationSpatialGrid.Build(gridOrigin, cellSize, treeInstances);
+            BuildDrawSlotCapacityMetadata(out int[] drawSlotMaxInstanceCounts, out Bounds[] drawSlotConservativeWorldBounds);
             return new VegetationRuntimeRegistry(
                 drawSlots.ToArray(),
+                drawSlotMaxInstanceCounts,
+                drawSlotConservativeWorldBounds,
                 lodProfiles.ToArray(),
                 treeBlueprints.ToArray(),
                 blueprintBranchPlacements.ToArray(),
@@ -186,6 +189,66 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 nodeWorldBounds.ToArray(),
                 spatialGrid,
                 totalNodeDecisionCapacity);
+        }
+
+        private void BuildDrawSlotCapacityMetadata(out int[] drawSlotMaxInstanceCounts, out Bounds[] drawSlotConservativeWorldBounds)
+        {
+            int slotCount = drawSlots.Count;
+            drawSlotMaxInstanceCounts = new int[slotCount];
+            drawSlotConservativeWorldBounds = new Bounds[slotCount];
+            bool[] hasBounds = new bool[slotCount];
+
+            for (int treeIndex = 0; treeIndex < treeInstances.Count; treeIndex++)
+            {
+                VegetationTreeInstanceRuntime treeInstance = treeInstances[treeIndex];
+                VegetationTreeBlueprintRuntime blueprint = treeBlueprints[treeInstance.BlueprintIndex];
+                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, blueprint.ImpostorDrawSlot, treeInstance.ImpostorWorldBounds);
+                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, blueprint.TrunkFullDrawSlot, treeInstance.TrunkFullWorldBounds);
+                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, blueprint.TrunkL3DrawSlot, treeInstance.TrunkL3WorldBounds);
+            }
+
+            for (int branchIndex = 0; branchIndex < sceneBranches.Count; branchIndex++)
+            {
+                VegetationSceneBranchRuntime sceneBranch = sceneBranches[branchIndex];
+                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL0, sceneBranch.WoodWorldBoundsL0);
+                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL1, sceneBranch.WoodWorldBoundsL1);
+                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL2, sceneBranch.WoodWorldBoundsL2);
+                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL3, sceneBranch.WoodWorldBoundsL3);
+                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, sceneBranch.FoliageDrawSlotL0, sceneBranch.FoliageWorldBoundsL0);
+            }
+
+            for (int nodeIndex = 0; nodeIndex < nodeDrawSlotIndices.Count; nodeIndex++)
+            {
+                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, nodeDrawSlotIndices[nodeIndex], nodeWorldBounds[nodeIndex]);
+            }
+
+            for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
+            {
+                if (hasBounds[slotIndex])
+                {
+                    continue;
+                }
+
+                drawSlotConservativeWorldBounds[slotIndex] = new Bounds(Vector3.zero, Vector3.zero);
+            }
+        }
+
+        private static void AccumulateSlot(
+            int[] drawSlotMaxInstanceCounts,
+            Bounds[] drawSlotConservativeWorldBounds,
+            bool[] hasBounds,
+            int slotIndex,
+            Bounds worldBounds)
+        {
+            drawSlotMaxInstanceCounts[slotIndex]++;
+            if (!hasBounds[slotIndex])
+            {
+                drawSlotConservativeWorldBounds[slotIndex] = worldBounds;
+                hasBounds[slotIndex] = true;
+                return;
+            }
+
+            drawSlotConservativeWorldBounds[slotIndex].Encapsulate(worldBounds);
         }
 
         private int RegisterLodProfile(LODProfileSO lodProfile)
