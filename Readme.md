@@ -31,11 +31,10 @@ Inspired by Unreal Engine 5.7 foliage innovations (Assemblies, voxelized LOD, an
 
 1. Authoritative feature contract: [Packages/com.voxgeofol.vegetation/README.md](Packages/com.voxgeofol.vegetation/README.md)
 2. Architecture authority: [DetailedDocs/UnityAssembledVegetation_FULL.md](DetailedDocs/UnityAssembledVegetation_FULL.md)
-3. Current milestone plan: [DetailedDocs/Milestone1.md](DetailedDocs/Milestone1.md)
-4. Embedded package: [Packages/com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation)
-5. Playground scene: [Assets/Scenes/Playground.unity](Assets/Scenes/Playground.unity)
-6. Package sample content: [Packages/com.voxgeofol.vegetation/Samples~/Vegetation Demo](Packages/com.voxgeofol.vegetation/Samples~/Vegetation%20Demo)
-7. Repo-local sample mirror used by scenes: [Assets/Tree](Assets/Tree)
+3. Embedded package: [Packages/com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation)
+4. Playground scene: [Assets/Scenes/Playground.unity](Assets/Scenes/Playground.unity)
+5. Package sample content: [Packages/com.voxgeofol.vegetation/Samples~/VegetationDemo](Packages/com.voxgeofol.vegetation/Samples~/VegetationDemo)
+6. Repo-local sample mirror used by scenes: [Assets/Tree](Assets/Tree)
 
 ## Install
 

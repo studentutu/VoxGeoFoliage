@@ -102,7 +102,7 @@ Examples:
 ## Important Limitations
 
 1. Opaque-only runtime: no transparency, no alpha clip, no masked foliage.
-2. URP only. Built-in pipeline, HDRP, and custom SRP integrations are outside the contract.
+2. URP only (via new render graph API). Built-in pipeline, HDRP, and custom SRP integrations are outside the contract.
 3. No runtime CPU fallback, no CPU decode bridge, and no async-readback rendering path.
 4. Exact CPU-side visible-instance lists are not exposed in production flow.
 5. `LODGroup` is not used; LOD comes from authored distance bands and GPU classification.
