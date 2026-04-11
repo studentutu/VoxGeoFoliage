@@ -11,11 +11,10 @@
 - [Common Use Cases](#common-use-cases)
 - [Important Limitations](#important-limitations)
 - Reference: [What is Foliage Assembly and voxel-based rendering?](#what-is-foliage-assembly-and-voxel-based-rendering)
-- [Agentic Workflow](#agentic-workflow)
-- [Repo Requirements](#repo-requirements)
-- [Verification](#verification)
-- Cross-links: [Package README](Packages/com.voxgeofol.vegetation/README.md), [Architecture Authority](DetailedDocs/UnityAssembledVegetation_FULL.md), [Current Milestone](DetailedDocs/Milestone1.md)
+- Development: [Agentic Workflow](#agentic-workflow), [Repo Requirements](#repo-requirements), [Verification](#verification)
+- Cross-links: [Package README](Packages/com.voxgeofol.vegetation/README.md), [Architecture Authority](DetailedDocs/UnityAssembledVegetation_FULL.md)
 - [License](#license)
+- [Kudos](#kudos)
 
 ## Summary
 
@@ -31,10 +30,10 @@ Inspired by Unreal Engine 5.7 foliage innovations (Assemblies, voxelized LOD, an
 
 1. Authoritative feature contract: [Packages/com.voxgeofol.vegetation/README.md](Packages/com.voxgeofol.vegetation/README.md)
 2. Architecture authority: [DetailedDocs/UnityAssembledVegetation_FULL.md](DetailedDocs/UnityAssembledVegetation_FULL.md)
-3. Embedded package: [Packages/com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation)
+3. Embedded package(see [Install](#install)): [Packages/com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation)
 4. Playground scene: [Assets/Scenes/Playground.unity](Assets/Scenes/Playground.unity)
 5. Package sample content: [Packages/com.voxgeofol.vegetation/Samples~/VegetationDemo](Packages/com.voxgeofol.vegetation/Samples~/VegetationDemo)
-6. Repo-local sample mirror used by scenes: [Assets/Tree](Assets/Tree)
+6. Next [Install](#install)
 
 ## Install
 
@@ -174,3 +173,7 @@ MIT license.
 
 1. Root repository license: [LICENSE](LICENSE)
 2. Package license: [Packages/com.voxgeofol.vegetation/LICENSE.md](Packages/com.voxgeofol.vegetation/LICENSE.md)
+
+## Kudos
+
+Big thanks to the [unity-voxel](https://github.com/mattatz/unity-voxel) and it's author @mattatz !
