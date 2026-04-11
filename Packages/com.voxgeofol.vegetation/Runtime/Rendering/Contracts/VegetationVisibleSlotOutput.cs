@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
@@ -10,22 +11,32 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     /// </summary>
     public sealed class VegetationVisibleSlotOutput
     {
+        private static readonly IReadOnlyList<VegetationVisibleInstance> EmptyInstances = System.Array.Empty<VegetationVisibleInstance>();
         private readonly List<VegetationVisibleInstance> instances = new List<VegetationVisibleInstance>();
-        private Bounds visibleBounds;
+        private readonly bool captureDebugInstances;
+        private VegetationIndirectInstanceData[] uploadInstances = System.Array.Empty<VegetationIndirectInstanceData>();
+        private int instanceCount;
+        private Vector3 visibleMin;
+        private Vector3 visibleMax;
         private bool hasVisibleBounds;
 
-        public VegetationVisibleSlotOutput(VegetationDrawSlot drawSlot)
+        public VegetationVisibleSlotOutput(VegetationDrawSlot drawSlot, bool captureDebugInstances)
         {
             DrawSlot = drawSlot;
+            this.captureDebugInstances = captureDebugInstances;
         }
 
         public VegetationDrawSlot DrawSlot { get; }
 
-        public IReadOnlyList<VegetationVisibleInstance> Instances => instances;
+        public IReadOnlyList<VegetationVisibleInstance> Instances => captureDebugInstances ? instances : EmptyInstances;
 
-        public int InstanceCount => instances.Count;
+        internal VegetationIndirectInstanceData[] UploadInstances => uploadInstances;
 
-        public Bounds VisibleBounds => visibleBounds;
+        public int InstanceCount => instanceCount;
+
+        public Bounds VisibleBounds => hasVisibleBounds
+            ? new Bounds((visibleMin + visibleMax) * 0.5f, visibleMax - visibleMin)
+            : default;
 
         public bool HasVisibleBounds => hasVisibleBounds;
 
@@ -34,27 +45,52 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// </summary>
         public void Reset()
         {
-            instances.Clear();
-            visibleBounds = default;
+            instanceCount = 0;
+            if (captureDebugInstances)
+            {
+                instances.Clear();
+            }
+
+            visibleMin = default;
+            visibleMax = default;
             hasVisibleBounds = false;
         }
 
         /// <summary>
         /// [INTEGRATION] Appends one visible instance and refreshes the exact visible-data bounds for this slot.
         /// </summary>
-        public void AddInstance(VegetationVisibleInstance instance)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void AddInstance(int treeIndex, in VegetationIndirectInstanceData uploadInstance, in Bounds worldBounds)
         {
+            int instanceIndex = instanceCount;
+            EnsureUploadCapacity(instanceIndex + 1);
+            uploadInstances[instanceIndex] = uploadInstance;
+
             if (!hasVisibleBounds)
             {
-                visibleBounds = instance.WorldBounds;
+                visibleMin = worldBounds.min;
+                visibleMax = worldBounds.max;
                 hasVisibleBounds = true;
             }
             else
             {
-                visibleBounds.Encapsulate(instance.WorldBounds);
+                Vector3 worldMin = worldBounds.min;
+                Vector3 worldMax = worldBounds.max;
+                visibleMin = Vector3.Min(visibleMin, worldMin);
+                visibleMax = Vector3.Max(visibleMax, worldMax);
             }
 
-            instances.Add(instance);
+            instanceCount++;
+            if (!captureDebugInstances)
+            {
+                return;
+            }
+
+            instances.Add(new VegetationVisibleInstance
+            {
+                TreeIndex = treeIndex,
+                WorldBounds = worldBounds
+            });
         }
 
         /// <summary>
@@ -62,7 +98,23 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// </summary>
         public VegetationIndirectArgsSeed BuildIndirectArgsSeed()
         {
-            return DrawSlot.BuildIndirectArgsSeed((uint)instances.Count);
+            return DrawSlot.BuildIndirectArgsSeed((uint)instanceCount);
+        }
+
+        private void EnsureUploadCapacity(int requiredCount)
+        {
+            if (uploadInstances.Length >= requiredCount)
+            {
+                return;
+            }
+
+            int newCapacity = Mathf.Max(1, uploadInstances.Length);
+            while (newCapacity < requiredCount)
+            {
+                newCapacity <<= 1;
+            }
+
+            uploadInstances = new VegetationIndirectInstanceData[newCapacity];
         }
     }
 }

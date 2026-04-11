@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
@@ -13,14 +14,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     {
         private readonly List<int> activeSlotIndices = new List<int>();
         private readonly VegetationVisibleSlotOutput[] slotOutputs;
-        private int[] shellDecodeQueue = Array.Empty<int>();
 
-        public VegetationFrameOutput(IReadOnlyList<VegetationDrawSlot> drawSlots)
+        public VegetationFrameOutput(IReadOnlyList<VegetationDrawSlot> drawSlots, bool captureDebugInstances)
         {
             slotOutputs = new VegetationVisibleSlotOutput[drawSlots.Count];
             for (int i = 0; i < drawSlots.Count; i++)
             {
-                slotOutputs[i] = new VegetationVisibleSlotOutput(drawSlots[i]);
+                slotOutputs[i] = new VegetationVisibleSlotOutput(drawSlots[i], captureDebugInstances);
             }
         }
 
@@ -43,32 +43,20 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// <summary>
         /// [INTEGRATION] Appends one visible instance into the exact draw slot selected by the runtime decision path.
         /// </summary>
-        public void AddVisibleInstance(VegetationVisibleInstance instance)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void AddVisibleInstance(
+            int drawSlotIndex,
+            int treeIndex,
+            in VegetationIndirectInstanceData uploadInstance,
+            in Bounds worldBounds)
         {
-            VegetationVisibleSlotOutput slotOutput = slotOutputs[instance.DrawSlotIndex];
+            VegetationVisibleSlotOutput slotOutput = slotOutputs[drawSlotIndex];
             if (slotOutput.InstanceCount == 0)
             {
-                activeSlotIndices.Add(instance.DrawSlotIndex);
+                activeSlotIndices.Add(drawSlotIndex);
             }
 
-            slotOutput.AddInstance(instance);
-        }
-
-        internal int[] GetShellDecodeQueue(int requiredCapacity)
-        {
-            if (shellDecodeQueue.Length >= requiredCapacity)
-            {
-                return shellDecodeQueue;
-            }
-
-            int newCapacity = Mathf.Max(1, shellDecodeQueue.Length);
-            while (newCapacity < requiredCapacity)
-            {
-                newCapacity <<= 1;
-            }
-
-            shellDecodeQueue = new int[newCapacity];
-            return shellDecodeQueue;
+            slotOutput.AddInstance(treeIndex, in uploadInstance, in worldBounds);
         }
     }
 }

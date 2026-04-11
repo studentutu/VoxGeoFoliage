@@ -15,28 +15,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public static Bounds TransformBounds(Bounds bounds, Matrix4x4 matrix)
         {
             // Range: input bounds are authoritative authoring or mesh-local bounds. Condition: matrix is the final local-to-world transform for the current draw. Output: exact world AABB used by Phase D visibility and bounds rebuilds.
-            Vector3 center = bounds.center;
             Vector3 extents = bounds.extents;
-            Vector3[] corners =
-            {
-                center + new Vector3(-extents.x, -extents.y, -extents.z),
-                center + new Vector3(-extents.x, -extents.y, extents.z),
-                center + new Vector3(-extents.x, extents.y, -extents.z),
-                center + new Vector3(-extents.x, extents.y, extents.z),
-                center + new Vector3(extents.x, -extents.y, -extents.z),
-                center + new Vector3(extents.x, -extents.y, extents.z),
-                center + new Vector3(extents.x, extents.y, -extents.z),
-                center + new Vector3(extents.x, extents.y, extents.z)
-            };
-
-            Vector3 transformedCorner = matrix.MultiplyPoint3x4(corners[0]);
-            Bounds transformedBounds = new Bounds(transformedCorner, Vector3.zero);
-            for (int i = 1; i < corners.Length; i++)
-            {
-                transformedBounds.Encapsulate(matrix.MultiplyPoint3x4(corners[i]));
-            }
-
-            return transformedBounds;
+            Vector3 worldCenter = matrix.MultiplyPoint3x4(bounds.center);
+            Vector3 worldExtents = new Vector3(
+                Mathf.Abs(matrix.m00) * extents.x + Mathf.Abs(matrix.m01) * extents.y + Mathf.Abs(matrix.m02) * extents.z,
+                Mathf.Abs(matrix.m10) * extents.x + Mathf.Abs(matrix.m11) * extents.y + Mathf.Abs(matrix.m12) * extents.z,
+                Mathf.Abs(matrix.m20) * extents.x + Mathf.Abs(matrix.m21) * extents.y + Mathf.Abs(matrix.m22) * extents.z);
+            return new Bounds(worldCenter, worldExtents * 2f);
         }
 
         /// <summary>

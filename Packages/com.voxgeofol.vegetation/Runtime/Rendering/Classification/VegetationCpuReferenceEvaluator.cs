@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Profiling;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
@@ -11,6 +12,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     /// </summary>
     public sealed class VegetationCpuReferenceEvaluator
     {
+        private static readonly ProfilerMarker EvaluateFrameMarker = new ProfilerMarker("VoxGeoFol.VegetationCpuReferenceEvaluator.EvaluateFrame");
         private readonly List<int> visibleCellIndices = new List<int>();
 
         /// <summary>
@@ -23,32 +25,35 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             VegetationFrameDecisionState decisionState,
             VegetationFrameOutput frameOutput)
         {
-            if (registry == null)
+            using (EvaluateFrameMarker.Auto())
             {
-                throw new ArgumentNullException(nameof(registry));
+                if (registry == null)
+                {
+                    throw new ArgumentNullException(nameof(registry));
+                }
+
+                if (frustumPlanes == null)
+                {
+                    throw new ArgumentNullException(nameof(frustumPlanes));
+                }
+
+                if (decisionState == null)
+                {
+                    throw new ArgumentNullException(nameof(decisionState));
+                }
+
+                if (frameOutput == null)
+                {
+                    throw new ArgumentNullException(nameof(frameOutput));
+                }
+
+                decisionState.Reset(registry);
+                registry.SpatialGrid.BuildVisibleCellMask(frustumPlanes, decisionState.CellVisibilityMask, visibleCellIndices);
+                decisionState.RefreshVisibleCellIndices(visibleCellIndices);
+
+                ClassifyTreesAndBranches(registry, cameraWorldPosition, frustumPlanes, decisionState);
+                VegetationDecisionDecoder.Decode(registry, decisionState, frustumPlanes, frameOutput);
             }
-
-            if (frustumPlanes == null)
-            {
-                throw new ArgumentNullException(nameof(frustumPlanes));
-            }
-
-            if (decisionState == null)
-            {
-                throw new ArgumentNullException(nameof(decisionState));
-            }
-
-            if (frameOutput == null)
-            {
-                throw new ArgumentNullException(nameof(frameOutput));
-            }
-
-            decisionState.Reset(registry);
-            registry.SpatialGrid.BuildVisibleCellMask(frustumPlanes, decisionState.CellVisibilityMask, visibleCellIndices);
-            decisionState.RefreshVisibleCellIndices(visibleCellIndices);
-
-            ClassifyTreesAndBranches(registry, cameraWorldPosition, frustumPlanes, decisionState);
-            VegetationDecisionDecoder.Decode(registry, decisionState, frustumPlanes, frameOutput);
         }
 
         private static void ClassifyTreesAndBranches(

@@ -10,32 +10,33 @@ Purpose: track immediate tasks and current milestone status.
 
 ## Status Snapshot
 
-- `Phase A` through `Phase D` are implemented. Phase D landed on `2026-04-09` with runtime registration/flattening, deterministic spatial-grid registration, CPU reference classification/decode, renderer-neutral per-slot visible outputs, and a GPU parity hook.
+- `Phase A` through `Phase E` are implemented.
 - `2026-04-10`: Phase E render infrastructure landed. `VegetationIndirectRenderer` now uploads per-slot instance payloads/args/bounds, `VegetationRendererFeature` schedules indirect depth/color passes, the runtime shader suite is in place, `VegetationRuntimeManager` prepares camera-visible frames for rendering, and `DebugVegetationDemo` exposes the uploaded batch state in Scene view.
+- `2026-04-11`: Removed the constant per-frame `TransformBounds` corner-array GC from Phase E visible-bounds rebuilds, removed render-graph `managers.ToArray()` garbage in `VegetationRendererFeature`, and added profiler markers across frame prep, decode, upload, and render submission so Playground captures can isolate the next bottleneck.
+- `2026-04-11`: Removed the wasted full `VegetationFrameDecisionState.Reset()` on completed GPU readback consume, replaced temporary visible-cell array rebuilds with in-place mask expansion, changed decode output to write `VegetationIndirectInstanceData` directly into slot outputs, and removed the per-slot CPU repack loop in `VegetationIndirectRenderer`. New markers now split GPU readback consume, decode, instance-buffer upload, and args upload.
+- `2026-04-11`: Reworked `VegetationDecisionDecoder.DecodeTrees` so it rejects whole trees before branch traversal, rejects whole shell tiers before scanning node decisions, and consumes precomputed per-tree/per-branch/per-node world bounds from runtime registration instead of recomputing transformed draw-slot bounds in the decode hot loop.
+- `2026-04-11`: Removed more decode hot-path payload churn by caching per-tree/per-branch `VegetationIndirectInstanceData` at registration time, switching frame-output append calls to readonly-ref payload/bounds flow, and disabling per-instance debug capture on the runtime-manager frame output unless diagnostics are enabled.
 - Current runtime shell-node rule is explicit and conservative: visible internal nodes expand, visible leaves emit, and finer intra-tier collapse is deferred.
 - Current prepared-frame reality is not the final target architecture yet: CPU reference output is still the default render source, while the optional GPU mode is a delayed non-blocking decision-readback bridge rather than a fully GPU-decoded frontier.
-- Compile validation succeeded through `Fully Compile by Unity` on `2026-04-10`.
-- Unity EditMode tests were not rerun after Phase E because the repo guidance prefers manual user-triggered Unity test runs for the long editor path.
+- Compile validation succeeded through `Fully Compile by Unity`.
 
 ## Phase E Clarification
 
 - Milestone 1 `Phase E` implementation work is only partially complete against [Milestone1.md](../DetailedDocs/Milestone1.md).
 - Code-side render infrastructure from Milestone `E1` through `E5` exists in the repo.
 - `Phase E` is not accepted complete.
-- The remaining explicit milestone work is `E6` demo-scene verification and the manual portion of `E7`.
 - There is also an architectural gap versus the milestone target: the current shipped path still defaults to CPU-prepared visible output, so the intended GPU-primary decode ownership is not fully satisfied yet.
 
 ## Immediate Tasks
 
+### Low hanging fruits
+
+- Validate in Playground that the fixed `TransformBounds`/render-pass GC spike is actually gone under `GpuDecisionReadback`.
+- Capture a new Playground profile and compare `VegetationRuntimeManager.TryConsumeGpuReadback`, `VegetationRuntimeManager.DecodeGpuReadback`, `VegetationRuntimeManager.UploadGpuReadback`, `VegetationGpuDecisionPipeline.CopyDecisionBuffers`, and `VegetationIndirectRenderer.SlotResources.UploadInstanceBuffer`.
+- Capture a new Playground profile and compare `VegetationDecisionDecoder.DecodeTrees` against `VegetationDecisionDecoder.Decode` overall to confirm the tree-level and shell-tier rejects actually removed the hot path.
+- If `UploadInstanceBuffer` still dominates with hundreds of active slots, stop pretending the bottleneck is decode and investigate slot-count reduction or shared-buffer upload architecture.
+
 ### Phase E: Hybrid Decode Rendering Pipeline
-
-- [x] `E-01` Freeze renderer ownership between `VegetationRuntimeManager`, `VegetationIndirectRenderer`, and `VegetationRendererFeature`.
-- [x] `E-02` Implement `VegetationIndirectRenderer` consumption of Phase D draw-slot outputs, visible-instance payloads, indirect-arg seeds, and rebuilt per-slot bounds.
-- [x] `E-03` Implement the URP render-pass integration and the four-shader runtime suite against one instance-payload contract.
-- [x] `E-04` Implement the runtime/renderer wiring plus the optional non-blocking GPU decision readback bridge. The batch-mode kernel-import issue on `VegetationClassify.compute` is still open.
-- [ ] `E-05` End-to-end demo-scene verification for expanded trees, impostors, per-slot counts, and rebuilt `worldBounds`.
-
-## Next Up
 
 - `E-05` End-to-end demo-scene verification in the Playground scene with `DebugVegetationDemo`.
 - Investigate the batch-mode kernel-import issue on `VegetationClassify.compute` so the optional GPU decision-readback mode stops being editor-only confidence work.

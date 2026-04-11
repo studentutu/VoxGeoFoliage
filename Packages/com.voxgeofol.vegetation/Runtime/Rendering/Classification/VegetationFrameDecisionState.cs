@@ -65,6 +65,20 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         }
 
         /// <summary>
+        /// [INTEGRATION] Reinitializes only the mutable per-frame state that is not overwritten by the GPU readback payload.
+        /// </summary>
+        public void ResetForGpuReadback()
+        {
+            Array.Clear(cellVisibilityMask, 0, cellVisibilityMask.Length);
+            visibleCellIndices.Clear();
+
+            for (int i = 0; i < treeModes.Length; i++)
+            {
+                treeModes[i] = VegetationTreeRenderMode.Culled;
+            }
+        }
+
+        /// <summary>
         /// [INTEGRATION] Replaces the stored visible-cell ordering with the latest deterministic spatial-grid query result.
         /// </summary>
         public void RefreshVisibleCellIndices(IReadOnlyList<int> orderedVisibleCells)
@@ -73,6 +87,21 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             for (int i = 0; i < orderedVisibleCells.Count; i++)
             {
                 visibleCellIndices.Add(orderedVisibleCells[i]);
+            }
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Rebuilds the visible-cell ordering in place from the latest cell-visibility mask without allocating a temporary array.
+        /// </summary>
+        public void RefreshVisibleCellIndicesFromMask(IReadOnlyList<uint> visibilityMask)
+        {
+            visibleCellIndices.Clear();
+            for (int i = 0; i < visibilityMask.Count; i++)
+            {
+                if (visibilityMask[i] != 0u)
+                {
+                    visibleCellIndices.Add(i);
+                }
             }
         }
 

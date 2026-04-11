@@ -10,12 +10,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     public struct VegetationVisibleInstance
     {
         public int TreeIndex;
-        public int BranchInstanceIndex;
-        public int NodeIndex;
-        public int DrawSlotIndex;
-        public uint PackedLeafTint;
-        public Matrix4x4 LocalToWorld;
-        public Matrix4x4 WorldToObject;
         public Bounds WorldBounds;
     }
 }

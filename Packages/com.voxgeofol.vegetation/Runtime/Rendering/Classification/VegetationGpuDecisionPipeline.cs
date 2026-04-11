@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Unity.Profiling;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
@@ -14,6 +15,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     /// </summary>
     public sealed class VegetationGpuDecisionPipeline : IDisposable
     {
+        private static readonly ProfilerMarker TryConsumeCompletedReadbackMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.TryConsumeCompletedReadback");
+        private static readonly ProfilerMarker ResetCompletedReadbackStateMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.ResetCompletedReadbackState");
+        private static readonly ProfilerMarker CopyCellVisibilityMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.CopyCellVisibility");
+        private static readonly ProfilerMarker CopyTreeModesMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.CopyTreeModes");
+        private static readonly ProfilerMarker CopyDecisionBuffersMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.CopyDecisionBuffers");
         private readonly ComputeShader classifyShader;
         private readonly VegetationRuntimeRegistry registry;
         private readonly int classifyCellsKernel;
@@ -110,9 +116,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             DispatchKernel(classifyBranchesAndNodesKernel, registry.SceneBranches.Count);
 
             VegetationFrameDecisionState state = new VegetationFrameDecisionState(registry);
-            state.Reset(registry);
+            state.ResetForGpuReadback();
             cellVisibilityBuffer.GetData(state.CellVisibilityMask, 0, 0, registry.SpatialGrid.Cells.Count);
-            state.RefreshVisibleCellIndices(BuildVisibleCellIndices(state.CellVisibilityMask));
+            state.RefreshVisibleCellIndicesFromMask(state.CellVisibilityMask);
 
             int[] treeModes = new int[Mathf.Max(1, registry.TreeInstances.Count)];
             treeModesBuffer.GetData(treeModes, 0, 0, registry.TreeInstances.Count);
@@ -175,72 +181,81 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// </summary>
         public bool TryConsumeCompletedReadback(out VegetationFrameDecisionState? state)
         {
-            if (disposed)
+            using (TryConsumeCompletedReadbackMarker.Auto())
             {
-                throw new ObjectDisposedException(nameof(VegetationGpuDecisionPipeline));
-            }
+                if (disposed)
+                {
+                    throw new ObjectDisposedException(nameof(VegetationGpuDecisionPipeline));
+                }
 
-            if (!readbackPending)
-            {
-                state = null;
-                return false;
-            }
+                if (!readbackPending)
+                {
+                    state = null;
+                    return false;
+                }
 
-            if (!cellVisibilityReadback.done ||
-                !treeModesReadback.done ||
-                !branchDecisionsReadback.done ||
-                !nodeDecisionsReadback.done)
-            {
-                state = null;
-                return false;
-            }
+                if (!cellVisibilityReadback.done ||
+                    !treeModesReadback.done ||
+                    !branchDecisionsReadback.done ||
+                    !nodeDecisionsReadback.done)
+                {
+                    state = null;
+                    return false;
+                }
 
-            readbackPending = false;
-            if (cellVisibilityReadback.hasError ||
-                treeModesReadback.hasError ||
-                branchDecisionsReadback.hasError ||
-                nodeDecisionsReadback.hasError)
-            {
-                if (cellVisibilityReadback.hasError)
-                    UnityEngine.Debug.LogError(
-                        $"VegetationGpuDecisionPipeline GPU decision cellVisibilityReadback error.");
-                if (treeModesReadback.hasError)
-                    UnityEngine.Debug.LogError($"VegetationGpuDecisionPipeline GPU decision treeModesReadback error.");
-                if (branchDecisionsReadback.hasError)
-                    UnityEngine.Debug.LogError(
-                        $"VegetationGpuDecisionPipeline GPU decision branchDecisionsReadback error.");
-                if (nodeDecisionsReadback.hasError)
-                    UnityEngine.Debug.LogError(
-                        $"VegetationGpuDecisionPipeline GPU decision nodeDecisionsReadback error.");
+                readbackPending = false;
+                if (cellVisibilityReadback.hasError ||
+                    treeModesReadback.hasError ||
+                    branchDecisionsReadback.hasError ||
+                    nodeDecisionsReadback.hasError)
+                {
+                    if (cellVisibilityReadback.hasError)
+                        UnityEngine.Debug.LogError(
+                            $"VegetationGpuDecisionPipeline GPU decision cellVisibilityReadback error.");
+                    if (treeModesReadback.hasError)
+                        UnityEngine.Debug.LogError($"VegetationGpuDecisionPipeline GPU decision treeModesReadback error.");
+                    if (branchDecisionsReadback.hasError)
+                        UnityEngine.Debug.LogError(
+                            $"VegetationGpuDecisionPipeline GPU decision branchDecisionsReadback error.");
+                    if (nodeDecisionsReadback.hasError)
+                        UnityEngine.Debug.LogError(
+                            $"VegetationGpuDecisionPipeline GPU decision nodeDecisionsReadback error.");
                 
-                state = null;
-                return false;
+                    state = null;
+                    return false;
+                }
+
+                completedReadbackState ??= new VegetationFrameDecisionState(registry);
+                using (ResetCompletedReadbackStateMarker.Auto())
+                {
+                    completedReadbackState.ResetForGpuReadback();
+                }
+
+                using (CopyCellVisibilityMarker.Auto())
+                {
+                    cellVisibilityReadback.GetData<uint>().CopyTo(completedReadbackState.CellVisibilityMask);
+                    completedReadbackState.RefreshVisibleCellIndicesFromMask(completedReadbackState.CellVisibilityMask);
+                }
+
+                using (CopyTreeModesMarker.Auto())
+                {
+                    NativeArray<int> treeModes = treeModesReadback.GetData<int>();
+                    for (int i = 0; i < registry.TreeInstances.Count; i++)
+                    {
+                        completedReadbackState.TreeModes[i] = (VegetationTreeRenderMode)treeModes[i];
+                    }
+                }
+
+                using (CopyDecisionBuffersMarker.Auto())
+                {
+                    branchDecisionsReadback.GetData<VegetationBranchDecisionRecord>()
+                        .CopyTo(completedReadbackState.BranchDecisions);
+                    nodeDecisionsReadback.GetData<VegetationNodeDecisionRecord>().CopyTo(completedReadbackState.NodeDecisions);
+                }
+
+                state = completedReadbackState;
+                return true;
             }
-
-            completedReadbackState ??= new VegetationFrameDecisionState(registry);
-            completedReadbackState.Reset(registry);
-
-            NativeArray<uint> cellVisibility = cellVisibilityReadback.GetData<uint>();
-            for (int i = 0; i < registry.SpatialGrid.Cells.Count; i++)
-            {
-                completedReadbackState.CellVisibilityMask[i] = cellVisibility[i];
-            }
-
-            completedReadbackState.RefreshVisibleCellIndices(
-                BuildVisibleCellIndices(completedReadbackState.CellVisibilityMask));
-
-            NativeArray<int> treeModes = treeModesReadback.GetData<int>();
-            for (int i = 0; i < registry.TreeInstances.Count; i++)
-            {
-                completedReadbackState.TreeModes[i] = (VegetationTreeRenderMode)treeModes[i];
-            }
-
-            branchDecisionsReadback.GetData<VegetationBranchDecisionRecord>()
-                .CopyTo(completedReadbackState.BranchDecisions);
-            nodeDecisionsReadback.GetData<VegetationNodeDecisionRecord>().CopyTo(completedReadbackState.NodeDecisions);
-
-            state = completedReadbackState;
-            return true;
         }
 
         public void Dispose()
@@ -427,30 +442,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private static ComputeBuffer CreateStructuredBuffer<T>(int count) where T : struct
         {
             return new ComputeBuffer(count, Marshal.SizeOf<T>());
-        }
-
-        private static int[] BuildVisibleCellIndices(IReadOnlyList<uint> mask)
-        {
-            int visibleCount = 0;
-            for (int i = 0; i < mask.Count; i++)
-            {
-                if (mask[i] != 0u)
-                {
-                    visibleCount++;
-                }
-            }
-
-            int[] result = new int[visibleCount];
-            int targetIndex = 0;
-            for (int i = 0; i < mask.Count; i++)
-            {
-                if (mask[i] != 0u)
-                {
-                    result[targetIndex++] = i;
-                }
-            }
-
-            return result;
         }
 
         [StructLayout(LayoutKind.Sequential)]

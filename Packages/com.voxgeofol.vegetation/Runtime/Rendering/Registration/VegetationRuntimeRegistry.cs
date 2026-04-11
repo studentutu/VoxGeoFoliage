@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
@@ -11,63 +12,92 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     public sealed class VegetationRuntimeRegistry
     {
         public VegetationRuntimeRegistry(
-            IReadOnlyList<VegetationDrawSlot> drawSlots,
-            IReadOnlyList<VegetationLodProfileRuntime> lodProfiles,
-            IReadOnlyList<VegetationTreeBlueprintRuntime> treeBlueprints,
-            IReadOnlyList<VegetationBlueprintBranchPlacementRuntime> blueprintBranchPlacements,
-            IReadOnlyList<VegetationBranchPrototypeRuntime> branchPrototypes,
-            IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> shellNodesL1,
-            IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> shellNodesL2,
-            IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> shellNodesL3,
-            IReadOnlyList<VegetationTreeInstanceRuntime> treeInstances,
-            IReadOnlyList<VegetationSceneBranchRuntime> sceneBranches,
+            VegetationDrawSlot[] drawSlots,
+            VegetationLodProfileRuntime[] lodProfiles,
+            VegetationTreeBlueprintRuntime[] treeBlueprints,
+            VegetationBlueprintBranchPlacementRuntime[] blueprintBranchPlacements,
+            VegetationBranchPrototypeRuntime[] branchPrototypes,
+            VegetationBranchShellNodeRuntimeBfs[] shellNodesL1,
+            VegetationBranchShellNodeRuntimeBfs[] shellNodesL2,
+            VegetationBranchShellNodeRuntimeBfs[] shellNodesL3,
+            VegetationTreeInstanceRuntime[] treeInstances,
+            VegetationSceneBranchRuntime[] sceneBranches,
+            int[] nodeDrawSlotIndices,
+            Bounds[] nodeWorldBounds,
             VegetationSpatialGrid spatialGrid,
             int totalNodeDecisionCapacity)
         {
-            DrawSlots = drawSlots;
-            LodProfiles = lodProfiles;
-            TreeBlueprints = treeBlueprints;
-            BlueprintBranchPlacements = blueprintBranchPlacements;
-            BranchPrototypes = branchPrototypes;
-            ShellNodesL1 = shellNodesL1;
-            ShellNodesL2 = shellNodesL2;
-            ShellNodesL3 = shellNodesL3;
-            TreeInstances = treeInstances;
-            SceneBranches = sceneBranches;
+            this.drawSlots = drawSlots;
+            this.lodProfiles = lodProfiles;
+            this.treeBlueprints = treeBlueprints;
+            this.blueprintBranchPlacements = blueprintBranchPlacements;
+            this.branchPrototypes = branchPrototypes;
+            this.shellNodesL1 = shellNodesL1;
+            this.shellNodesL2 = shellNodesL2;
+            this.shellNodesL3 = shellNodesL3;
+            this.treeInstances = treeInstances;
+            this.sceneBranches = sceneBranches;
+            this.nodeDrawSlotIndices = nodeDrawSlotIndices;
+            this.nodeWorldBounds = nodeWorldBounds;
             SpatialGrid = spatialGrid;
             TotalNodeDecisionCapacity = totalNodeDecisionCapacity;
         }
 
-        public IReadOnlyList<VegetationDrawSlot> DrawSlots { get; }
+        private readonly VegetationDrawSlot[] drawSlots;
+        private readonly VegetationLodProfileRuntime[] lodProfiles;
+        private readonly VegetationTreeBlueprintRuntime[] treeBlueprints;
+        private readonly VegetationBlueprintBranchPlacementRuntime[] blueprintBranchPlacements;
+        private readonly VegetationBranchPrototypeRuntime[] branchPrototypes;
+        private readonly VegetationBranchShellNodeRuntimeBfs[] shellNodesL1;
+        private readonly VegetationBranchShellNodeRuntimeBfs[] shellNodesL2;
+        private readonly VegetationBranchShellNodeRuntimeBfs[] shellNodesL3;
+        private readonly VegetationTreeInstanceRuntime[] treeInstances;
+        private readonly VegetationSceneBranchRuntime[] sceneBranches;
+        private readonly int[] nodeDrawSlotIndices;
+        private readonly Bounds[] nodeWorldBounds;
 
-        public IReadOnlyList<VegetationLodProfileRuntime> LodProfiles { get; }
+        public IReadOnlyList<VegetationDrawSlot> DrawSlots => drawSlots;
 
-        public IReadOnlyList<VegetationTreeBlueprintRuntime> TreeBlueprints { get; }
+        public IReadOnlyList<VegetationLodProfileRuntime> LodProfiles => lodProfiles;
 
-        public IReadOnlyList<VegetationBlueprintBranchPlacementRuntime> BlueprintBranchPlacements { get; }
+        public IReadOnlyList<VegetationTreeBlueprintRuntime> TreeBlueprints => treeBlueprints;
 
-        public IReadOnlyList<VegetationBranchPrototypeRuntime> BranchPrototypes { get; }
+        public IReadOnlyList<VegetationBlueprintBranchPlacementRuntime> BlueprintBranchPlacements => blueprintBranchPlacements;
 
-        public IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> ShellNodesL1 { get; }
+        public IReadOnlyList<VegetationBranchPrototypeRuntime> BranchPrototypes => branchPrototypes;
 
-        public IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> ShellNodesL2 { get; }
+        public IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> ShellNodesL1 => shellNodesL1;
 
-        public IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> ShellNodesL3 { get; }
+        public IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> ShellNodesL2 => shellNodesL2;
 
-        public IReadOnlyList<VegetationTreeInstanceRuntime> TreeInstances { get; }
+        public IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> ShellNodesL3 => shellNodesL3;
 
-        public IReadOnlyList<VegetationSceneBranchRuntime> SceneBranches { get; }
+        public IReadOnlyList<VegetationTreeInstanceRuntime> TreeInstances => treeInstances;
+
+        public IReadOnlyList<VegetationSceneBranchRuntime> SceneBranches => sceneBranches;
 
         public VegetationSpatialGrid SpatialGrid { get; }
 
         public int TotalNodeDecisionCapacity { get; }
 
+        internal VegetationDrawSlot[] DrawSlotsArray => drawSlots;
+
+        internal VegetationTreeBlueprintRuntime[] TreeBlueprintsArray => treeBlueprints;
+
+        internal VegetationTreeInstanceRuntime[] TreeInstancesArray => treeInstances;
+
+        internal VegetationSceneBranchRuntime[] SceneBranchesArray => sceneBranches;
+
+        internal int[] NodeDrawSlotIndices => nodeDrawSlotIndices;
+
+        internal Bounds[] NodeWorldBounds => nodeWorldBounds;
+
         /// <summary>
         /// [INTEGRATION] Creates the stable per-slot visible-output container that Phase D rebuilds every frame.
         /// </summary>
-        public VegetationFrameOutput CreateFrameOutput()
+        public VegetationFrameOutput CreateFrameOutput(bool captureDebugInstances = true)
         {
-            return new VegetationFrameOutput(DrawSlots);
+            return new VegetationFrameOutput(DrawSlots, captureDebugInstances);
         }
 
         /// <summary>
@@ -101,9 +131,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             return runtimeTier switch
             {
-                VegetationRuntimeBranchTier.L1 => ShellNodesL1,
-                VegetationRuntimeBranchTier.L2 => ShellNodesL2,
-                VegetationRuntimeBranchTier.L3 => ShellNodesL3,
+                VegetationRuntimeBranchTier.L1 => shellNodesL1,
+                VegetationRuntimeBranchTier.L2 => shellNodesL2,
+                VegetationRuntimeBranchTier.L3 => shellNodesL3,
                 _ => throw new ArgumentOutOfRangeException(nameof(runtimeTier), runtimeTier, "Shell-node runtime caches exist only for shell runtime tiers L1/L2/L3.")
             };
         }

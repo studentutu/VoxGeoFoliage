@@ -161,6 +161,26 @@ public sealed class VegetationRuntimeFoundationTests
     }
 
     [Test]
+    public void RuntimeMathUtility_TransformBounds_MatchesCornerSweepReference()
+    {
+        Bounds localBounds = new Bounds(new Vector3(0.4f, 1.2f, -0.6f), new Vector3(2.5f, 3.75f, 1.5f));
+        Matrix4x4 transformMatrix = Matrix4x4.TRS(
+            new Vector3(-4.5f, 2.25f, 7.5f),
+            Quaternion.Euler(17f, 33f, 12f),
+            new Vector3(1.5f, 0.75f, 2.25f));
+
+        Bounds actualBounds = VegetationRuntimeMathUtility.TransformBounds(localBounds, transformMatrix);
+        Bounds expectedBounds = TransformBoundsByCornerSweep(localBounds, transformMatrix);
+
+        Assert.That(actualBounds.center.x, Is.EqualTo(expectedBounds.center.x).Within(0.0001f));
+        Assert.That(actualBounds.center.y, Is.EqualTo(expectedBounds.center.y).Within(0.0001f));
+        Assert.That(actualBounds.center.z, Is.EqualTo(expectedBounds.center.z).Within(0.0001f));
+        Assert.That(actualBounds.size.x, Is.EqualTo(expectedBounds.size.x).Within(0.0001f));
+        Assert.That(actualBounds.size.y, Is.EqualTo(expectedBounds.size.y).Within(0.0001f));
+        Assert.That(actualBounds.size.z, Is.EqualTo(expectedBounds.size.z).Within(0.0001f));
+    }
+
+    [Test]
     public void GpuDecisionPipeline_MatchesCpuReferenceForL1ShellBranch()
     {
         if (!SystemInfo.supportsComputeShaders)
@@ -189,7 +209,7 @@ public sealed class VegetationRuntimeFoundationTests
         VegetationGpuDecisionPipeline pipeline;
         try
         {
-            pipeline = new VegetationGpuDecisionPipeline(classifyShader, registry);
+            pipeline = new VegetationGpuDecisionPipeline(classifyShader!, registry);
         }
         catch (NotSupportedException exception)
         {
@@ -404,6 +424,32 @@ public sealed class VegetationRuntimeFoundationTests
         }
 
         return counts;
+    }
+
+    private static Bounds TransformBoundsByCornerSweep(Bounds bounds, Matrix4x4 matrix)
+    {
+        Vector3 center = bounds.center;
+        Vector3 extents = bounds.extents;
+        Vector3[] corners =
+        {
+            center + new Vector3(-extents.x, -extents.y, -extents.z),
+            center + new Vector3(-extents.x, -extents.y, extents.z),
+            center + new Vector3(-extents.x, extents.y, -extents.z),
+            center + new Vector3(-extents.x, extents.y, extents.z),
+            center + new Vector3(extents.x, -extents.y, -extents.z),
+            center + new Vector3(extents.x, -extents.y, extents.z),
+            center + new Vector3(extents.x, extents.y, -extents.z),
+            center + new Vector3(extents.x, extents.y, extents.z)
+        };
+
+        Vector3 transformedCorner = matrix.MultiplyPoint3x4(corners[0]);
+        Bounds transformedBounds = new Bounds(transformedCorner, Vector3.zero);
+        for (int i = 1; i < corners.Length; i++)
+        {
+            transformedBounds.Encapsulate(matrix.MultiplyPoint3x4(corners[i]));
+        }
+
+        return transformedBounds;
     }
 
     private void AssertBoundsEqual(VegetationFrameOutput frameOutput, string drawLabel, Bounds actualBounds)

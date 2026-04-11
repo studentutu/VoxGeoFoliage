@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using Unity.Profiling;
 using VoxGeoFol.Features.Vegetation.Authoring;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
@@ -15,6 +16,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     [DisallowMultipleComponent]
     public sealed class VegetationRuntimeManager : MonoBehaviour
     {
+        private static readonly ProfilerMarker RefreshRuntimeRegistrationMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.RefreshRuntimeRegistration");
+        private static readonly ProfilerMarker PrepareFrameForCameraMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.PrepareFrameForCamera");
+        private static readonly ProfilerMarker PrepareCpuReferenceFrameMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.PrepareCpuReferenceFrame");
+        private static readonly ProfilerMarker PrepareGpuDecisionFrameMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.PrepareGpuDecisionFrame");
+        private static readonly ProfilerMarker TryConsumeGpuReadbackMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.TryConsumeGpuReadback");
+        private static readonly ProfilerMarker DecodeGpuReadbackMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.DecodeGpuReadback");
+        private static readonly ProfilerMarker UploadGpuReadbackMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeManager.UploadGpuReadback");
         private static readonly List<VegetationRuntimeManager> ActiveManagersInternal = new List<VegetationRuntimeManager>();
 
         [SerializeField] private Vector3 gridOrigin = Vector3.zero;
@@ -76,29 +84,32 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// </summary>
         public void RefreshRuntimeRegistration()
         {
-            ResetAuthoringRuntimeIndices();
-
-            VegetationTreeAuthoring[] authorings = FindObjectsByType<VegetationTreeAuthoring>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
-            VegetationRuntimeRegistryBuilder builder = new VegetationRuntimeRegistryBuilder(gridOrigin, cellSize);
-            registry = builder.Build(authorings);
-            lastDecisionState = new VegetationFrameDecisionState(registry);
-            lastFrameOutput = registry.CreateFrameOutput();
-            indirectRenderer?.Dispose();
-            indirectRenderer = new VegetationIndirectRenderer(registry, gameObject.layer, enableDiagnostics);
-
-            for (int treeIndex = 0; treeIndex < registry.TreeInstances.Count; treeIndex++)
+            using (RefreshRuntimeRegistrationMarker.Auto())
             {
-                registry.TreeInstances[treeIndex].Authoring.RefreshRuntimeTreeIndex(treeIndex);
+                ResetAuthoringRuntimeIndices();
+
+                VegetationTreeAuthoring[] authorings = FindObjectsByType<VegetationTreeAuthoring>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                VegetationRuntimeRegistryBuilder builder = new VegetationRuntimeRegistryBuilder(gridOrigin, cellSize);
+                registry = builder.Build(authorings);
+                lastDecisionState = new VegetationFrameDecisionState(registry);
+                lastFrameOutput = registry.CreateFrameOutput(enableDiagnostics);
+                indirectRenderer?.Dispose();
+                indirectRenderer = new VegetationIndirectRenderer(registry, gameObject.layer, enableDiagnostics);
+
+                for (int treeIndex = 0; treeIndex < registry.TreeInstances.Count; treeIndex++)
+                {
+                    registry.TreeInstances[treeIndex].Authoring.RefreshRuntimeTreeIndex(treeIndex);
+                }
+
+                gpuDecisionPipeline?.Dispose();
+                gpuDecisionPipeline = vegetationClassifyShader == null
+                    ? null
+                    : new VegetationGpuDecisionPipeline(vegetationClassifyShader, registry);
+                lastPreparedCameraInstanceId = -1;
+                lastPreparedRenderFrame = -1;
+
+                LogRegistrationDiagnostics(authorings);
             }
-
-            gpuDecisionPipeline?.Dispose();
-            gpuDecisionPipeline = vegetationClassifyShader == null
-                ? null
-                : new VegetationGpuDecisionPipeline(vegetationClassifyShader, registry);
-            lastPreparedCameraInstanceId = -1;
-            lastPreparedRenderFrame = -1;
-
-            LogRegistrationDiagnostics(authorings);
         }
 
         /// <summary>
@@ -163,35 +174,38 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// </summary>
         public bool PrepareFrameForCamera(Camera camera)
         {
-            if (camera == null)
+            using (PrepareFrameForCameraMarker.Auto())
             {
-                throw new ArgumentNullException(nameof(camera));
+                if (camera == null)
+                {
+                    throw new ArgumentNullException(nameof(camera));
+                }
+
+                EnsureRuntimeRegistration();
+                if (registry == null || lastDecisionState == null || lastFrameOutput == null || indirectRenderer == null)
+                {
+                    return false;
+                }
+
+                int renderFrame = Time.renderedFrameCount;
+                int cameraInstanceId = camera.GetInstanceID();
+                if (lastPreparedRenderFrame == renderFrame && lastPreparedCameraInstanceId == cameraInstanceId)
+                {
+                    return HasPreparedFrame;
+                }
+
+                GeometryUtility.CalculateFrustumPlanes(camera, reusableFrustumPlanes);
+                Vector3 cameraWorldPosition = camera.transform.position;
+
+                bool uploadedFrame = frameSource == VegetationRuntimeFrameSource.GpuDecisionReadback
+                    ? PrepareGpuDecisionFrame(cameraWorldPosition, reusableFrustumPlanes)
+                    : PrepareCpuReferenceFrame(cameraWorldPosition, reusableFrustumPlanes);
+
+                lastPreparedCameraInstanceId = cameraInstanceId;
+                lastPreparedRenderFrame = renderFrame;
+                LogPreparationDiagnostics(camera, uploadedFrame);
+                return uploadedFrame;
             }
-
-            EnsureRuntimeRegistration();
-            if (registry == null || lastDecisionState == null || lastFrameOutput == null || indirectRenderer == null)
-            {
-                return false;
-            }
-
-            int renderFrame = Time.renderedFrameCount;
-            int cameraInstanceId = camera.GetInstanceID();
-            if (lastPreparedRenderFrame == renderFrame && lastPreparedCameraInstanceId == cameraInstanceId)
-            {
-                return HasPreparedFrame;
-            }
-
-            GeometryUtility.CalculateFrustumPlanes(camera, reusableFrustumPlanes);
-            Vector3 cameraWorldPosition = camera.transform.position;
-
-            bool uploadedFrame = frameSource == VegetationRuntimeFrameSource.GpuDecisionReadback
-                ? PrepareGpuDecisionFrame(cameraWorldPosition, reusableFrustumPlanes)
-                : PrepareCpuReferenceFrame(cameraWorldPosition, reusableFrustumPlanes);
-
-            lastPreparedCameraInstanceId = cameraInstanceId;
-            lastPreparedRenderFrame = renderFrame;
-            LogPreparationDiagnostics(camera, uploadedFrame);
-            return uploadedFrame;
         }
 
         private void OnEnable()
@@ -222,44 +236,66 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private bool PrepareCpuReferenceFrame(Vector3 cameraWorldPosition, Plane[] frustumPlanes)
         {
-            cpuReferenceEvaluator.EvaluateFrame(registry!, cameraWorldPosition, frustumPlanes, lastDecisionState!, lastFrameOutput!);
-            indirectRenderer!.UploadFrameOutput(lastFrameOutput!);
-            lastPreparedFrameSource = VegetationRuntimeFrameSource.CpuReference;
-            return indirectRenderer!.HasUploadedFrame;
+            using (PrepareCpuReferenceFrameMarker.Auto())
+            {
+                cpuReferenceEvaluator.EvaluateFrame(registry!, cameraWorldPosition, frustumPlanes, lastDecisionState!, lastFrameOutput!);
+                indirectRenderer!.UploadFrameOutput(lastFrameOutput!);
+                lastPreparedFrameSource = VegetationRuntimeFrameSource.CpuReference;
+                return indirectRenderer!.HasUploadedFrame;
+            }
         }
 
         private bool PrepareGpuDecisionFrame(Vector3 cameraWorldPosition, Plane[] frustumPlanes)
         {
-            if (gpuDecisionPipeline == null)
+            using (PrepareGpuDecisionFrameMarker.Auto())
             {
-                return PrepareCpuReferenceFrame(cameraWorldPosition, frustumPlanes);
+                if (gpuDecisionPipeline == null)
+                {
+                    return PrepareCpuReferenceFrame(cameraWorldPosition, frustumPlanes);
+                }
+
+                bool uploadedGpuReadback = false;
+                VegetationFrameDecisionState? completedState;
+                using (TryConsumeGpuReadbackMarker.Auto())
+                {
+                    completedState = gpuDecisionPipeline.TryConsumeCompletedReadback(out VegetationFrameDecisionState? consumedState)
+                        ? consumedState
+                        : null;
+                }
+
+                if (completedState != null)
+                {
+                    lastDecisionState = completedState;
+                    using (DecodeGpuReadbackMarker.Auto())
+                    {
+                        VegetationDecisionDecoder.Decode(registry!, lastDecisionState!, pendingGpuReadbackFrustumPlanes, lastFrameOutput!);
+                    }
+
+                    using (UploadGpuReadbackMarker.Auto())
+                    {
+                        indirectRenderer!.UploadFrameOutput(lastFrameOutput!);
+                    }
+
+                    lastPreparedFrameSource = VegetationRuntimeFrameSource.GpuDecisionReadback;
+                    uploadedGpuReadback = true;
+                }
+
+                gpuDecisionPipeline.ScheduleFrameReadback(cameraWorldPosition, frustumPlanes);
+                CopyFrustumPlanes(frustumPlanes, pendingGpuReadbackFrustumPlanes);
+
+                if (uploadedGpuReadback)
+                {
+                    return true;
+                }
+
+                // TODO: Changed by user, as we primary will use only GPU-async readback!
+                // if (bootstrapCpuReferenceWhileGpuReadbackPending || !indirectRenderer!.HasUploadedFrame)
+                // {
+                //     return PrepareCpuReferenceFrame(cameraWorldPosition, frustumPlanes);
+                // }
+
+                return indirectRenderer!.HasUploadedFrame;
             }
-
-            bool uploadedGpuReadback = false;
-            if (gpuDecisionPipeline.TryConsumeCompletedReadback(out VegetationFrameDecisionState? completedState))
-            {
-                lastDecisionState = completedState;
-                VegetationDecisionDecoder.Decode(registry!, lastDecisionState!, pendingGpuReadbackFrustumPlanes, lastFrameOutput!);
-                indirectRenderer!.UploadFrameOutput(lastFrameOutput!);
-                lastPreparedFrameSource = VegetationRuntimeFrameSource.GpuDecisionReadback;
-                uploadedGpuReadback = true;
-            }
-
-            gpuDecisionPipeline.ScheduleFrameReadback(cameraWorldPosition, frustumPlanes);
-            CopyFrustumPlanes(frustumPlanes, pendingGpuReadbackFrustumPlanes);
-
-            if (uploadedGpuReadback)
-            {
-                return true;
-            }
-            
-            // TODO: Changed by user, as we primary will use only GPU-async readback!
-            // if (bootstrapCpuReferenceWhileGpuReadbackPending || !indirectRenderer!.HasUploadedFrame)
-            // {
-            //     return PrepareCpuReferenceFrame(cameraWorldPosition, frustumPlanes);
-            // }
-
-            return indirectRenderer!.HasUploadedFrame;
         }
 
         private static void CopyFrustumPlanes(IReadOnlyList<Plane> source, Plane[] destination)

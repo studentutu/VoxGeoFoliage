@@ -14,11 +14,15 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public Matrix4x4 LocalToWorld;
         public Matrix4x4 WorldToObject;
         public Bounds WorldBounds;
+        public Bounds TrunkFullWorldBounds;
+        public Bounds TrunkL3WorldBounds;
+        public Bounds ImpostorWorldBounds;
         public Vector3 SphereCenterWorld;
         public float BoundingSphereRadius;
         public int BlueprintIndex;
         public int SceneBranchStartIndex;
         public int SceneBranchCount;
         public int CellIndex;
+        internal VegetationIndirectInstanceData UploadInstanceData;
     }
 }

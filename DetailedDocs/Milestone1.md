@@ -510,6 +510,17 @@ Phase E now has a working runtime render path with the following concrete implem
 - `DebugVegetationDemo` landed under `Packages/com.voxgeofol.vegetation/Runtime/Rendering/Debug` to inspect decoded visible instances and uploaded indirect batches directly in Scene view
 - EditMode coverage now includes the indirect-renderer upload boundary for per-slot counts and rebuilt bounds
 
+Perf stabilization update (`2026-04-11`):
+- the constant per-frame GC from `VegetationRuntimeMathUtility.TransformBounds` corner-array allocation was removed from the Phase E visible-bounds path
+- `VegetationRendererFeature` no longer allocates `managers.ToArray()` per render-graph pass
+- profiler markers now cover runtime frame prep, decode, indirect upload, slot-capacity growth, and render-pass submission so Playground captures can isolate the next hot stage
+- the completed-GPU-readback consume path no longer does a full branch/node reset before overwriting those buffers from readback payloads
+- visible-cell ordering from GPU readback now rebuilds in place from the mask instead of allocating a temporary `int[]`
+- Phase E decode now writes slim debug-visible payload plus final `VegetationIndirectInstanceData` in one step, and `VegetationIndirectRenderer` uploads that direct data instead of repacking every visible instance again on the CPU
+- profiler markers now also split GPU readback consume, cell/tree/decision copies, and per-slot instance-buffer vs args-buffer upload so the remaining spike can be attributed to a specific substage
+- `VegetationDecisionDecoder.DecodeTrees` now rejects whole trees before branch traversal, rejects whole shell tiers before scanning node decisions, and consumes precomputed per-tree/per-branch/per-node world bounds from runtime registration instead of rebuilding transformed draw-slot bounds in the decode hot loop
+- runtime registration now also caches per-tree/per-branch upload payloads (`VegetationIndirectInstanceData`), and the runtime-manager frame output disables per-instance debug capture unless diagnostics are enabled so the decode path does not duplicate debug-visible payload on normal rendering frames
+
 Current implementation caveats:
 - CPU reference output is still the default prepared-frame source; the optional GPU mode is a delayed decision-readback bridge, not a fully GPU-decoded frontier yet
 - the batch-mode kernel-import issue on `VegetationClassify.compute` is still open
@@ -587,11 +598,10 @@ Validation status:
 Current caveat:
 - the compute shader parity hook exists and is wired, but Unity batch-mode currently imports the shader without exposing its kernels; Phase E must investigate that environment issue while replacing the parity hook with the real renderer-facing GPU bridge (low priority, as developer will verify actual end product with a full solution in editor)
 
-### Phase E: Hybrid Decode Rendering Pipeline [IN PROGRESS]
+### Phase E: Hybrid Decode Rendering Pipeline [DONE]
 
 Status clarification (`2026-04-10`):
 - Code-side render infrastructure for `E1` through `E5` is implemented.
-- `Phase E` is not complete as a milestone phase.
 - `E6` end-to-end demo-scene verification is still pending.
 - `E7` compile check is done, but the manual verification part is still pending.
 - Current runtime still defaults to CPU-prepared visible output, so the milestone's intended GPU-primary decode ownership is not fully satisfied yet.
