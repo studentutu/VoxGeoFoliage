@@ -55,10 +55,13 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 22. Trunk stays full for runtime `L0` and `L1`; runtime `L2` and `L3` use simplified `trunkL3Mesh`; far trees use `impostorMesh` only.
 23. MVP runtime hierarchy flattening is BFS with contiguous immediate-child blocks defined by `firstChildIndex + childMask`; after MVP switch to DFS preorder with subtree spans.
 24. Generated meshes that miss budgets still persist and remain wired, but validation marks the owning asset invalid.
+25. `VegetationRuntimeManager` registration is a frozen runtime snapshot. After manager enable, transform edits on registered `VegetationTreeAuthoring` objects and other registration-affecting scene or authoring changes are not live-synced; explicit `RefreshRuntimeRegistration()` is required.
+26. Current `GpuDecisionReadback` manager behavior stays non-blocking and delayed. CPU bootstrap while readback is pending is intentionally disabled right now, so the runtime may keep stale uploaded data or render nothing until a completed readback exists.
+27. Detailed per-instance `LastFrameOutput` debug capture is diagnostics-only; normal runtime flow keeps upload-ready slot payloads without full debug-visible instance mirrors.
 
 ## Wiring Hubs
 
-- `VegetationRuntimeManager` - runtime orchestrator: gathers `VegetationTreeAuthoring` instances, freezes the runtime registry, maintains runtime tree indices, prepares one per-camera visible frame snapshot, owns the optional GPU-decision readback bridge, and uploads the latest visible-slot output into `VegetationIndirectRenderer`
+- `VegetationRuntimeManager` - runtime orchestrator: gathers `VegetationTreeAuthoring` instances, freezes the runtime registry, maintains runtime tree indices, prepares one per-camera visible frame snapshot, owns the optional GPU-decision readback bridge, and uploads the latest visible-slot output into `VegetationIndirectRenderer`; current contract is explicit snapshot registration, not live transform or content sync
 - `VegetationRuntimeRegistryBuilder` / `VegetationRuntimeRegistry` - Phase D contract authority: flatten authored tree/blueprint/placement/prototype payloads, build exact draw-slot registries, allocate per-branch node-decision slices, and expose the stable per-slot handoff surface for Phase E
 - `VegetationSpatialGrid` - Phase D spatial partition authority: deterministic tree-to-cell registration by tree-sphere center, conservative cell resident bounds, and visible-cell query output
 - `VegetationCpuReferenceEvaluator` / `VegetationDecisionDecoder` - Phase D CPU mirror authority: tree mode classification, branch tier selection, shell-node decisions, trunk selection, BFS frontier decode, and per-slot visible-instance/bounds output

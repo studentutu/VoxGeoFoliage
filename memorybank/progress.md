@@ -18,6 +18,9 @@ Purpose: track immediate tasks and current milestone status.
 - `2026-04-11`: Removed more decode hot-path payload churn by caching per-tree/per-branch `VegetationIndirectInstanceData` at registration time, switching frame-output append calls to readonly-ref payload/bounds flow, and disabling per-instance debug capture on the runtime-manager frame output unless diagnostics are enabled.
 - Current runtime shell-node rule is explicit and conservative: visible internal nodes expand, visible leaves emit, and finer intra-tier collapse is deferred.
 - Current prepared-frame reality is not the final target architecture yet: CPU reference output is still the default render source, while the optional GPU mode is a delayed non-blocking decision-readback bridge rather than a fully GPU-decoded frontier.
+- `VegetationRuntimeManager` registration is currently snapshot-based, not live-synced: transform edits on registered `VegetationTreeAuthoring` instances, plus other registration-affecting authoring or scene changes after manager enable, require explicit `RefreshRuntimeRegistration()` or a disable/enable cycle.
+- Current `GpuDecisionReadback` manager behavior has another hard caveat: CPU bootstrap while async readback is pending is intentionally disabled, so startup and pending-readback frames can reuse stale uploaded data or show nothing until the first completed readback is available.
+- `LastFrameOutput` detailed per-instance debug capture is diagnostics-gated now; with diagnostics disabled the runtime manager keeps upload-ready slot payloads only.
 - Compile validation succeeded through `Fully Compile by Unity`.
 
 ## Phase E Clarification
@@ -26,6 +29,13 @@ Purpose: track immediate tasks and current milestone status.
 - Code-side render infrastructure from Milestone `E1` through `E5` exists in the repo.
 - `Phase E` is not accepted complete.
 - There is also an architectural gap versus the milestone target: the current shipped path still defaults to CPU-prepared visible output, so the intended GPU-primary decode ownership is not fully satisfied yet.
+
+## Known `VegetationRuntimeManager` Limitations
+
+- Runtime transform edits are not live-synced. After the manager is enabled, moving, rotating, or scaling a `VegetationTreeAuthoring` does not update the frozen registry until `RefreshRuntimeRegistration()` runs.
+- Registration-affecting content changes are not live-synced either. Adding or removing authorings, changing blueprint placement data, or swapping generated meshes after enable also requires `RefreshRuntimeRegistration()`.
+- `GpuDecisionReadback` is delayed and non-blocking. The current implementation does not fall back to a fresh CPU-prepared frame while readback is pending, so first frames can render stale data or nothing.
+- Detailed `LastFrameOutput` instance debug data exists only with diagnostics enabled.
 
 ## Immediate Tasks
 

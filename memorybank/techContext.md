@@ -85,6 +85,9 @@ Repo-used libraries and plugins:
 - Generated vegetation meshes must be written into project `Assets/` space, never into `Packages/`, so public package installs stay writable.
 - Editor-baked voxel artifacts must be clipped back to authoritative source bounds; this applies to canopy shells, generated branch wood, simplified trunk meshes, and impostor meshes. Persisted shell-node `localBounds` are authored ownership bounds, not mesh-tight bounds.
 - Current vegetation runtime authority docs target indirect rendering plus runtime `L0/L1/L2/L3 + Impostor`, not BRG or one tree-wide runtime tier; the shipped Phase E path now has working indirect rendering/depth/color submission, but the final frontier is still CPU-decoded and GPU decision readback remains an optional delayed bridge rather than a full GPU decode.
+- `VegetationRuntimeManager` runtime registration is currently snapshot-based. After the manager is enabled, transform edits and other registration-affecting `VegetationTreeAuthoring` changes are not live-synced until `RefreshRuntimeRegistration()` runs.
+- Current `GpuDecisionReadback` manager flow does not bootstrap a fresh CPU-prepared frame while async readback is pending, so startup and pending-readback frames can show stale uploaded data or nothing.
+- Detailed `LastFrameOutput` per-instance debug data is only captured when manager diagnostics are enabled.
 - Phase D currently keeps shell-tier survival deterministic and conservative: visible internal shell nodes expand, visible leaves emit, and finer intra-tier collapse is deferred.
 - The current scripting toolchain tops out at `LangVersion 9.0`; use block-scoped namespaces, not file-scoped namespaces.
 - Use message-bus or singleton when cross communication is needed (prefer message bus with explicit sender and data).

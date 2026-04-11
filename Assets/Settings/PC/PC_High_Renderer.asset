@@ -59,7 +59,7 @@ MonoBehaviour:
     DepthPassEvent: 250
     ColorPassEvent: 300
     RenderGameCameras: 1
-    RenderSceneViewCameras: 0
+    RenderSceneViewCameras: 1
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0

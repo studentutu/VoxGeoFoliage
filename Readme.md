@@ -37,6 +37,14 @@ We can't make it one-to-one right now, but we still have options:
 2. See embedded package [com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation)
 3. See playground scene [Playground.unity](Assets/Scenes/Playground.unity)
 
+## Current `VegetationRuntimeManager` limitations
+
+- Runtime registration is a frozen snapshot. After `VegetationRuntimeManager` is enabled, moving, rotating, or scaling `VegetationTreeAuthoring` instances is not synced automatically, including editor transform edits done after enable. Call `RefreshRuntimeRegistration()` or re-enable the manager after those changes.
+- Registration-affecting scene and authoring changes are also not live-synced. Adding or removing `VegetationTreeAuthoring` instances, changing blueprint or placement data, or swapping generated meshes after enable requires `RefreshRuntimeRegistration()`.
+- `GpuDecisionReadback` is a delayed non-blocking bridge, not a same-frame GPU-primary render path. The current manager implementation does not bootstrap a CPU reference frame while readback is pending, so the first frames can keep stale uploaded data or render nothing until a completed readback exists.
+- CPU reference output is still the default prepared-frame source. The GPU path is currently a validation and fallback bridge, not the final runtime architecture.
+- Detailed per-instance debug data in `LastFrameOutput` is captured only when diagnostics are enabled.
+
 Includes:
 - distributable sample assets, prefabs, and baked meshes under [Samples~/Vegetation Demo](Packages/com.voxgeofol.vegetation/Samples~/Vegetation%20Demo)
 - local workspace mirror of those demo assets under [Assets/Tree](Assets/Tree) so repo scenes continue to function
