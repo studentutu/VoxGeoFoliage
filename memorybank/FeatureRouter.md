@@ -24,9 +24,13 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - scene gizmo
   - LOD
   - spatial grid
+  - wind
+  - custom material
+  - shader compatibility
 - Read:
   - [UnityAssembledVegetation_FULL](../DetailedDocs/UnityAssembledVegetation_FULL.md) - architecture authority
-  - [Milestone1](../DetailedDocs/Milestone1.md) - MVP plan, task breakdown, runtime readiness gate, data model, and strict-bound compact-hierarchy follow-up notes
+  - [Milestone2](../DetailedDocs/Milestone2.md) - current milestone authority for hierarchical wind, custom-material compatibility, and production improvements
+  - [Milestone1](../DetailedDocs/Milestone1.md) - finished MVP baseline and completion record
 
 ## CI and Tests
 

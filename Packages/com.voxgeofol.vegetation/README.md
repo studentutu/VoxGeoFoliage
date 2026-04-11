@@ -20,6 +20,13 @@
 5. Draw calls scale with active draw slots, not with raw tree count.
 6. Runtime is opaque-only, URP-only, compute-required, and snapshot-based until refresh.
 
+## Missing features
+
+1. [ ] Wind.
+2. [ ] Support non-package only materials and shaders.
+3. [ ] Generation of canopy-shell (primary voxelization) based on the [GPUVoxelizer](Packages/com.voxgeofol.vegetation/Runtime/VoxelizerV2/Scripts/GPUVoxelizer.cs) from quad, alpha-masked branch material.
+
+
 ## Best-Fit Use Cases
 
 1. Tree species/bushes/grass-flower clumps built from reusable branch modules.
@@ -57,7 +64,7 @@ Examples:
 1. Unity `6000.3` or newer.
 2. URP `17.3.0` or newer-compatible project setup.
 3. Compute-shader and indirect-draw support on the target hardware and graphics API.
-4. `VegetationRendererFeature` added to the active URP renderer.
+4. `VegetationRendererFeature` added to the active URP renderer. Preview via scene view or Render graph viewer.
 5. `VegetationFoliageFeatureSettings.ClassifyShader` assigned to `VegetationClassify.compute`.
 6. Opaque URP SRP-compatible shaders only.
 7. Runtime vegetation shaders compatible with the package indirect-instance contract.
@@ -113,12 +120,11 @@ Examples:
 ## Included In This Repo
 
 1. Playground scene: [../../Assets/Scenes/Playground.unity](../../Assets/Scenes/Playground.unity)
-2. Package sample content: [Samples~/Vegetation Demo](Samples~/VegetationDemo)
+2. Package sample content: [Samples~/VegetationDemo](Samples~/VegetationDemo)
 - sample mesh very hight poly pine tree, see [ChristmasTree](Samples~/VegetationDemo/Raw/ChristmasTree.fbx) with separate trunk and branches mesh from the leaves mesh (pines)
 - sample high poly single Fern leaf, see [fern_foliage_dense](Samples~/VegetationDemo/Raw/fern_foliage_dense_fullgeo.obj)
 - sample branch for standard tree, see [branch_leaves](Samples~/VegetationDemo/Raw/branch_leaves_fullgeo.obj)
-3. Repo-local sample mirror used by scenes: [../../Assets/Tree](../../Assets/Tree)
-4. Architecture authority: [../../DetailedDocs/UnityAssembledVegetation_FULL.md](../../DetailedDocs/UnityAssembledVegetation_FULL.md)
+3. Architecture authority: [UnityAssembledVegetation_FULL.md](https://github.com/studentutu/VoxGeoFoliage/blob/master/DetailedDocs/UnityAssembledVegetation_FULL.md)
 
 ## License
 

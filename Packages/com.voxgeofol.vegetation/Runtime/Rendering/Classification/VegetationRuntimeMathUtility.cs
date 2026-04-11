@@ -25,7 +25,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         }
 
         /// <summary>
-        /// [INTEGRATION] Computes the conservative sphere radius used by Phase D tree and branch distance classification.
+        /// [INTEGRATION] Computes the conservative sphere radius used by tree and branch distance classification.
         /// </summary>
         public static float ComputeBoundingSphereRadius(Bounds bounds, Matrix4x4 matrix)
         {
@@ -34,7 +34,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         }
 
         /// <summary>
-        /// [INTEGRATION] Computes the sphere-surface distance required by the Milestone 1 LOD contract.
+        /// [INTEGRATION] Computes the sphere-surface distance required by LOD contract.
         /// </summary>
         public static float ComputeSphereSurfaceDistance(Vector3 cameraWorldPosition, Vector3 sphereCenterWorld, float sphereRadiusWorld)
         {
@@ -43,7 +43,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         }
 
         /// <summary>
-        /// [INTEGRATION] Packs the authoring tint into one uint so Phase D matches the runtime RSUV transport contract.
+        /// [INTEGRATION] Packs the authoring tint into one uint so matches the runtime RSUV transport contract.
         /// </summary>
         public static uint PackColorToUint(Color color)
         {

@@ -7,7 +7,7 @@ using UnityEngine;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// Frozen Phase D runtime contract built from scene authoring data.
+    /// Frozen runtime contract built from scene authoring data.
     /// </summary>
     public sealed class VegetationRuntimeRegistry
     {

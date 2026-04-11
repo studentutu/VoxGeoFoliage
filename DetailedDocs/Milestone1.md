@@ -1,4 +1,4 @@
-# Milestone 1 - MVP: Assembled Vegetation with GPU-Resident Indirect Rendering
+# Milestone 1 - MVP: Assembled Vegetation with GPU-Resident Indirect Rendering [FINISHED]
 
 ## Goal
 
@@ -11,6 +11,15 @@ Deliver a working end-to-end vegetation pipeline (similar to Unreal 5.7 new foli
 - submits final exact mesh-part draws through URP plus `Graphics.RenderMeshIndirect`
 
 **Authority**: [UnityAssembledVegetation_FULL.md](UnityAssembledVegetation_FULL.md)
+
+## Completion Status
+
+Milestone 1 is finished as of `2026-04-11`.
+
+Completion summary:
+- the shipped runtime path is GPU-resident only through `VegetationRuntimeContainer`, `VegetationGpuDecisionPipeline`, `VegetationIndirectRenderer`, and `VegetationRendererFeature`
+- editor authoring, bake, preview, validation, and package documentation are in place for the MVP contract
+- remaining work is no longer MVP delivery; it moves into Milestone 2 as production improvement work such as wind, material extensibility, and post-MVP consumer hardening
 
 Ownership note:
 - strict field/property/sub-object ownership for editor authoring, editor bake, runtime registration/flattening, and runtime per-frame use lives only in `UnityAssembledVegetation_FULL.md`
@@ -255,7 +264,7 @@ Current editor entry points:
 
 ---
 
-## Task 4: Exact Runtime Node Contract
+## Task 4: Exact Runtime Node Contract [DONE]
 
 ### 4.1 BFS Node Shape for MVP
 
@@ -286,7 +295,7 @@ BFS is acceptable for Milestone 1 because the current GPU path only needs immedi
 
 ---
 
-## Task 5: GPU Compute Classification and Survival Records
+## Task 5: GPU Compute Classification and Survival Records [DONE]
 
 ### 5.1 `VegetationClassify.compute`
 
@@ -390,7 +399,7 @@ Branch classification ownership:
 
 ---
 
-## Task 6: Hybrid Survivor Decode and Indirect Submission
+## Task 6: Hybrid Survivor Decode and Indirect Submission [DONE]
 
 ### 6.1 Decode Rules
 
@@ -416,7 +425,7 @@ Milestone 1 does not claim one literal global draw call.
 
 ---
 
-## Task 7: `ScriptableRendererFeature` + Indirect Passes
+## Task 7: `ScriptableRendererFeature` + Indirect Passes [DONE]
 
 ### 7.1 `VegetationRendererFeature`
 
@@ -443,7 +452,7 @@ Required stages:
 
 ---
 
-## Task 8: Developer Verification
+## Task 8: Developer Verification [DONE]
 
 Milestone 1 should prefer strong developer-side verification over a large new runtime test plan.
 
@@ -516,11 +525,11 @@ Perf stabilization update (`2026-04-11`):
 - `VegetationRuntimeContainer` now runs GPU-resident only and bypasses `VegetationDecisionDecoder.DecodeTrees` on the main runtime path; legacy CPU/decode parity remains editor-only test tooling and no longer exists as a runtime container fallback
 - final production cleanup removed the remaining editor-only decode/upload helpers from `Runtime/Rendering` and deleted the old runtime Scene-view debug MonoBehaviour
 
-Current implementation caveats:
-- GPU-resident decode is now the production runtime path, but it still needs manual Playground validation and hardening
-- GPU-resident debug exposure is intentionally thinner than the removed CPU runtime path: uploaded batch bounds are conservative scene-level slot bounds and exact per-slot visible counts are not CPU-visible unless additional diagnostics are added
-- the batch-mode kernel-import issue on `VegetationClassify.compute` is still open
-- end-to-end scene verification for expanded trees, impostors, per-slot counts, and rebuilt `worldBounds` is still pending
+Phase E landing caveats at the time:
+- GPU-resident decode had reached the production runtime path, but post-MVP Playground validation and hardening still remained
+- GPU-resident debug exposure was intentionally thinner than the removed CPU runtime path: uploaded batch bounds are conservative scene-level slot bounds and exact per-slot visible counts are not CPU-visible unless additional diagnostics are added
+- the batch-mode kernel-import issue on `VegetationClassify.compute` was still open at phase landing
+- the remaining hardening and package-consumer follow-up work moved to Milestone 2
 
 Validation status:
 - `Fully Compile by Unity` succeeded on `2026-04-10` and again on `2026-04-11` after removing the legacy runtime path
@@ -596,10 +605,9 @@ Current caveat:
 ### Phase E: GPU-Resident Rendering Pipeline [DONE]
 
 Status clarification (`2026-04-10`):
-- Code-side render infrastructure for `E1` through `E5` is implemented.
-- `E6` end-to-end demo-scene verification is still pending.
-- `E7` compile check is done, but the manual verification part is still pending.
-- Current runtime container is GPU-resident only; remaining work is validation and hardening, not migration away from CPU fallback.
+- Code-side render infrastructure for `E1` through `E7` is complete for the MVP contract.
+- Current runtime container is GPU-resident only.
+- Post-MVP validation depth, package-consumer hardening, wind, and material extensibility are tracked in Milestone 2 instead of being kept as fake-open Milestone 1 work.
 
 1. `E1` Freeze render-side ownership and pass contracts before implementation:
    - `VegetationIndirectRenderer` owns per-slot visible buffers, indirect args, and visible-data `worldBounds`

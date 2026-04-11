@@ -7,7 +7,7 @@ using UnityEngine;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// Deterministic tree-to-cell registration and visible-cell query authority for Phase D.
+    /// Deterministic tree-to-cell registration and visible-cell query authority.
     /// </summary>
     public sealed class VegetationSpatialGrid
     {
@@ -41,7 +41,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public IReadOnlyList<CellData> Cells => cells;
 
         /// <summary>
-        /// [INTEGRATION] Rebuilds the deterministic visible-cell mask consumed by Phase D classification.
+        /// [INTEGRATION] Rebuilds the deterministic visible-cell mask consumed by classification.
         /// </summary>
         public void BuildVisibleCellMask(Plane[] frustumPlanes, uint[] targetMask, List<int> visibleCellIndices)
         {

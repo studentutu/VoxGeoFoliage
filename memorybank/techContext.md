@@ -33,6 +33,7 @@ Repo-used libraries and plugins:
 - `Packages/com.voxgeofol.vegetation/Runtime`
   - runtime-side authoring data and shared vegetation code, including tier-specific `BranchShellNode` canopy hierarchies persisted as `shellNodesL0`, `shellNodesL1`, and `shellNodesL2`
   - `Runtime/Rendering/` now holds the production Phase E runtime path: Phase D contracts/registration, the GPU-resident compute decode/emission path, the indirect renderer submission path, and the URP renderer feature/pass integration
+  - current render-material ownership is still constrained by `Runtime/Rendering/VegetationIndirectMaterialFactory.cs`, which rebuilds runtime materials from package shader names instead of exposing a first-class custom-material compatibility contract
   - `Runtime/Shaders/VegetationClassify.compute` is the production Phase D/Phase E compute entry point used by GPU-resident classification and indirect emission
   - `Runtime/Shaders/VegetationCanopyLit.shader`, `VegetationTrunkLit.shader`, `VegetationFarMeshLit.shader`, `VegetationDepthOnly.shader`, and `VegetationIndirectCommon.hlsl` are the Phase E runtime shader suite used by indirect vegetation submission
   - `MeshVoxelizerV1/` hosts the compatibility hierarchy API plus legacy voxelizer reference/demo code; the hierarchy builder in this folder is now CPU-volume-backed
@@ -88,6 +89,8 @@ Repo-used libraries and plugins:
 - `VegetationRendererFeature` now owns the shared `VegetationClassify.compute` asset reference through `VegetationFoliageFeatureSettings.ClassifyShader`, and feature-scoped runtime diagnostics through `VegetationFoliageFeatureSettings.EnableDiagnostics`; runtime containers no longer serialize either the compute shader reference or a diagnostics toggle per instance.
 - Runtime container debug exposure is batch-level only in production flow; exact CPU-side visible-instance mirrors are not available.
 - Phase D currently keeps shell-tier survival deterministic and conservative: visible internal shell nodes expand, visible leaves emit, and finer intra-tier collapse is deferred.
+- Hierarchical wind is still a Milestone 2 target, not a shipped runtime feature.
+- Project-local custom vegetation materials are not first-class yet because runtime rendering still resolves final materials through `VegetationIndirectMaterialFactory` rather than an explicit compatible-material contract.
 - The current scripting toolchain tops out at `LangVersion 9.0`; use block-scoped namespaces, not file-scoped namespaces.
 - Use message-bus or singleton when cross communication is needed (prefer message bus with explicit sender and data).
 - All static runtime classes must have explicit `Reset` method that is invoked once in `EditorPlayModeStaticServicesReset.cs`.

@@ -8,7 +8,7 @@ using VoxGeoFol.Features.Vegetation.Authoring;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// Builds the frozen Phase D runtime registry from scene authoring data without touching editor-only fields.
+    /// Builds the frozen runtime registry from scene authoring data without touching editor-only fields.
     /// </summary>
     public sealed class VegetationRuntimeRegistryBuilder
     {

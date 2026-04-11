@@ -10,7 +10,7 @@ using UnityEngine.Rendering;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// [INTEGRATION] Owns Phase E per-slot instance buffers, indirect args, runtime materials, and draw submission.
+    /// [INTEGRATION] Owns per-slot instance buffers, indirect args, runtime materials, and draw submission.
     /// </summary>
     public sealed class VegetationIndirectRenderer : IDisposable
     {

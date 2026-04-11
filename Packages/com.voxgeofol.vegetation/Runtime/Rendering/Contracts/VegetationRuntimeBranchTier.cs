@@ -3,7 +3,7 @@
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// Runtime branch tier contract for Milestone 1.
+    /// Runtime branch tier contract.
     /// </summary>
     public enum VegetationRuntimeBranchTier
     {

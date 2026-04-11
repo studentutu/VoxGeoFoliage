@@ -44,6 +44,12 @@ Inspired by Unreal Engine 5.7 foliage innovations (Assemblies, voxelized LOD, an
 4. Runtime batching is driven by draw slots keyed by `mesh + material + material kind`.
 5. Runtime is container-scoped, GPU-resident, URP-only, opaque-only, and snapshot-based until refresh.
 
+## Missing features
+
+1. [ ] Wind.
+2. [ ] Support non-package only materials and shaders.
+3. [ ] Generation of canopy-shell (primary voxelization) based on the [GPUVoxelizer](Packages/com.voxgeofol.vegetation/Runtime/VoxelizerV2/Scripts/GPUVoxelizer.cs) from quad, alpha-masked branch material.
+
 ## Common Use Cases
 
 1. Repeated trees built from shared branch modules.

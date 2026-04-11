@@ -5,7 +5,7 @@ using UnityEngine;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// MVP BFS shell-node payload used by the CPU mirror and GPU decision path.
+    /// MVP BFS shell-node payload used by the GPU decision path.
     /// </summary>
     public struct VegetationBranchShellNodeRuntimeBfs
     {

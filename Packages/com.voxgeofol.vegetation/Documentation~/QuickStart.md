@@ -5,13 +5,11 @@
 - `Runtime/Authoring` contains the public runtime-side authoring API.
 - `Editor` contains the editor-only baking and asset refresh tooling.
 - `Tests/Editor` contains the package EditMode tests.
-- `Samples~/Vegetation Demo` contains all non-essential demo content for distribution.
+- `Samples~/VegetationDemo` contains all non-essential demo content for distribution.
 
 ## Importing the Demo
 
-Import `Vegetation Demo` from Package Manager to copy the sample assets into your project's `Assets/Samples/...` area.
-
-The repo still keeps a working copy of the demo assets under `Assets/Tree/` so the local scenes continue to function, but the distributable public source of those assets is now the package sample.
+Import `VegetationDemo` from Package Manager to copy the sample assets into your project's `Assets/Samples/...` area.
 
 ## Generated Assets
 

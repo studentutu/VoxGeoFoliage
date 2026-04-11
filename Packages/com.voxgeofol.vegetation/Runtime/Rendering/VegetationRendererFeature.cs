@@ -11,7 +11,7 @@ using UnityEngine.Rendering.Universal;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// [INTEGRATION] URP feature that schedules the Phase E vegetation depth and color indirect passes.
+    /// [INTEGRATION] URP feature that schedules the vegetation depth and color indirect passes.
     /// </summary>
     public sealed class VegetationRendererFeature : ScriptableRendererFeature
     {

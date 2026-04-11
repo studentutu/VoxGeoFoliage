@@ -10,7 +10,7 @@ using VoxGeoFol.Features.Vegetation.Authoring;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// [INTEGRATION] Runtime orchestration hub for Phase D registration plus Phase E frame preparation and renderer ownership.
+    /// [INTEGRATION] Runtime orchestration hub for registration and frame preparation and renderer ownership.
     /// </summary>
     [ExecuteAlways]
     [DisallowMultipleComponent]

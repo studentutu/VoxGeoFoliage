@@ -5,7 +5,7 @@ using UnityEngine;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// Stable exact mesh/material slot consumed by Phase D outputs and Phase E rendering.
+    /// Stable exact mesh/material slot consumed by outputs and rendering.
     /// </summary>
     public sealed class VegetationDrawSlot
     {
