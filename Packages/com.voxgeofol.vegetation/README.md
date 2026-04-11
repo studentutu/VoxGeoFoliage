@@ -6,6 +6,7 @@
 - Runtime: [Draw Calls And Draw Slots](#draw-calls-and-draw-slots), [Grass-Like Vegetation Strategies](#grass-like-vegetation-strategies), [Key Settings](#key-settings), [Runtime Pipeline](#runtime-pipeline), [Important Limitations](#important-limitations), [Supported Devices](#supported-devices)
 - [Included In This Repo](#included-in-this-repo)
 - [License](#license)
+- [Kudos](#kudos)
 
 ## Summary
 
@@ -129,3 +130,7 @@ Examples:
 ## License
 
 Package license: [LICENSE.md](LICENSE.md)
+
+## Kudos
+
+Big thanks to the [unity-voxel](https://github.com/mattatz/unity-voxel) and it's author @mattatz !
