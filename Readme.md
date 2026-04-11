@@ -6,6 +6,7 @@
 
 - [Summary](#summary)
 - [Start Here](#start-here)
+- [Install](#install)
 - [Feature Highlights](#feature-highlights)
 - [Common Use Cases](#common-use-cases)
 - [Important Limitations](#important-limitations)
@@ -35,6 +36,45 @@ Inspired by Unreal Engine 5.7 foliage innovations (Assemblies, voxelized LOD, an
 5. Playground scene: [Assets/Scenes/Playground.unity](Assets/Scenes/Playground.unity)
 6. Package sample content: [Packages/com.voxgeofol.vegetation/Samples~/Vegetation Demo](Packages/com.voxgeofol.vegetation/Samples~/Vegetation%20Demo)
 7. Repo-local sample mirror used by scenes: [Assets/Tree](Assets/Tree)
+
+## Install
+
+The distributable Unity package lives at [Packages/com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation). If you only need the package in another project, install that package path directly instead of copying repo files by hand.
+
+### Install as Git dependency via Package Manager
+
+1. Open Package Manager in Unity (`Window -> Package Manager`).
+2. Click `+` in the top-left corner.
+3. Select `Add package from git URL...`.
+4. Enter the following URL and click `Add`:
+
+```text
+https://github.com/studentutu/VoxGeoFoliage.git?path=/Packages/com.voxgeofol.vegetation
+```
+
+> NOTE: If you want to pin the install, append `#branch`, `#tag`, or a commit SHA. Do not assume repo tags map cleanly to `package.json` versions.
+
+### Install by editing `Packages/manifest.json`
+
+1. Close Unity if it is holding the manifest open.
+2. Open `Packages/manifest.json`.
+3. Add the package entry under `"dependencies"`:
+
+```json
+"com.studentutu.vegetation": "https://github.com/studentutu/VoxGeoFoliage.git?path=/Packages/com.voxgeofol.vegetation"
+```
+
+4. Reopen the project in Unity and let Package Manager resolve the dependency.
+
+### Install from local disk
+
+If this repository is already checked out next to your Unity project, you can point `manifest.json` to the package folder directly:
+
+```json
+"com.studentutu.vegetation": "file:../path-to-cloned-repo/Packages/com.voxgeofol.vegetation"
+```
+
+Replace `../path-to-cloned-repo` with the actual relative path from your Unity project's `Packages/manifest.json` file to this repository clone.
 
 ## Feature Highlights
 

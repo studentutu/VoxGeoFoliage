@@ -95,4 +95,4 @@ Repo-used libraries and plugins:
 - Use message-bus or singleton when cross communication is needed (prefer message bus with explicit sender and data).
 - All static runtime classes must have explicit `Reset` method that is invoked once in `EditorPlayModeStaticServicesReset.cs`.
 - Existing vegetation EditMode bake tests keep bake settings explicit per fixture instead of relying on authoring defaults
-- Use Univesral Render Pipeline compatible shaders. 
+- Use Univesral Render Pipeline compatible shaders.
