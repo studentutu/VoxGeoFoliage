@@ -19,8 +19,9 @@ Purpose: track immediate tasks and current milestone status.
 - `2026-04-11`: Replaced the runtime prepared-frame hot path with a GPU-resident decode/emission path. `VegetationGpuDecisionPipeline` now classifies, emits exact indirect instance payloads into a shared GPU instance buffer, writes one indirect-args record per draw slot, and `VegetationIndirectRenderer` consumes those GPU-written buffers directly through per-slot args offsets. `DecodeTrees` is no longer part of the normal `GpuResident` render path.
 - `2026-04-11`: Production cleanup removed the legacy runtime CPU-reference and GPU-readback container branches. `VegetationRuntimeContainer` now prepares only GPU-resident frames, and the old classification Scene-view demo was removed from the Playground scene.
 - `2026-04-11`: Final rendering cleanup removed the remaining editor-only parity/decode path from `Runtime/Rendering`, deleted the runtime `DebugVegetationDemo`, and trimmed EditMode coverage to production rendering contracts only.
-- `2026-04-11`: Renamed `VegetationRuntimeManager` to `VegetationRuntimeContainer` and scoped runtime registration to active `VegetationTreeAuthoring` components inside each container hierarchy, excluding descendants claimed by nested child containers. This is the new streaming/addressables contract.
-- `2026-04-11`: Root/package docs and memory bank were updated to the `VegetationRuntimeContainer` naming and to the container-scoped multi-instance contract: any number of containers can coexist, but each owns only its own active hierarchy snapshot.
+- `2026-04-11`: Renamed `VegetationRuntimeManager` to `VegetationRuntimeContainer` and scoped runtime registration to container-owned authorings. That ownership now lives in an explicit serialized authorings list that editor tooling can refill while excluding descendants claimed by nested child containers.
+- `2026-04-11`: Moved `VegetationClassify.compute` assignment out of `VegetationRuntimeContainer` and into `VegetationFoliageFeatureSettings.ClassifyShader`, updated the Playground/runtime renderer assets, and removed runtime `GetComponent` / `GetComponentsInChildren` discovery from `Runtime/Rendering`.
+- `2026-04-11`: Moved `enableDiagnostics` out of `VegetationRuntimeContainer` and into `VegetationFoliageFeatureSettings.EnableDiagnostics`. Diagnostics are now renderer-feature scoped for all containers rendered by that feature.
 - `2026-04-11`: `Fully Compile by Unity` succeeded after the production cleanup and regenerated the solution without the removed legacy files.
 - Current runtime shell-node rule is explicit and conservative: visible internal nodes expand, visible leaves emit, and finer intra-tier collapse is deferred.
 - Current prepared-frame reality changed materially: `GpuResident` is the only shipped runtime path. Legacy CPU/decode helpers are removed from `Runtime/Rendering`.
@@ -36,8 +37,9 @@ Purpose: track immediate tasks and current milestone status.
 
 - Runtime transform edits are not live-synced. After the container is enabled, moving, rotating, or scaling a `VegetationTreeAuthoring` does not update the frozen registry until `RefreshRuntimeRegistration()` runs.
 - Registration-affecting content changes are not live-synced either. Adding or removing authorings, changing blueprint placement data, or swapping generated meshes after enable also requires `RefreshRuntimeRegistration()`.
-- Each container only owns active authorings in its own hierarchy. If foliage should belong to a specific streamed/addressable chunk, it must live under that chunk's `VegetationRuntimeContainer` transform and not under a different container.
+- Each container only owns active authorings from its serialized list. If foliage should belong to a specific streamed/addressable chunk, it must live under that chunk's `VegetationRuntimeContainer` transform and that container's serialized list must be refilled after hierarchy ownership changes.
 - The container is GPU-resident only. Missing compute support, missing `VegetationClassify.compute`, or shader-import failures are hard runtime blockers because the old CPU/readback fallback path was removed.
+- Missing `VegetationFoliageFeatureSettings.ClassifyShader` is now also a hard runtime blocker; containers no longer serialize their own compute shader reference.
 - Exact CPU-side visible-instance debug output is no longer part of the production container contract. Runtime diagnostics stop at profiler markers plus conservative uploaded batch snapshots with unknown exact counts.
 
 ## Immediate Tasks

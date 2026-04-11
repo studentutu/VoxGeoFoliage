@@ -55,7 +55,7 @@ Includes:
 - sample branch for standard tree, see [branch_leaves](Assets/Tree/Raw/branch_leaves_fullgeo.obj)
 - demo terrain with mass-placement, see scene [BigPineForest.unity](Assets/Scenes/PineForest/BigPineForest.unity)
 
-## Prerequisites (this repo, not the vegetation package)
+## Prerequisites (developer repo, not the vegetation package)
 
 ### Required
 

@@ -603,8 +603,8 @@ Status clarification (`2026-04-10`):
 
 1. `E1` Freeze render-side ownership and pass contracts before implementation:
    - `VegetationIndirectRenderer` owns per-slot visible buffers, indirect args, and visible-data `worldBounds`
-   - `VegetationRendererFeature` owns URP pass scheduling and render-pass integration, not classification authority
-   - `VegetationRuntimeContainer` owns scene/runtime wiring and feeds stable Phase D outputs into rendering
+   - `VegetationRendererFeature` owns URP pass scheduling, render-pass integration, and the shared `VegetationClassify.compute` asset reference, not classification authority
+   - `VegetationRuntimeContainer` owns scene/runtime wiring, explicit serialized authoring ownership, and the handoff from stable Phase D outputs into rendering
    - fixed whole-scene bounds and BRG-style shortcuts remain forbidden
 2. `E2` Implement the shader suite with one consistent instance-input contract:
    - `VegetationCanopyLit.shader`
@@ -618,7 +618,7 @@ Status clarification (`2026-04-10`):
    - per-slot indirect-args build/final upload
    - per-slot `worldBounds` rebuild from visible data only
 4. `E4` Implement `VegetationRuntimeContainer` runtime/renderer wiring:
-   - scene registration of authored vegetation instances
+   - scene registration of authored vegetation instances through an explicit serialized authorings list
    - lifetime/reset of runtime caches and GPU resources
    - handoff from Phase D visibility/decode outputs into Phase E renderer consumption
    - no editor-only field access and no bake/preview leakage into runtime

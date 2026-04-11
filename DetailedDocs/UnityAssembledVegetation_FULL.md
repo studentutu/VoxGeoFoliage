@@ -7,7 +7,7 @@ This document defines the production target inspired by Unreal Engine 5.7 foliag
 Current implementation note (`2026-04-11`):
 - The old MVP CPU fallback / async-readback runtime bridge is retired.
 - Production runtime is GPU-resident only through `VegetationRuntimeContainer`, `VegetationGpuDecisionPipeline`, and `VegetationIndirectRenderer`.
-- `VegetationRuntimeContainer` registers only active `VegetationTreeAuthoring` components inside its own hierarchy, and nested child containers own their own descendants. This is the intended streaming/addressables contract.
+- `VegetationRuntimeContainer` now consumes an explicit serialized `VegetationTreeAuthoring` list. Every referenced authoring must live inside that container's hierarchy, and editor fill tooling excludes descendants claimed by nested child containers. This is the intended streaming/addressables contract.
 - Runtime registration is still a frozen snapshot. Transform edits and other registration-affecting authoring changes require explicit `RefreshRuntimeRegistration()`.
 - The old CPU/decode parity layer was also removed from `Runtime/Rendering`, so historical sections below that mention temporary CPU fallback should be treated as superseded design history rather than the current runtime contract.
 
@@ -693,13 +693,11 @@ Tree -> Expanded or Impostor -> BranchDecision -> NodeDecision -> CPU/GPU BFS de
 ## 8.3 URP Integration
 
 `VegetationRendererFeature` owns:
-- compute dispatch ordering
-- optional non-blocking `AsyncGPUReadback` scheduling for the CPU fallback path
-- indirect args upload
+- the shared `VegetationClassify.compute` asset reference through feature settings
 - indirect depth pass
 - indirect color pass
 
-The renderer feature is the rendering integration point. It is not a BRG wrapper.
+`VegetationRuntimeContainer` still owns runtime registration and GPU-frame preparation; the renderer feature is only the URP integration and shader-wiring point. It is not a BRG wrapper.
 
 ---
 

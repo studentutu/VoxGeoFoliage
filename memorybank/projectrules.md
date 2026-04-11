@@ -5,27 +5,25 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 ## Global Rules
 
 1. Budgeting and optimization on anything asset related. By settings: cutoff and hard budgets, pooling, level of detail, trimming, full occlusion, and incremental per-batch/per-frame processing.
-2. ECS core must not read `UnityEngine.Time`; tick and delta are passed explicitly.
-3. ECS core must not use `UnityEngine.Random`; randomness must be injected explicitly if introduced later.
-4. OOP controllers are request-driven or consume-driven only; they do not mutate gameplay state directly.
-5. Never use direct C# events with ECS.
-6. Never store mutable runtime data in ScriptableObjects.
-7. Do not rely on Unity lifecycle callbacks and must use explicit runtime APIs in EditMode tests.
-8. Prefer structs where applicable, but do not use struct types as hot dictionary keys when avoidable.
-9. No hidden assumptions: missing setup must throw explicit errors.
-10. All integration boundaries need concise `[INTEGRATION]` summaries.
-11. All static runtime stores must have deterministic `Reset` coverage through `StaticServicesReset`.
-12. OOP communications to ECS happen through transient request entities, either queued directly by helpers or created by loop-owned bus ingress.
-13. MVC separation for UI remains in effect.
-14. Prefer `Refresh` and `Simulate` naming over `Update` for explicit runtime APIs.
-15. Keep authoring, runtime ECS data, and Unity binding logic separate. 
-16. Separate what should done at edit-mode and runtime.
-17. Hot paths should be allocation-aware and follow DRY/SingleResponsibility best practices.
-18. Reusable public-facing features should live in embedded packages under `Packages/`; repo-local-only features can remain under `Assets/Scripts/Features`.
-19. No useless maintenance. Scripts are either completely dropped or fully migrated to new api, no obsolete wrappers!
-20. No useless abstractions, no bloatware.
-21. Avoid constant asset creation and editor refresh in tests! It makes test run multiple times slower!
-22. Avoid constant asset creation if full algorithm is not finished! Create finished asset once but do not refresh editor constantly! Only do AssetDatabase.SaveAssets() once all meshes are created. All operations with AssetDatabase is generally very-very long!
+2. OOP controllers are request-driven or consume-driven only; they do not mutate gameplay state directly.
+3. Never use direct C# events with ECS.
+4. Never store mutable runtime data in ScriptableObjects.
+5. Do not rely on Unity lifecycle callbacks and must use explicit runtime APIs in EditMode tests.
+6. Prefer structs where applicable, but do not use struct types as hot dictionary keys when avoidable.
+7. No hidden assumptions: missing setup must throw explicit errors.
+8. All integration boundaries need concise `[INTEGRATION]` summaries.
+9. All static runtime stores must have deterministic `Reset` coverage through `StaticServicesReset`.
+10. OOP communications to ECS happen through transient request entities, either queued directly by helpers or created by loop-owned bus ingress.
+11. MVC separation for UI remains in effect.
+12. Prefer `Refresh` and `Simulate` naming over `Update` for explicit runtime APIs.
+13. Keep authoring, runtime ECS data, and Unity binding logic separate. 
+14. Separate what should done at edit-mode and runtime.
+15. Hot paths should be allocation-aware and follow DRY/SingleResponsibility best practices.
+16. Reusable public-facing features should live in embedded packages under `Packages/`; repo-local-only features can remain under `Assets/Scripts/Features`.
+17. No useless maintenance. Scripts are either completely dropped or fully migrated to new api, no obsolete wrappers!
+18. No useless abstractions, no bloatware.
+19. Avoid constant asset creation and editor refresh in tests! It makes test run multiple times slower!
+20. Avoid constant asset creation if full algorithm is not finished! Create finished asset once but do not refresh editor constantly! Only do `AssetDatabase.SaveAssets()` once all meshes are created. All operations with `AssetDatabase` is generally very-very long!
 
 --
 
@@ -56,17 +54,18 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 23. MVP runtime hierarchy flattening is BFS with contiguous immediate-child blocks defined by `firstChildIndex + childMask`; after MVP switch to DFS preorder with subtree spans.
 24. Generated meshes that miss budgets still persist and remain wired, but validation marks the owning asset invalid.
 25. `VegetationRuntimeContainer` registration is a frozen runtime snapshot. After container enable, transform edits on registered `VegetationTreeAuthoring` objects and other registration-affecting scene or authoring changes are not live-synced; explicit `RefreshRuntimeRegistration()` is required.
-26. Each `VegetationRuntimeContainer` owns only active `VegetationTreeAuthoring` components in its own hierarchy. Nested child containers claim their own descendants, so streaming/addressable chunks must be structured by container hierarchy instead of scene-global discovery.
+26. Each `VegetationRuntimeContainer` owns only active `VegetationTreeAuthoring` references from its serialized list, and every referenced authoring must stay inside that container hierarchy. Nested child containers claim their own descendants when editor fill tooling rebuilds the list, so streaming/addressable chunks must be structured by container hierarchy instead of scene-global discovery.
 27. `VegetationRuntimeContainer` has no production CPU fallback. Missing compute support, missing `VegetationClassify.compute`, or shader-import failures are hard blockers that must fail explicitly.
 28. Production `VegetationRuntimeContainer` flow does not expose exact CPU-visible instance mirrors; available runtime diagnostics are profiler markers plus conservative uploaded indirect-batch snapshots with unknown exact per-slot instance counts.
+29. Runtime diagnostics ownership is renderer-feature scoped, not container scoped. `VegetationFoliageFeatureSettings.EnableDiagnostics` affects every active `VegetationRuntimeContainer` rendered by that feature.
 
 ## Wiring Hubs
 
-- `VegetationRuntimeContainer` - runtime orchestration hub: gathers active `VegetationTreeAuthoring` instances from its own hierarchy, freezes the runtime registry, maintains runtime tree indices, prepares one GPU-resident per-camera frame, and binds the latest indirect draw resources into `VegetationIndirectRenderer`; nested child containers own their own descendants and current contract is explicit snapshot registration, not live transform or content sync
+- `VegetationRuntimeContainer` - runtime orchestration hub: validates and consumes its explicit serialized `VegetationTreeAuthoring` list, freezes the runtime registry, maintains runtime tree indices, prepares one GPU-resident per-camera frame, and binds the latest indirect draw resources into `VegetationIndirectRenderer`; nested child containers own their own descendants and current contract is explicit snapshot registration, not live transform or content sync
 - `VegetationRuntimeRegistryBuilder` / `VegetationRuntimeRegistry` - Phase D contract authority: flatten authored tree/blueprint/placement/prototype payloads, build exact draw-slot registries, allocate per-branch node-decision slices, and expose the stable per-slot handoff surface for Phase E
 - `VegetationSpatialGrid` - Phase D spatial partition authority: deterministic tree-to-cell registration by tree-sphere center, conservative cell resident bounds, and visible-cell query output
 - `VegetationGpuDecisionPipeline` - Phase D/Phase E GPU authority: uploads the frozen registry into compute buffers and emits GPU-resident indirect instance payloads plus indirect args directly into shared draw buffers; environments that import the shader without kernels must fail explicitly instead of silently faking GPU success
-- `VegetationRendererFeature` - URP integration: schedules the indirect vegetation depth/color passes and consumes prepared `VegetationRuntimeContainer` output; it does not own classification or decode rules
+- `VegetationRendererFeature` - URP integration: stores the shared `VegetationClassify.compute` reference and diagnostics toggle in `VegetationFoliageFeatureSettings`, schedules the indirect vegetation depth/color passes, and consumes prepared `VegetationRuntimeContainer` output; it does not own classification or decode rules
 - `VegetationIndirectRenderer` - indirect rendering authority: runtime material copies, shared GPU-resident instance/args buffers, conservative uploaded-batch snapshots for diagnostics, and `RenderMeshIndirect` submission
 - `VegetationAuthoringValidator` - Task 1/C.5 authoring contract authority: explicit validation for readability, opacity, budgets, bounds, scale, 5-band LOD ordering, trunk-L3 reduction/bounds, and BFS child order in ascending octant-bit order
 - `CanopyShellGenerator` - editor-side branch-shell authority: bakes canonical `shellNodesL0`, derives compact `shellNodesL1` / `shellNodesL2` from owned `L0` occupancy, applies optional reduction and mesh-only fallback, and refreshes bounded voxelized `shellL1WoodMesh` / `shellL2WoodMesh`

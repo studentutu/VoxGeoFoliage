@@ -12,6 +12,8 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
     {
         [SerializeField] private TreeBlueprintSO? blueprint;
         [SerializeField] private GameObject? _rootForBranches;
+        
+        // Only for preview, should not be serialized!
         [SerializeField] [HideInInspector] private int runtimeTreeIndex = -1;
 
         public TreeBlueprintSO? Blueprint => blueprint;

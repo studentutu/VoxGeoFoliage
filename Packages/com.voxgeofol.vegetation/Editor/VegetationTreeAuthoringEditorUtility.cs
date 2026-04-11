@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using VoxGeoFol.Features.Vegetation.Authoring;
+using VoxGeoFol.Features.Vegetation.Rendering;
 
 namespace VoxGeoFol.Features.Vegetation.Editor
 {
@@ -13,6 +14,8 @@ namespace VoxGeoFol.Features.Vegetation.Editor
     /// </summary>
     public static class VegetationTreeAuthoringEditorUtility
     {
+        private const string RegisteredAuthoringsPropertyName = "registeredAuthorings";
+
         /// <summary>
         /// [INTEGRATION] Bakes shell L0/L1/L2 for every unique branch prototype referenced by one authoring component.
         /// </summary>
@@ -171,6 +174,37 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 shellL3OnlyTriangles);
         }
 
+        /// <summary>
+        /// [INTEGRATION] Rebuilds one runtime container's serialized authorings list from its hierarchy while excluding descendants owned by nested child containers.
+        /// </summary>
+        public static void FillRuntimeContainerAuthorings(VegetationRuntimeContainer container)
+        {
+            // Range: requires one runtime container in a loaded scene hierarchy. Condition: editor-only hierarchy discovery populates the serialized list and preserves nested-container ownership boundaries. Output: the container stores explicit authoring references and refreshes its runtime registration snapshot.
+            if (container == null)
+            {
+                throw new ArgumentNullException(nameof(container));
+            }
+
+            List<VegetationTreeAuthoring> discoveredAuthorings = new List<VegetationTreeAuthoring>();
+            CollectOwnedRuntimeContainerAuthorings(container, discoveredAuthorings);
+
+            SerializedObject serializedObject = new SerializedObject(container);
+            SerializedProperty registeredAuthoringsProperty = serializedObject.FindProperty(RegisteredAuthoringsPropertyName)
+                ?? throw new InvalidOperationException(
+                    $"Property '{RegisteredAuthoringsPropertyName}' was not found on {nameof(VegetationRuntimeContainer)}.");
+
+            Undo.RecordObject(container, "Fill Vegetation Runtime Authorings");
+            registeredAuthoringsProperty.arraySize = discoveredAuthorings.Count;
+            for (int i = 0; i < discoveredAuthorings.Count; i++)
+            {
+                registeredAuthoringsProperty.GetArrayElementAtIndex(i).objectReferenceValue = discoveredAuthorings[i];
+            }
+
+            serializedObject.ApplyModifiedProperties();
+            EditorUtility.SetDirty(container);
+            container.RefreshRuntimeRegistration();
+        }
+
         internal static TreeBlueprintSO GetRequiredBlueprint(VegetationTreeAuthoring authoring)
         {
             return authoring.Blueprint ?? throw new InvalidOperationException($"{authoring.name} is missing blueprint.");
@@ -190,6 +224,47 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         internal static GameObject GetRequiredBranchRoot(VegetationTreeAuthoring authoring)
         {
             return authoring.BranchRoot ?? throw new InvalidOperationException($"{authoring.name} is missing _rootForBranches.");
+        }
+
+        internal static void CollectOwnedRuntimeContainerAuthorings(
+            VegetationRuntimeContainer container,
+            List<VegetationTreeAuthoring> target)
+        {
+            if (container == null)
+            {
+                throw new ArgumentNullException(nameof(container));
+            }
+
+            if (target == null)
+            {
+                throw new ArgumentNullException(nameof(target));
+            }
+
+            target.Clear();
+            container.GetComponentsInChildren(true, target);
+            int writeIndex = 0;
+            for (int readIndex = 0; readIndex < target.Count; readIndex++)
+            {
+                VegetationTreeAuthoring authoring = target[readIndex];
+                if (authoring == null)
+                {
+                    continue;
+                }
+
+                VegetationRuntimeContainer? owningContainer = authoring.GetComponentInParent<VegetationRuntimeContainer>();
+                if (owningContainer != container)
+                {
+                    continue;
+                }
+
+                target[writeIndex] = authoring;
+                writeIndex++;
+            }
+
+            if (writeIndex < target.Count)
+            {
+                target.RemoveRange(writeIndex, target.Count - writeIndex);
+            }
         }
 
         private static void BakeCanopyShellsWithoutSave(TreeBlueprintSO blueprint)

@@ -16,21 +16,30 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     [DisallowMultipleComponent]
     public sealed class VegetationRuntimeContainer : MonoBehaviour
     {
-        private static readonly ProfilerMarker RefreshRuntimeRegistrationMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeContainer.RefreshRuntimeRegistration");
-        private static readonly ProfilerMarker PrepareFrameForCameraMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeContainer.PrepareFrameForCamera");
-        private static readonly ProfilerMarker PrepareGpuResidentFrameMarker = new ProfilerMarker("VoxGeoFol.VegetationRuntimeContainer.PrepareGpuResidentFrame");
-        private static readonly List<VegetationRuntimeContainer> ActiveContainersInternal = new List<VegetationRuntimeContainer>();
+        private static readonly ProfilerMarker RefreshRuntimeRegistrationMarker =
+            new ProfilerMarker("VoxGeoFol.VegetationRuntimeContainer.RefreshRuntimeRegistration");
+
+        private static readonly ProfilerMarker PrepareFrameForCameraMarker =
+            new ProfilerMarker("VoxGeoFol.VegetationRuntimeContainer.PrepareFrameForCamera");
+
+        private static readonly ProfilerMarker PrepareGpuResidentFrameMarker =
+            new ProfilerMarker("VoxGeoFol.VegetationRuntimeContainer.PrepareGpuResidentFrame");
+
+        private static readonly List<VegetationRuntimeContainer> ActiveContainersInternal =
+            new List<VegetationRuntimeContainer>();
 
         [SerializeField] private Vector3 gridOrigin = Vector3.zero;
         [SerializeField] private Vector3 cellSize = new Vector3(32f, 32f, 32f);
-        [SerializeField] private ComputeShader? vegetationClassifyShader;
-        [SerializeField] private bool enableDiagnostics;
 
-        private readonly List<VegetationTreeAuthoring> containedAuthorings = new List<VegetationTreeAuthoring>();
+        [SerializeField]
+        private List<VegetationTreeAuthoring> registeredAuthorings = new List<VegetationTreeAuthoring>();
+
+        private readonly List<VegetationTreeAuthoring> activeRegisteredAuthorings = new List<VegetationTreeAuthoring>();
         private readonly Plane[] reusableFrustumPlanes = new Plane[6];
         private VegetationRuntimeRegistry? registry;
         private VegetationGpuDecisionPipeline? gpuDecisionPipeline;
         private VegetationIndirectRenderer? indirectRenderer;
+        private int gpuPipelineShaderInstanceId = -1;
         private int lastPreparedCameraInstanceId = -1;
         private int lastPreparedRenderFrame = -1;
         private string lastRegistrationDiagnostics = string.Empty;
@@ -42,8 +51,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public VegetationIndirectRenderer? IndirectRenderer => indirectRenderer;
 
         public bool HasPreparedFrame => indirectRenderer != null && indirectRenderer.HasUploadedFrame;
-
-        internal bool DiagnosticsEnabled => enableDiagnostics;
 
         public static void GetActiveContainers(List<VegetationRuntimeContainer> target)
         {
@@ -64,7 +71,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         }
 
         /// <summary>
-        /// [INTEGRATION] Rebuilds the full Phase D runtime registration snapshot from the current scene vegetation authorings.
+        /// [INTEGRATION] Rebuilds the full Phase D runtime registration snapshot from the configured vegetation authorings list.
         /// </summary>
         public void RefreshRuntimeRegistration()
         {
@@ -72,25 +79,20 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             {
                 ResetAuthoringRuntimeIndices();
 
-                CollectContainedAuthorings(containedAuthorings);
+                CollectRegisteredAuthorings(activeRegisteredAuthorings);
                 VegetationRuntimeRegistryBuilder builder = new VegetationRuntimeRegistryBuilder(gridOrigin, cellSize);
-                registry = builder.Build(containedAuthorings);
+                registry = builder.Build(activeRegisteredAuthorings);
                 indirectRenderer?.Dispose();
-                indirectRenderer = new VegetationIndirectRenderer(registry, gameObject.layer, enableDiagnostics);
+                indirectRenderer = new VegetationIndirectRenderer(registry, gameObject.layer);
 
                 for (int treeIndex = 0; treeIndex < registry.TreeInstances.Count; treeIndex++)
                 {
                     registry.TreeInstances[treeIndex].Authoring.RefreshRuntimeTreeIndex(treeIndex);
                 }
 
-                gpuDecisionPipeline?.Dispose();
-                gpuDecisionPipeline = vegetationClassifyShader == null
-                    ? null
-                    : new VegetationGpuDecisionPipeline(vegetationClassifyShader, registry);
+                ResetGpuDecisionPipeline();
                 lastPreparedCameraInstanceId = -1;
                 lastPreparedRenderFrame = -1;
-
-                LogRegistrationDiagnostics(containedAuthorings);
             }
         }
 
@@ -100,8 +102,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public void ResetRuntimeState()
         {
             ResetAuthoringRuntimeIndices();
-            gpuDecisionPipeline?.Dispose();
-            gpuDecisionPipeline = null;
+            ResetGpuDecisionPipeline();
             indirectRenderer?.Dispose();
             indirectRenderer = null;
             registry = null;
@@ -112,7 +113,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// <summary>
         /// [INTEGRATION] Prepares exactly one camera-visible frame snapshot and uploads it into the Phase E indirect renderer.
         /// </summary>
-        public bool PrepareFrameForCamera(Camera camera)
+        public bool PrepareFrameForCamera(Camera camera, ComputeShader? classifyShader, bool diagnosticsEnabled)
         {
             using (PrepareFrameForCameraMarker.Auto())
             {
@@ -127,6 +128,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     return false;
                 }
 
+                LogRegistrationDiagnostics(activeRegisteredAuthorings, diagnosticsEnabled);
                 int renderFrame = Time.renderedFrameCount;
                 int cameraInstanceId = camera.GetInstanceID();
                 if (lastPreparedRenderFrame == renderFrame && lastPreparedCameraInstanceId == cameraInstanceId)
@@ -136,11 +138,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                 GeometryUtility.CalculateFrustumPlanes(camera, reusableFrustumPlanes);
                 Vector3 cameraWorldPosition = camera.transform.position;
-                bool uploadedFrame = PrepareGpuResidentFrame(cameraWorldPosition, reusableFrustumPlanes);
+                bool uploadedFrame =
+                    PrepareGpuResidentFrame(cameraWorldPosition, reusableFrustumPlanes, classifyShader);
 
                 lastPreparedCameraInstanceId = cameraInstanceId;
                 lastPreparedRenderFrame = renderFrame;
-                LogPreparationDiagnostics(camera, uploadedFrame);
+                LogPreparationDiagnostics(camera, uploadedFrame, diagnosticsEnabled);
                 return uploadedFrame;
             }
         }
@@ -163,7 +166,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private void EnsureRuntimeRegistration()
         {
-            if (registry != null && indirectRenderer != null && gpuDecisionPipeline != null)
+            if (registry != null && indirectRenderer != null)
             {
                 return;
             }
@@ -171,51 +174,97 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             RefreshRuntimeRegistration();
         }
 
-        private bool PrepareGpuResidentFrame(Vector3 cameraWorldPosition, Plane[] frustumPlanes)
+        private bool PrepareGpuResidentFrame(Vector3 cameraWorldPosition, Plane[] frustumPlanes,
+            ComputeShader? classifyShader)
         {
             using (PrepareGpuResidentFrameMarker.Auto())
             {
-                if (gpuDecisionPipeline == null)
-                {
-                    throw new InvalidOperationException(
-                        "VegetationRuntimeContainer requires vegetationClassifyShader and a valid GPU pipeline. Legacy CPU/readback runtime paths were removed.");
-                }
-
-                gpuDecisionPipeline.PrepareResidentFrame(cameraWorldPosition, frustumPlanes);
+                EnsureGpuDecisionPipeline(classifyShader);
+                VegetationGpuDecisionPipeline pipeline = gpuDecisionPipeline!;
+                pipeline.PrepareResidentFrame(cameraWorldPosition, frustumPlanes);
                 indirectRenderer!.BindGpuResidentFrame(
-                    gpuDecisionPipeline.ResidentInstanceBuffer,
-                    gpuDecisionPipeline.ResidentArgsBuffer);
+                    pipeline.ResidentInstanceBuffer,
+                    pipeline.ResidentArgsBuffer);
                 return indirectRenderer.HasUploadedFrame;
             }
         }
 
-        private void CollectContainedAuthorings(List<VegetationTreeAuthoring> target)
+        private void EnsureGpuDecisionPipeline(ComputeShader? classifyShader)
+        {
+            if (registry == null)
+            {
+                Debug.LogError(
+                    "VegetationRuntimeContainer cannot build the GPU pipeline before runtime registration is available.");
+                throw new InvalidOperationException(
+                    "VegetationRuntimeContainer cannot build the GPU pipeline before runtime registration is available.");
+            }
+
+            if (classifyShader == null)
+            {
+                Debug.LogError(
+                    "VegetationRendererFeature requires VegetationFoliageFeatureSettings.ClassifyShader to be assigned. Legacy per-container compute-shader wiring was removed.");
+
+                throw new InvalidOperationException(
+                    "VegetationRendererFeature requires VegetationFoliageFeatureSettings.ClassifyShader to be assigned. Legacy per-container compute-shader wiring was removed.");
+            }
+
+            int shaderInstanceId = classifyShader.GetInstanceID();
+            if (gpuDecisionPipeline != null && shaderInstanceId == gpuPipelineShaderInstanceId)
+            {
+                return;
+            }
+
+            ResetGpuDecisionPipeline();
+            gpuDecisionPipeline = new VegetationGpuDecisionPipeline(classifyShader, registry);
+            gpuPipelineShaderInstanceId = shaderInstanceId;
+        }
+
+        private void CollectRegisteredAuthorings(List<VegetationTreeAuthoring> target)
         {
             target.Clear();
-            GetComponentsInChildren(true, target);
-            int writeIndex = 0;
-            for (int readIndex = 0; readIndex < target.Count; readIndex++)
+            for (int i = 0; i < registeredAuthorings.Count; i++)
             {
-                VegetationTreeAuthoring authoring = target[readIndex];
-                if (authoring == null || !authoring.gameObject.activeInHierarchy)
+                VegetationTreeAuthoring? authoring = registeredAuthorings[i];
+                if (authoring == null)
+                {
+                    throw new InvalidOperationException(
+                        $"VegetationRuntimeContainer '{name}' contains a null authoring entry at index {i}. Refill the serialized authorings list.");
+                }
+
+                if (!IsOwnedByContainer(authoring.transform))
+                {
+                    throw new InvalidOperationException(
+                        $"VegetationRuntimeContainer '{name}' references authoring '{authoring.name}' outside its own hierarchy.");
+                }
+
+                if (!authoring.gameObject.activeInHierarchy)
                 {
                     continue;
                 }
 
-                VegetationRuntimeContainer? owningContainer = authoring.GetComponentInParent<VegetationRuntimeContainer>();
-                if (owningContainer != this)
+                for (int existingIndex = 0; existingIndex < target.Count; existingIndex++)
                 {
-                    continue;
+                    if (ReferenceEquals(target[existingIndex], authoring))
+                    {
+                        throw new InvalidOperationException(
+                            $"VegetationRuntimeContainer '{name}' contains duplicate authoring '{authoring.name}' in the serialized list.");
+                    }
                 }
 
-                target[writeIndex] = authoring;
-                writeIndex++;
+                target.Add(authoring);
             }
+        }
 
-            if (writeIndex < target.Count)
-            {
-                target.RemoveRange(writeIndex, target.Count - writeIndex);
-            }
+        private bool IsOwnedByContainer(Transform authoringTransform)
+        {
+            return authoringTransform == transform || authoringTransform.IsChildOf(transform);
+        }
+
+        private void ResetGpuDecisionPipeline()
+        {
+            gpuDecisionPipeline?.Dispose();
+            gpuDecisionPipeline = null;
+            gpuPipelineShaderInstanceId = -1;
         }
 
         private void ResetAuthoringRuntimeIndices()
@@ -235,9 +284,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
         }
 
-        private void LogRegistrationDiagnostics(IReadOnlyList<VegetationTreeAuthoring> authorings)
+        private void LogRegistrationDiagnostics(IReadOnlyList<VegetationTreeAuthoring> authorings, bool diagnosticsEnabled)
         {
-            if (!enableDiagnostics || registry == null)
+            if (!diagnosticsEnabled || registry == null)
             {
                 return;
             }
@@ -245,12 +294,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             StringBuilder builder = new StringBuilder(256);
             builder.Append("VegetationRuntimeContainer registration");
             builder.Append(" container=").Append(name);
-            builder.Append(" authorings=").Append(authorings.Count);
+            builder.Append(" configuredAuthorings=").Append(registeredAuthorings.Count);
+            builder.Append(" activeAuthorings=").Append(authorings.Count);
             builder.Append(" trees=").Append(registry.TreeInstances.Count);
             builder.Append(" branches=").Append(registry.SceneBranches.Count);
             builder.Append(" drawSlots=").Append(registry.DrawSlots.Count);
             builder.Append(" cells=").Append(registry.SpatialGrid.Cells.Count);
-            builder.Append(" classifyShader=").Append(vegetationClassifyShader != null ? vegetationClassifyShader.name : "<none>");
 
             if (authorings.Count > 0)
             {
@@ -284,9 +333,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             UnityEngine.Debug.Log(summary, this);
         }
 
-        private void LogPreparationDiagnostics(Camera camera, bool uploadedFrame)
+        private void LogPreparationDiagnostics(Camera camera, bool uploadedFrame, bool diagnosticsEnabled)
         {
-            if (!enableDiagnostics)
+            if (!diagnosticsEnabled)
             {
                 return;
             }

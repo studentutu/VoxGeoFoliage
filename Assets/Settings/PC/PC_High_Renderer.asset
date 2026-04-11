@@ -60,6 +60,8 @@ MonoBehaviour:
     ColorPassEvent: 300
     RenderGameCameras: 1
     RenderSceneViewCameras: 1
+    EnableDiagnostics: 0
+    ClassifyShader: {fileID: 7200000, guid: 32ba8aa36e08ac740b444e38723d3153, type: 3}
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0

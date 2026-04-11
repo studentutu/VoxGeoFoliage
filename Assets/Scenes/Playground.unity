@@ -3692,8 +3692,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: Vegetation::VoxGeoFol.Features.Vegetation.Rendering.VegetationRuntimeContainer
   gridOrigin: {x: 0, y: 0, z: 0}
   cellSize: {x: 32, y: 32, z: 32}
-  vegetationClassifyShader: {fileID: 7200000, guid: 32ba8aa36e08ac740b444e38723d3153, type: 3}
-  enableDiagnostics: 0
+  registeredAuthorings:
+  - {fileID: 228908863}
+  - {fileID: 1450369675}
+  - {fileID: 731957601}
+  - {fileID: 149105824}
+  - {fileID: 728550530}
+  - {fileID: 1270605797}
+  - {fileID: 97817487}
+  - {fileID: 1483987602}
+  - {fileID: 592997873}
+  - {fileID: 21626121}
+  - {fileID: 83570727}
+  - {fileID: 571161455}
+  - {fileID: 1202496502}
+  - {fileID: 707125831}
+  - {fileID: 1142704452}
+  - {fileID: 2085827122}
 --- !u!1001 &1142704448
 PrefabInstance:
   m_ObjectHideFlags: 0

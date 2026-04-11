@@ -16,7 +16,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     {
         private static readonly ProfilerMarker BindGpuResidentFrameMarker = new ProfilerMarker("VoxGeoFol.VegetationIndirectRenderer.BindGpuResidentFrame");
         private static readonly ProfilerMarker RenderMarker = new ProfilerMarker("VoxGeoFol.VegetationIndirectRenderer.Render");
-        private readonly bool diagnosticsEnabled;
         private readonly SlotResources[] slotResources;
         private readonly List<int> activeSlotIndices = new List<int>();
         private string lastDepthRenderDiagnostics = string.Empty;
@@ -25,14 +24,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private bool hasGpuResidentFrame;
         private bool disposed;
 
-        public VegetationIndirectRenderer(VegetationRuntimeRegistry registry, int renderLayer, bool diagnosticsEnabled = false)
+        public VegetationIndirectRenderer(VegetationRuntimeRegistry registry, int renderLayer)
         {
             if (registry == null)
             {
                 throw new ArgumentNullException(nameof(registry));
             }
 
-            this.diagnosticsEnabled = diagnosticsEnabled;
+            _ = renderLayer;
             slotResources = new SlotResources[registry.DrawSlots.Count];
             int sharedStartInstance = 0;
             for (int i = 0; i < slotResources.Length; i++)
@@ -43,11 +42,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     registry.DrawSlotConservativeWorldBounds[i],
                     sharedStartInstance);
                 sharedStartInstance += registry.DrawSlotMaxInstanceCounts[i];
-            }
-
-            if (diagnosticsEnabled)
-            {
-                UnityEngine.Debug.Log($"VegetationIndirectRenderer created renderLayer={renderLayer} slotCount={slotResources.Length}");
             }
         }
 
@@ -97,7 +91,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// <summary>
         /// [INTEGRATION] Renders the uploaded slot batches through raster command-buffer indirect draws for one camera/pass pair.
         /// </summary>
-        internal void Render(IRasterCommandBuffer commandBuffer, Camera camera, VegetationRenderPassMode passMode)
+        internal void Render(IRasterCommandBuffer commandBuffer, Camera camera, VegetationRenderPassMode passMode, bool diagnosticsEnabled)
         {
             if (disposed)
             {
@@ -118,13 +112,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     0,
                     ResolveArgsBuffer(slot),
                     slot.ResolveArgsBufferOffset());
-            });
+            }, diagnosticsEnabled);
         }
 
         /// <summary>
         /// [INTEGRATION] Renders the uploaded slot batches through compatibility command-buffer indirect draws for one camera/pass pair.
         /// </summary>
-        internal void Render(CommandBuffer commandBuffer, Camera camera, VegetationRenderPassMode passMode)
+        internal void Render(CommandBuffer commandBuffer, Camera camera, VegetationRenderPassMode passMode, bool diagnosticsEnabled)
         {
             if (disposed)
             {
@@ -145,10 +139,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     0,
                     ResolveArgsBuffer(slot),
                     slot.ResolveArgsBufferOffset());
-            });
+            }, diagnosticsEnabled);
         }
 
-        private void RenderInternal(Camera camera, VegetationRenderPassMode passMode, Action<SlotResources, Material> issueDraw)
+        private void RenderInternal(
+            Camera camera,
+            VegetationRenderPassMode passMode,
+            Action<SlotResources, Material> issueDraw,
+            bool diagnosticsEnabled)
         {
             using (RenderMarker.Auto())
             {
@@ -166,7 +164,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     renderedSlotCount++;
                 }
 
-                LogRenderDiagnostics(camera, passMode, renderedSlotCount);
+                LogRenderDiagnostics(camera, passMode, renderedSlotCount, diagnosticsEnabled);
             }
         }
 
@@ -273,7 +271,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
         }
 
-        private void LogRenderDiagnostics(Camera camera, VegetationRenderPassMode passMode, int renderedSlotCount)
+        private void LogRenderDiagnostics(
+            Camera camera,
+            VegetationRenderPassMode passMode,
+            int renderedSlotCount,
+            bool diagnosticsEnabled)
         {
             if (!diagnosticsEnabled)
             {
