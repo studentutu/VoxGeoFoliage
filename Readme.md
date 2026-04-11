@@ -1,26 +1,74 @@
 # Unity Foliage Assembly And Voxel-Based Rendering
 
-![UnityPreview](PreviewForReadme.png)
+![UnityPreview](repoimages/PreviewForReadme.png)
 
-## Overview
+## Quick Navigation
 
-This repository hosts the authoritative vegetation package, repo-local docs and scenes, and the agentic development workflow around them outside of Unity Editor.
+- [Summary](#summary)
+- [Start Here](#start-here)
+- [Feature Highlights](#feature-highlights)
+- [Common Use Cases](#common-use-cases)
+- [Important Limitations](#important-limitations)
+- Reference: [What is Foliage Assembly and voxel-based rendering?](#what-is-foliage-assembly-and-voxel-based-rendering)
+- [Agentic Workflow](#agentic-workflow)
+- [Repo Requirements](#repo-requirements)
+- [Verification](#verification)
+- Cross-links: [Package README](Packages/com.voxgeofol.vegetation/README.md), [Architecture Authority](DetailedDocs/UnityAssembledVegetation_FULL.md), [Current Milestone](DetailedDocs/Milestone1.md)
+- [License](#license)
 
-The feature goal is a Unity-side foliage-assembly workflow inspired by reusable branch modules, explicit voxel-derived shell tiers, opaque far meshes, and GPU-driven indirect rendering instead of masked foliage cards.
+## Summary
+
+This repository hosts the authoritative vegetation package, repo-local scenes and docs, and the agentic development workflow around them.
+
+The feature itself is an opaque-only, branch-assembled vegetation workflow for Unity 6 URP with GPU classification, GPU-resident indirect emission, and indirect depth/color submission.
 
 Inspired by Unreal Engine 5.7 foliage innovations (Assemblies, voxelized LOD, and hierarchical wind animation).
 
+![PreviewLodsInScene](repoimages/PreviewLodsIdle.gif)
+
 ## Start Here
 
-- Package readme: [Packages/com.voxgeofol.vegetation/README.md](Packages/com.voxgeofol.vegetation/README.md)
-- Architecture authority: [DetailedDocs/UnityAssembledVegetation_FULL.md](DetailedDocs/UnityAssembledVegetation_FULL.md)
-- Embedded package: [Packages/com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation)
-- Playground scene: [Assets/Scenes/Playground.unity](Assets/Scenes/Playground.unity)
-- Repo-local sample mirror: [Assets/Tree](Assets/VegetationDemo)
-- demo terrain with mass-placement, see scene [BigPineForest.unity](Assets/Scenes/PineForest/BigPineForest.unity)
+1. Authoritative feature contract: [Packages/com.voxgeofol.vegetation/README.md](Packages/com.voxgeofol.vegetation/README.md)
+2. Architecture authority: [DetailedDocs/UnityAssembledVegetation_FULL.md](DetailedDocs/UnityAssembledVegetation_FULL.md)
+3. Current milestone plan: [DetailedDocs/Milestone1.md](DetailedDocs/Milestone1.md)
+4. Embedded package: [Packages/com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation)
+5. Playground scene: [Assets/Scenes/Playground.unity](Assets/Scenes/Playground.unity)
+6. Package sample content: [Packages/com.voxgeofol.vegetation/Samples~/Vegetation Demo](Packages/com.voxgeofol.vegetation/Samples~/Vegetation%20Demo)
+7. Repo-local sample mirror used by scenes: [Assets/Tree](Assets/Tree)
 
+## Feature Highlights
+
+1. `VegetationTreeAuthoring -> TreeBlueprintSO -> BranchPlacement[] -> BranchPrototypeSO`
+2. One blueprint can mix or reuse branch prototypes.
+3. Many authorings can share one blueprint.
+4. Runtime batching is driven by draw slots keyed by `mesh + material + material kind`.
+5. Runtime is container-scoped, GPU-resident, URP-only, opaque-only, and snapshot-based until refresh.
+
+## Common Use Cases
+
+1. Repeated trees built from shared branch modules.
+2. Mixed species that share meshes and materials for stronger batching.
+3. Grass or flowers authored as clumps or as many small plants depending on culling and placement needs.
+
+Examples:
+
+1. `tree species -> 1 blueprint -> many branch placements -> shared branch prototypes`
+2. `grass clump -> 1 authoring -> many blade placements`
+3. `individual grass -> many authorings -> 1 blade placement each`
+
+For full setup, draw-slot behavior, tradeoffs, pipeline, and limitations, use the package README above as the source of truth.
+
+## Important Limitations
+
+1. No transparent or alpha-clipped runtime vegetation.
+2. URP only.
+3. Compute-shader and indirect-draw support are required.
+4. No CPU fallback.
+5. Registration changes after enable require `RefreshRuntimeRegistration()`.
 
 ## What is Foliage Assembly and voxel-based rendering?
+
+![foliage assemblies in Nanite vegetation](repoimages/WitcherPresentation.png)
 
 See Unreal 5.7 foliage assemblies (Nanite vegetation):
 - Witcher 4 presentation [Presentation](https://youtu.be/EdNkm0ezP0o?si=YYlytLYKuexVYUOT) 
@@ -43,30 +91,18 @@ We can't make it one-to-one right now, but we still have options:
 - Reduced geometry at all levels in SRP (custom lods) needs to be explicit for the manual render batch approach
 - to keep SRP-friendly batching and allow variation we can use Unity API Renderer Shader User Value (RSUV) which is a tightly pack `uint` that is manually unpacked in shader for any form of variation for the instances.
 
-## Feature Snapshot
-
-- One `VegetationTreeAuthoring` references one `TreeBlueprintSO`.
-  - meaning that grass can be a single instance of vegetation authority with multiple different branches (e.g. actual instances of the foliage grass blades or flowers).
-- One `TreeBlueprintSO` contains trunk and far-mesh (geometry-imposter) data plus `BranchPlacement[]`.
-- One `BranchPlacement` references one `BranchPrototypeSO`.
-- Many authorings can share one blueprint, and one blueprint can mix different prototypes or reuse the same prototype many times.
-- Runtime batching is by draw slot `mesh + material + material kind`, not by tree count or blueprint identity.
-- Runtime is container-scoped, snapshot-based, GPU-resident, URP-only, and opaque-only.
-
-For the full support matrix, batching rules, setup, settings, runtime pipeline, and constraints, use the package README above as the source of truth.
-
 ## Agentic Workflow
 
-- Read [AGENTS.md](AGENTS.md) before repo work.
-- For feature work, read [memorybank/techContext.md](memorybank/techContext.md), [memorybank/projectrules.md](memorybank/projectrules.md), and [memorybank/FeatureRouter.md](memorybank/FeatureRouter.md), then follow the routed detailed docs.
-- Ask to `read memory bank` before deep repo work and `update memory bank` when a task finishes or documentation/state changes.
-- Fast compile: `./rebuildSolutionWithRiderMsBuild.sh`
-- Full Unity compile and solution refresh: `./rebuildSolutionFromUnityItself.sh`
-- Run Unity tests: `./runTestsFromRoot.sh`
-- Parse Unity test output: `./runParsetests.sh`
-- If Unity, Rider, or Git Bash are installed in different locations, update the hardcoded paths in those scripts and in [.vscode/tasks.json](.vscode/tasks.json).
+1. Read [AGENTS.md](AGENTS.md) before repo work.
+2. For feature work, read [memorybank/techContext.md](memorybank/techContext.md), [memorybank/projectrules.md](memorybank/projectrules.md), and [memorybank/FeatureRouter.md](memorybank/FeatureRouter.md), then follow the routed docs.
+3. Ask to `read memory bank` before deep repo work and `update memory bank` when documentation or implementation state changes.
+4. Fast compile: `./rebuildSolutionWithRiderMsBuild.sh`
+5. Full Unity compile and solution refresh: `./rebuildSolutionFromUnityItself.sh`
+6. Run Unity tests: `./runTestsFromRoot.sh`
+7. Parse Unity test output: `./runParsetests.sh`
+8. If Unity, Rider, or Git Bash are installed elsewhere, update the hardcoded paths in those scripts and in [.vscode/tasks.json](.vscode/tasks.json).
 
-## What to change in order to get full agentic workflow
+### What to change in order to get full agentic workflow
 
 - CI/Tests/Compilation
   - change versions and path to Unity Editor and Rider in: [rebuildSolutionFromUnityItself](./rebuildSolutionFromUnityItself.sh), [parseTestErrors](./parseTestErrors.sh), [rebuildSolutionWithRiderMsBuild](./rebuildSolutionWithRiderMsBuild.sh), [runTestsBash](./runTestsBash.sh)
@@ -75,19 +111,21 @@ For the full support matrix, batching rules, setup, settings, runtime pipeline, 
 
 ## Repo Requirements
 
-- Unity Hub with a Unity `6000.3+` editor installation.
-- Git and Git Bash.
-- Rider or an equivalent MSBuild-capable setup.
-- VS Code is optional, but the repo task wrappers are configured there.
+1. Unity Hub with a Unity `6000.3+` editor installation.
+2. Git and Git Bash.
+3. Rider or another MSBuild-capable setup.
+4. VS Code is optional, but repo task wrappers are configured there.
 
 ## Verification
 
-- Fast compile output: `CI/RiderMsBuild.log`
-- Unity compile output: `CI/CompileErrorsAfterUnityRun.txt`
-- Unity test output: `CI/CITestOutput.xml`
-- Unity test log: `CI/UnityLogs.log`
+1. Fast compile output: `CI/RiderMsBuild.log`
+2. Unity compile output: `CI/CompileErrorsAfterUnityRun.txt`
+3. Unity test output: `CI/CITestOutput.xml`
+4. Unity test log: `CI/UnityLogs.log`
 
 ## License
 
-- Root repository license: [LICENSE](LICENSE)
-- Package license: [Packages/com.voxgeofol.vegetation/LICENSE.md](Packages/com.voxgeofol.vegetation/LICENSE.md)
+MIT license.
+
+1. Root repository license: [LICENSE](LICENSE)
+2. Package license: [Packages/com.voxgeofol.vegetation/LICENSE.md](Packages/com.voxgeofol.vegetation/LICENSE.md)

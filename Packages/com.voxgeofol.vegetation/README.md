@@ -1,74 +1,66 @@
 # VoxGeoFol Vegetation
 
-## Overview
+## Quick Navigation
 
-`com.voxgeofol.vegetation` is a Unity 6 URP package for branch-assembled, opaque-only vegetation with a GPU-resident runtime path. It is inspired by foliage-assembly workflows built from reusable branch modules, explicit shell tiers, and opaque far meshes, but implemented for Unity through GPU classification and `Graphics.RenderMeshIndirect`.
+- Basics: [Summary](#summary), [Highlights](#highlights), [Best-Fit Use Cases](#best-fit-use-cases), [Requirements](#requirements), [Setup](#setup)
+- Runtime: [Draw Calls And Draw Slots](#draw-calls-and-draw-slots), [Grass-Like Vegetation Strategies](#grass-like-vegetation-strategies), [Key Settings](#key-settings), [Runtime Pipeline](#runtime-pipeline), [Important Limitations](#important-limitations), [Supported Devices](#supported-devices)
+- [Included In This Repo](#included-in-this-repo)
+- [License](#license)
 
-Runtime ownership is container-based. A scene can use any number of `VegetationRuntimeContainer` instances for chunks, additive scenes, or addressable prefabs.
+## Summary
 
-## Target use-case Model
+`com.voxgeofol.vegetation` is a Unity 6 URP package for opaque-only, branch-assembled vegetation with a GPU-resident runtime path. Authorings are frozen into a container-owned runtime registry, visible content is classified and emitted on GPU, and URP submits vegetation through indirect depth and color passes.
 
-- `VegetationTreeAuthoring`: one instance of vegetation, one `TreeBlueprintSO`.
-  - meaning that grass can be a single instance of vegetation authority with multiple different branches (e.g. actual instances of the foliage grass blades or flowers)
-  - single instance of a tree is also a single `TreeBlueprintSO`
-- `TreeBlueprintSO`: one assembled-tree recipe with trunk, trunk-L3, far mesh (geometry-imposter), LOD profile, and `BranchPlacement[]`.
-- `BranchPlacement`: one placement of one `BranchPrototypeSO`.
-- `BranchPrototypeSO`: one reusable branch module.
-- Supported composition: many authorings can share one blueprint, one container can mix many blueprints, and one blueprint can mix many branch prototypes or reuse the same prototype many times.
-- Registration is container-scoped (to support streaming) and snapshot-based until `RefreshRuntimeRegistration()` runs.
+## Highlights
 
-## Draw Calls And Batching
+1. `VegetationTreeAuthoring -> TreeBlueprintSO -> BranchPlacement[] -> BranchPrototypeSO`
+2. One blueprint can reuse the same branch prototype many times or mix many different prototypes.
+3. Many scene authorings can share one blueprint, and one container can mix many blueprints.
+4. Runtime ownership is explicit and streaming-friendly through `VegetationRuntimeContainer`.
+5. Draw calls scale with active draw slots, not with raw tree count.
+6. Runtime is opaque-only, URP-only, compute-required, and snapshot-based until refresh.
 
-- Runtime flattens authorings into a registry, classifies visible content on GPU, and emits indirect instances into draw slots.
-- One draw slot is one indirect render bucket with one shared instance range and one indirect-args record.
-- A draw slot is keyed by exact `mesh + material + material kind`.
-- Shared render assets across blueprints or branch prototypes batch into the same indirect draw.
-- Different meshes, materials, or material kinds split into different draw slots.
-- Draw-call count scales with active draw slots for the current camera, not with raw tree count.
-- Vegetation is submitted in both depth and color, so active slots are paid once per pass.
-- Lowest draw-call count comes from shared branch prototypes and shared materials across species. Unique assets are supported, but they increase draw slots.
+## Best-Fit Use Cases
 
-Concrete effect:
-- Reusing the same branch prototype many times does not automatically create more draw calls. If those placements resolve to the same mesh/material tier, they still write into the same draw slot.
-- Creating many different branch prototypes is also not automatically expensive. It becomes expensive when those prototypes resolve to different meshes or materials, because that creates more draw slots.
-- A scene with many trees can still render with a small number of indirect draws if most visible content resolves to the same small set of slots.
+1. Tree species/bushes/grass-flower clumps built from reusable branch modules.
+2. Multiple species that share meshes and materials to keep batching strong.
+3. Grass, flowers, or shrubs authored either as clumps or as many small instances, depending on culling and placement needs.
 
-Example:
-- `1000` trees that all share the same trunk meshes, trunk material, foliage mesh/material, and shell assets can still collapse into a relatively small slot set.
-- `100` trees that all use unique branch meshes or unique materials can create more active draw slots and therefore more draws, even though the raw tree count is lower.
+## Draw Calls And Draw Slots
+
+1. A draw slot is one indirect render bucket with one shared instance range and one indirect-args record.
+2. Slot key = exact `mesh + material + material kind`.
+3. If different trees or branch prototypes resolve to the same slot key, they batch into the same indirect draw.
+4. If mesh, material, or material kind changes, a new draw slot is created.
+5. Instance count grows instance-buffer usage; draw-slot count is what grows draw calls.
+6. The renderer pays active slots once in depth and once in color.
+
+Examples:
+
+1. `1000` trees sharing the same trunk, foliage, and shell assets can still collapse into a small slot set.
+2. `100` trees with unique branch meshes or unique materials can produce more active slots and more draws, even with fewer total trees.
+3. Reusing the same branch prototype many times inside one blueprint does not automatically create more draws if the placements resolve to the same slot key.
 
 ## Grass-Like Vegetation Strategies
 
-Both strategies are supported by the package.
-
-`1.` [Preferred] One vegetation instance as one clump blueprint with many branch placements:
-- Example: one `VegetationTreeAuthoring` represents one grass tuft or flower patch, and its `TreeBlueprintSO` contains many blade or flower `BranchPlacement` entries.
-- Pros: fewer scene authorings, fewer runtime tree instances, fewer tree bounds to classify, simpler placement when the content is naturally clumped.
-- Pros: if the blades/flowers reuse the same few branch prototypes and materials, draw calls can stay very low because most visible content lands in the same draw slots.
-- Cons: culling and LOD are coarser, because the whole clump shares one tree-level bounds and one tree-level classification path before branch-tier decisions.
-- Cons: if the clump becomes large, it can keep more content resident than necessary when only part of it is relevant.
-
-`2.` Many small vegetation instances with one branch placement each:
-- Example: many `VegetationTreeAuthoring` objects represent individual grass plants or tiny tufts, and each blueprint contains only one branch placement.
-- Pros: finer spatial granularity for culling, streaming, and placement variation.
-- Pros: better when the content should behave like many separate plants instead of one shared patch.
-- Cons: more runtime tree instances, more registry records, and more tree-level classification work.
-- Cons: draw calls do not necessarily go down compared with the clump approach; if the assets are the same, the renderer can still end up using the same draw slots while paying more instance-management overhead.
-
-Rule of thumb:
-- Use the clump approach when the content is visually read as one patch and the main goal is lower runtime management overhead.
-- Use the many-small-instances approach when culling granularity, streaming granularity, or procedural placement flexibility matters more.
-- The main draw-call lever is shared render assets, not whether the content is authored as one big blueprint or many small authorings.
+1. Clump strategy [Preferred]:
+   `1 VegetationTreeAuthoring -> 1 TreeBlueprintSO -> many BranchPlacement`
+   Lower scene-authoring count and lower tree-level runtime overhead, but coarser culling and coarser streaming granularity.
+2. Many-small-instances strategy:
+   `many VegetationTreeAuthoring -> 1 small TreeBlueprintSO each -> 1 BranchPlacement each`
+   Finer culling, finer streaming, and better procedural-placement flexibility, but more runtime tree instances and more tree-level classification work.
+3. Main rule:
+   Shared render assets are the primary draw-call lever in both strategies. If both strategies use the same meshes and materials, draw-call count can stay similar even though runtime-management cost differs.
 
 ## Requirements
 
-- Unity `6000.3` or newer.
-- URP `17.3.0` or newer-compatible project setup.
-- Compute shaders and indirect draws on the target hardware and graphics API.
-- `VegetationRendererFeature` added to the active URP renderer.
-- `VegetationFoliageFeatureSettings.ClassifyShader` assigned to `VegetationClassify.compute`.
-- Opaque URP SRP-compatible shaders only.
-- Runtime vegetation shaders must be indirect-instance compatible with the package instance-data contract.
+1. Unity `6000.3` or newer.
+2. URP `17.3.0` or newer-compatible project setup.
+3. Compute-shader and indirect-draw support on the target hardware and graphics API.
+4. `VegetationRendererFeature` added to the active URP renderer.
+5. `VegetationFoliageFeatureSettings.ClassifyShader` assigned to `VegetationClassify.compute`.
+6. Opaque URP SRP-compatible shaders only.
+7. Runtime vegetation shaders compatible with the package indirect-instance contract.
 
 ## Setup
 
@@ -82,47 +74,52 @@ Rule of thumb:
 
 ## Key Settings
 
-- `VegetationRuntimeContainer.gridOrigin`: world-space origin of the frozen spatial grid. It changes cell assignment and culling layout.
-- `VegetationRuntimeContainer.cellSize`: world-space size of the frozen spatial grid. Smaller cells improve culling granularity but increase cell count; larger cells are cheaper but more conservative.
-- `VegetationRendererFeature.DepthPassEvent`: URP event for vegetation depth submission. The first vegetation pass of the frame also prepares the GPU-resident buffers.
-- `VegetationRendererFeature.ColorPassEvent`: URP event for vegetation color submission. It controls final ordering against the rest of the opaque pipeline.
-- `VegetationFoliageFeatureSettings.EnableDiagnostics`: renderer-wide diagnostics toggle for every active container rendered by that feature.
+1. `VegetationRuntimeContainer.gridOrigin`
+   World-space origin of the frozen spatial grid. It changes cell assignment and culling layout.
+2. `VegetationRuntimeContainer.cellSize`
+   World-space size of the frozen spatial grid. Smaller cells improve culling granularity but increase cell count; larger cells are cheaper but more conservative.
+3. `VegetationRendererFeature.DepthPassEvent`
+   URP event for vegetation depth submission. The first vegetation pass of the frame also prepares the GPU-resident buffers.
+4. `VegetationRendererFeature.ColorPassEvent`
+   URP event for vegetation color submission. It controls ordering against the rest of the opaque pipeline.
+5. `VegetationFoliageFeatureSettings.EnableDiagnostics`
+   Renderer-wide diagnostics toggle for every active container rendered by that feature.
 
 ## Runtime Pipeline
 
-1. Enabling `VegetationRuntimeContainer` adds it to the active container list and calls `RefreshRuntimeRegistration()`.
-2. Registration validates and freezes the serialized `VegetationTreeAuthoring` list into `VegetationRuntimeRegistry`, spatial grid, branch/prototype data, and draw slots.
-3. `VegetationRendererFeature` gathers active containers for each eligible camera and schedules one vegetation depth pass and one vegetation color pass.
-4. On the first vegetation pass for that camera and frame, each container calculates frustum planes, ensures `VegetationClassify.compute` is ready, and runs GPU classification plus GPU emission into shared instance and indirect-args buffers.
-5. The depth pass submits `Graphics.RenderMeshIndirect` for active draw slots with depth-only materials.
-6. The color pass submits matching opaque vegetation materials from the same GPU-written buffers.
+1. `serialized authorings -> RefreshRuntimeRegistration() -> VegetationRuntimeRegistry + spatial grid + draw slots`
+2. `camera -> frustum planes -> GPU classification/emission -> shared instance buffer + indirect args`
+3. `shared instance buffer + indirect args -> vegetation depth pass -> vegetation color pass`
+4. `changed transforms / hierarchy / blueprint data -> RefreshRuntimeRegistration() -> rebuilt runtime state`
 
-## Constraints
+## Important Limitations
 
-- Opaque-only runtime: no transparency, no alpha clip, no masked foliage.
-- URP only. Built-in pipeline, HDRP, and custom SRP integrations are outside the contract.
-- No runtime CPU fallback, no CPU decode bridge, and no async-readback rendering path.
-- Exact CPU-side visible-instance lists are not exposed in production flow.
-- `LODGroup` is not used; LOD comes from authored distance bands and GPU classification.
-- Each container owns only active authorings from its serialized list, and nested child containers own their own descendants.
-- Registration is frozen after enable. Changes require `RefreshRuntimeRegistration()`. Moving/rotating/scaling transforms will not auto-sync! You need to manually call `RefreshRuntimeRegistration()` on the authoritative container.
-- Runtime diagnostics are renderer-wide through `VegetationFoliageFeatureSettings.EnableDiagnostics`.
+1. Opaque-only runtime: no transparency, no alpha clip, no masked foliage.
+2. URP only. Built-in pipeline, HDRP, and custom SRP integrations are outside the contract.
+3. No runtime CPU fallback, no CPU decode bridge, and no async-readback rendering path.
+4. Exact CPU-side visible-instance lists are not exposed in production flow.
+5. `LODGroup` is not used; LOD comes from authored distance bands and GPU classification.
+6. Registration is frozen after enable. Changes require `RefreshRuntimeRegistration()`. Transform changes (position/rotation/scale) do not auto-sync (not even in editor). Either enable/disable the container (script) or force update via `RefreshRuntimeRegistration()`.
+7. Each container owns only active authorings from its serialized list, and nested child containers own their own descendants.
+8. Runtime diagnostics are renderer-wide through `VegetationFoliageFeatureSettings.EnableDiagnostics`.
 
 ## Supported Devices
 
-- Desktop and laptop GPUs that run Unity 6 URP with compute shaders and indirect draws.
-- Console-class targets with the same feature support.
-- Higher-end mobile and handheld targets when the graphics API and hardware support URP, compute shaders, and indirect draws.
-- Not targeted: WebGL, graphics APIs without compute or indirect draws, and very low-end mobile hardware.
+1. Desktop and laptop GPUs that run Unity 6 URP with compute shaders and indirect draws.
+2. Console-class targets with the same feature support.
+3. Higher-end mobile and handheld targets when the graphics API and hardware support URP, compute shaders, and indirect draws.
+4. Not targeted: WebGL, graphics APIs without compute or indirect draws, and very low-end mobile hardware.
 
-## Included
+## Included In This Repo
 
-- Package sample content: [Samples~/VegetationDemo](Samples~/VegetationDemo)
+1. Playground scene: [../../Assets/Scenes/Playground.unity](../../Assets/Scenes/Playground.unity)
+2. Package sample content: [Samples~/Vegetation Demo](Samples~/VegetationDemo)
 - sample mesh very hight poly pine tree, see [ChristmasTree](Samples~/VegetationDemo/Raw/ChristmasTree.fbx) with separate trunk and branches mesh from the leaves mesh (pines)
 - sample high poly single Fern leaf, see [fern_foliage_dense](Samples~/VegetationDemo/Raw/fern_foliage_dense_fullgeo.obj)
 - sample branch for standard tree, see [branch_leaves](Samples~/VegetationDemo/Raw/branch_leaves_fullgeo.obj)
-
+3. Repo-local sample mirror used by scenes: [../../Assets/Tree](../../Assets/Tree)
+4. Architecture authority: [../../DetailedDocs/UnityAssembledVegetation_FULL.md](../../DetailedDocs/UnityAssembledVegetation_FULL.md)
 
 ## License
 
-- Package license: [LICENSE.md](LICENSE.md)
+Package license: [LICENSE.md](LICENSE.md)
