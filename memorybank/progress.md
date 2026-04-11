@@ -11,48 +11,43 @@ Purpose: track immediate tasks and current milestone status.
 ## Status Snapshot
 
 - `Phase A` through `Phase E` are implemented.
-- `2026-04-10`: Phase E render infrastructure landed. `VegetationIndirectRenderer` now uploads per-slot instance payloads/args/bounds, `VegetationRendererFeature` schedules indirect depth/color passes, the runtime shader suite is in place, `VegetationRuntimeManager` prepares camera-visible frames for rendering, and `DebugVegetationDemo` exposes the uploaded batch state in Scene view.
+- `2026-04-10`: Phase E render infrastructure landed. `VegetationIndirectRenderer`, `VegetationRendererFeature`, the runtime shader suite, and `VegetationRuntimeContainer` now prepare and submit camera-visible vegetation frames through indirect depth/color passes.
 - `2026-04-11`: Removed the constant per-frame `TransformBounds` corner-array GC from Phase E visible-bounds rebuilds, removed render-graph `managers.ToArray()` garbage in `VegetationRendererFeature`, and added profiler markers across frame prep, decode, upload, and render submission so Playground captures can isolate the next bottleneck.
 - `2026-04-11`: Removed the wasted full `VegetationFrameDecisionState.Reset()` on completed GPU readback consume, replaced temporary visible-cell array rebuilds with in-place mask expansion, changed decode output to write `VegetationIndirectInstanceData` directly into slot outputs, and removed the per-slot CPU repack loop in `VegetationIndirectRenderer`. New markers now split GPU readback consume, decode, instance-buffer upload, and args upload.
 - `2026-04-11`: Reworked `VegetationDecisionDecoder.DecodeTrees` so it rejects whole trees before branch traversal, rejects whole shell tiers before scanning node decisions, and consumes precomputed per-tree/per-branch/per-node world bounds from runtime registration instead of recomputing transformed draw-slot bounds in the decode hot loop.
-- `2026-04-11`: Removed more decode hot-path payload churn by caching per-tree/per-branch `VegetationIndirectInstanceData` at registration time, switching frame-output append calls to readonly-ref payload/bounds flow, and disabling per-instance debug capture on the runtime-manager frame output unless diagnostics are enabled.
+- `2026-04-11`: Removed more decode hot-path payload churn by caching per-tree/per-branch `VegetationIndirectInstanceData` at registration time, switching frame-output append calls to readonly-ref payload/bounds flow, and disabling per-instance debug capture on the old runtime frame-output path unless diagnostics were enabled.
 - `2026-04-11`: Replaced the runtime prepared-frame hot path with a GPU-resident decode/emission path. `VegetationGpuDecisionPipeline` now classifies, emits exact indirect instance payloads into a shared GPU instance buffer, writes one indirect-args record per draw slot, and `VegetationIndirectRenderer` consumes those GPU-written buffers directly through per-slot args offsets. `DecodeTrees` is no longer part of the normal `GpuResident` render path.
+- `2026-04-11`: Production cleanup removed the legacy runtime CPU-reference and GPU-readback container branches. `VegetationRuntimeContainer` now prepares only GPU-resident frames, and the old classification Scene-view demo was removed from the Playground scene.
+- `2026-04-11`: Final rendering cleanup removed the remaining editor-only parity/decode path from `Runtime/Rendering`, deleted the runtime `DebugVegetationDemo`, and trimmed EditMode coverage to production rendering contracts only.
+- `2026-04-11`: Renamed `VegetationRuntimeManager` to `VegetationRuntimeContainer` and scoped runtime registration to active `VegetationTreeAuthoring` components inside each container hierarchy, excluding descendants claimed by nested child containers. This is the new streaming/addressables contract.
+- `2026-04-11`: Root/package docs and memory bank were updated to the `VegetationRuntimeContainer` naming and to the container-scoped multi-instance contract: any number of containers can coexist, but each owns only its own active hierarchy snapshot.
+- `2026-04-11`: `Fully Compile by Unity` succeeded after the production cleanup and regenerated the solution without the removed legacy files.
 - Current runtime shell-node rule is explicit and conservative: visible internal nodes expand, visible leaves emit, and finer intra-tier collapse is deferred.
-- Current prepared-frame reality changed materially: `GpuResident` is now the intended runtime path, while CPU reference remains as a fallback/parity path and `GpuDecisionReadback` remains an optional delayed debug/validation bridge.
-- `VegetationRuntimeManager` registration is currently snapshot-based, not live-synced: transform edits on registered `VegetationTreeAuthoring` instances, plus other registration-affecting authoring or scene changes after manager enable, require explicit `RefreshRuntimeRegistration()` or a disable/enable cycle.
-- Current `GpuDecisionReadback` manager behavior has another hard caveat: CPU bootstrap while async readback is pending is intentionally disabled, so startup and pending-readback frames can reuse stale uploaded data or show nothing until the first completed readback is available.
-- `LastFrameOutput` detailed per-instance debug capture is diagnostics-gated now; with diagnostics disabled the runtime manager keeps upload-ready slot payloads only.
-- Compile validation succeeded through `Fully Compile by Unity`.
+- Current prepared-frame reality changed materially: `GpuResident` is the only shipped runtime path. Legacy CPU/decode helpers are removed from `Runtime/Rendering`.
+- `VegetationRuntimeContainer` registration is currently snapshot-based, not live-synced: transform edits on registered `VegetationTreeAuthoring` instances, plus other registration-affecting authoring or scene changes after container enable, require explicit `RefreshRuntimeRegistration()` or a disable/enable cycle.
 
 ## Phase E Clarification
 
-- Milestone 1 `Phase E` implementation work is only partially complete against [Milestone1.md](../DetailedDocs/Milestone1.md).
-- Code-side render infrastructure from Milestone `E1` through `E5` exists in the repo.
-- `Phase E` is not accepted complete.
-- The previous CPU-decode ownership gap is closed for the main runtime path, but `Phase E` still needs manual Playground validation and hardening of the GPU-resident path before it can be called accepted complete.
+- Milestone 1 `Phase E` implementation work exists end-to-end in the repo with the production GPU-resident path.
+- Current hardening focus is no longer CPU decode removal; that work is done.
+- Remaining production work is contract hardening around multi-container streaming/addressables, lifecycle refresh behavior, and package-consumer integration clarity.
 
-## Known `VegetationRuntimeManager` Limitations
+## Known `VegetationRuntimeContainer` Limitations
 
-- Runtime transform edits are not live-synced. After the manager is enabled, moving, rotating, or scaling a `VegetationTreeAuthoring` does not update the frozen registry until `RefreshRuntimeRegistration()` runs.
+- Runtime transform edits are not live-synced. After the container is enabled, moving, rotating, or scaling a `VegetationTreeAuthoring` does not update the frozen registry until `RefreshRuntimeRegistration()` runs.
 - Registration-affecting content changes are not live-synced either. Adding or removing authorings, changing blueprint placement data, or swapping generated meshes after enable also requires `RefreshRuntimeRegistration()`.
-- `GpuDecisionReadback` is delayed and non-blocking. The current implementation does not fall back to a fresh CPU-prepared frame while readback is pending, so first frames can render stale data or nothing.
-- Detailed `LastFrameOutput` instance debug data exists only with diagnostics enabled.
+- Each container only owns active authorings in its own hierarchy. If foliage should belong to a specific streamed/addressable chunk, it must live under that chunk's `VegetationRuntimeContainer` transform and not under a different container.
+- The container is GPU-resident only. Missing compute support, missing `VegetationClassify.compute`, or shader-import failures are hard runtime blockers because the old CPU/readback fallback path was removed.
+- Exact CPU-side visible-instance debug output is no longer part of the production container contract. Runtime diagnostics stop at profiler markers plus conservative uploaded batch snapshots with unknown exact counts.
 
 ## Immediate Tasks
 
-### Low hanging fruits
+### Production Hardening
 
-- Validate in Playground that `VegetationRuntimeManager.PrepareGpuResidentFrame` removed `VegetationDecisionDecoder.DecodeTrees` from the runtime hot path and that the CPU spike is gone in practice.
-- Capture a new Playground profile and compare `VegetationGpuDecisionPipeline.ResetIndirectArgs`, `VegetationGpuDecisionPipeline.EmitTreeInstances`, `VegetationGpuDecisionPipeline.EmitBranchInstances`, and `VegetationGpuDecisionPipeline.FinalizeIndirectArgs`.
-- Validate that indirect draws consume the GPU-written shared instance/args buffers correctly for expanded trees, trunks, shells, and impostors in both depth and color passes.
-- If the GPU-resident path still misses budget, investigate slot-count pressure and draw-count pressure next instead of returning to CPU decode work.
-
-### Phase E: Hybrid Decode Rendering Pipeline
-
-- `E-05` End-to-end demo-scene verification in the Playground scene with `DebugVegetationDemo`.
-- Investigate the batch-mode kernel-import issue on `VegetationClassify.compute` so the optional GPU decision-readback mode stops being editor-only confidence work.
-- Decide whether the shared-slot GPU-resident path needs double buffering / one-frame latency to improve GPU scheduling, or whether same-frame compute-to-indirect submission is sufficient for MVP.
-- Add diagnostics or validation for GPU-resident exact per-slot counts if Scene-view inspection needs more than conservative batch bounds and unknown counts.
+- Validate multi-container streamed/addressable ownership in a real chunked scene: sibling containers, nested child containers, instantiate/release, and additive-scene unload.
+- Harden lifecycle behavior around `OnEnable`, `OnDisable`, and explicit `RefreshRuntimeRegistration()` so container refresh rules stay explicit and deterministic under scene streaming.
+- Run a package-consumer smoke pass in a clean URP project to verify that the package README setup steps match actual import and renderer-feature wiring.
+- Decide whether GPU-resident submission needs double buffering / one-frame latency as an optimization pass, not as a correctness fix.
 - `Phase F` remains optional follow-up work. Texture-driven voxelization is still parked and should not dilute current Phase D/E delivery.
 
 ## Deferred

@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Unity.Profiling;
@@ -11,16 +10,11 @@ using Unity.Profiling;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// GPU decision-path mirror for Phase D parity checks against the frozen runtime contracts.
+    /// GPU-resident vegetation classification and indirect-emission pipeline for the frozen runtime contracts.
     /// </summary>
     public sealed class VegetationGpuDecisionPipeline : IDisposable
     {
         private static readonly ProfilerMarker PrepareResidentFrameMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.PrepareResidentFrame");
-        private static readonly ProfilerMarker TryConsumeCompletedReadbackMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.TryConsumeCompletedReadback");
-        private static readonly ProfilerMarker ResetCompletedReadbackStateMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.ResetCompletedReadbackState");
-        private static readonly ProfilerMarker CopyCellVisibilityMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.CopyCellVisibility");
-        private static readonly ProfilerMarker CopyTreeModesMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.CopyTreeModes");
-        private static readonly ProfilerMarker CopyDecisionBuffersMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.CopyDecisionBuffers");
         private static readonly ProfilerMarker ResetIndirectArgsMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.ResetIndirectArgs");
         private static readonly ProfilerMarker EmitTreeInstancesMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.EmitTreeInstances");
         private static readonly ProfilerMarker EmitBranchInstancesMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.EmitBranchInstances");
@@ -52,13 +46,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly GraphicsBuffer residentInstanceBuffer;
         private readonly GraphicsBuffer residentArgsBuffer;
         private readonly Vector4[] frustumPlaneVectors = new Vector4[6];
-        private AsyncGPUReadbackRequest cellVisibilityReadback;
-        private AsyncGPUReadbackRequest treeModesReadback;
-        private AsyncGPUReadbackRequest branchDecisionsReadback;
-        private AsyncGPUReadbackRequest nodeDecisionsReadback;
-        private VegetationFrameDecisionState? completedReadbackState;
         private readonly int residentInstanceCapacity;
-        private bool readbackPending;
         private bool residentFramePrepared;
         private bool disposed;
 
@@ -128,49 +116,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         }
 
         /// <summary>
-        /// [INTEGRATION] Runs one immediate GPU classification/decode-decision frame for parity verification.
-        /// </summary>
-        public VegetationFrameDecisionState EvaluateFrameImmediate(Vector3 cameraWorldPosition, Plane[] frustumPlanes)
-        {
-            if (disposed)
-            {
-                throw new ObjectDisposedException(nameof(VegetationGpuDecisionPipeline));
-            }
-
-            if (frustumPlanes == null)
-            {
-                throw new ArgumentNullException(nameof(frustumPlanes));
-            }
-
-            if (frustumPlanes.Length < 6)
-            {
-                throw new ArgumentException("Phase D GPU frustum classification requires six frustum planes.",
-                    nameof(frustumPlanes));
-            }
-
-            UploadDynamicFrameData(cameraWorldPosition, frustumPlanes);
-            DispatchKernel(classifyCellsKernel, registry.SpatialGrid.Cells.Count);
-            DispatchKernel(classifyTreesKernel, registry.TreeInstances.Count);
-            DispatchKernel(classifyBranchesAndNodesKernel, registry.SceneBranches.Count);
-
-            VegetationFrameDecisionState state = new VegetationFrameDecisionState(registry);
-            state.ResetForGpuReadback();
-            cellVisibilityBuffer.GetData(state.CellVisibilityMask, 0, 0, registry.SpatialGrid.Cells.Count);
-            state.RefreshVisibleCellIndicesFromMask(state.CellVisibilityMask);
-
-            int[] treeModes = new int[Mathf.Max(1, registry.TreeInstances.Count)];
-            treeModesBuffer.GetData(treeModes, 0, 0, registry.TreeInstances.Count);
-            for (int i = 0; i < registry.TreeInstances.Count; i++)
-            {
-                state.TreeModes[i] = (VegetationTreeRenderMode)treeModes[i];
-            }
-
-            branchDecisionBuffer.GetData(state.BranchDecisions, 0, 0, registry.SceneBranches.Count);
-            nodeDecisionBuffer.GetData(state.NodeDecisions, 0, 0, registry.TotalNodeDecisionCapacity);
-            return state;
-        }
-
-        /// <summary>
         /// [INTEGRATION] Executes the full GPU-resident classification and decode path into indirect draw resources without CPU readback.
         /// </summary>
         public void PrepareResidentFrame(Vector3 cameraWorldPosition, Plane[] frustumPlanes)
@@ -218,132 +163,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
 
                 residentFramePrepared = true;
-            }
-        }
-
-        /// <summary>
-        /// [INTEGRATION] Schedules one non-blocking GPU readback of the current Phase D decision buffers for Phase E fallback decode.
-        /// </summary>
-        public void ScheduleFrameReadback(Vector3 cameraWorldPosition, Plane[] frustumPlanes)
-        {
-            if (disposed)
-            {
-                throw new ObjectDisposedException(nameof(VegetationGpuDecisionPipeline));
-            }
-
-            if (!SystemInfo.supportsAsyncGPUReadback)
-            {
-                throw new NotSupportedException(
-                    "This runtime does not support AsyncGPUReadback, so the Phase E GPU decision readback bridge is unavailable.");
-            }
-
-            if (readbackPending)
-            {
-                return;
-            }
-
-            if (frustumPlanes == null)
-            {
-                throw new ArgumentNullException(nameof(frustumPlanes));
-            }
-
-            if (frustumPlanes.Length < 6)
-            {
-                throw new ArgumentException("Phase D GPU frustum classification requires six frustum planes.",
-                    nameof(frustumPlanes));
-            }
-
-            UploadDynamicFrameData(cameraWorldPosition, frustumPlanes);
-            DispatchKernel(classifyCellsKernel, registry.SpatialGrid.Cells.Count);
-            DispatchKernel(classifyTreesKernel, registry.TreeInstances.Count);
-            DispatchKernel(classifyBranchesAndNodesKernel, registry.SceneBranches.Count);
-
-            cellVisibilityReadback = AsyncGPUReadback.Request(cellVisibilityBuffer);
-            treeModesReadback = AsyncGPUReadback.Request(treeModesBuffer);
-            branchDecisionsReadback = AsyncGPUReadback.Request(branchDecisionBuffer);
-            nodeDecisionsReadback = AsyncGPUReadback.Request(nodeDecisionBuffer);
-            readbackPending = true;
-        }
-
-        /// <summary>
-        /// [INTEGRATION] Tries to consume the latest completed GPU decision readback without blocking the frame.
-        /// </summary>
-        public bool TryConsumeCompletedReadback(out VegetationFrameDecisionState? state)
-        {
-            using (TryConsumeCompletedReadbackMarker.Auto())
-            {
-                if (disposed)
-                {
-                    throw new ObjectDisposedException(nameof(VegetationGpuDecisionPipeline));
-                }
-
-                if (!readbackPending)
-                {
-                    state = null;
-                    return false;
-                }
-
-                if (!cellVisibilityReadback.done ||
-                    !treeModesReadback.done ||
-                    !branchDecisionsReadback.done ||
-                    !nodeDecisionsReadback.done)
-                {
-                    state = null;
-                    return false;
-                }
-
-                readbackPending = false;
-                if (cellVisibilityReadback.hasError ||
-                    treeModesReadback.hasError ||
-                    branchDecisionsReadback.hasError ||
-                    nodeDecisionsReadback.hasError)
-                {
-                    if (cellVisibilityReadback.hasError)
-                        UnityEngine.Debug.LogError(
-                            $"VegetationGpuDecisionPipeline GPU decision cellVisibilityReadback error.");
-                    if (treeModesReadback.hasError)
-                        UnityEngine.Debug.LogError($"VegetationGpuDecisionPipeline GPU decision treeModesReadback error.");
-                    if (branchDecisionsReadback.hasError)
-                        UnityEngine.Debug.LogError(
-                            $"VegetationGpuDecisionPipeline GPU decision branchDecisionsReadback error.");
-                    if (nodeDecisionsReadback.hasError)
-                        UnityEngine.Debug.LogError(
-                            $"VegetationGpuDecisionPipeline GPU decision nodeDecisionsReadback error.");
-                
-                    state = null;
-                    return false;
-                }
-
-                completedReadbackState ??= new VegetationFrameDecisionState(registry);
-                using (ResetCompletedReadbackStateMarker.Auto())
-                {
-                    completedReadbackState.ResetForGpuReadback();
-                }
-
-                using (CopyCellVisibilityMarker.Auto())
-                {
-                    cellVisibilityReadback.GetData<uint>().CopyTo(completedReadbackState.CellVisibilityMask);
-                    completedReadbackState.RefreshVisibleCellIndicesFromMask(completedReadbackState.CellVisibilityMask);
-                }
-
-                using (CopyTreeModesMarker.Auto())
-                {
-                    NativeArray<int> treeModes = treeModesReadback.GetData<int>();
-                    for (int i = 0; i < registry.TreeInstances.Count; i++)
-                    {
-                        completedReadbackState.TreeModes[i] = (VegetationTreeRenderMode)treeModes[i];
-                    }
-                }
-
-                using (CopyDecisionBuffersMarker.Auto())
-                {
-                    branchDecisionsReadback.GetData<VegetationBranchDecisionRecord>()
-                        .CopyTo(completedReadbackState.BranchDecisions);
-                    nodeDecisionsReadback.GetData<VegetationNodeDecisionRecord>().CopyTo(completedReadbackState.NodeDecisions);
-                }
-
-                state = completedReadbackState;
-                return true;
             }
         }
 

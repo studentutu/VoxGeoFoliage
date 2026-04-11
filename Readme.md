@@ -37,13 +37,15 @@ We can't make it one-to-one right now, but we still have options:
 2. See embedded package [com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation)
 3. See playground scene [Playground.unity](Assets/Scenes/Playground.unity)
 
-## Current `VegetationRuntimeManager` limitations
+Runtime setup is container-based: a scene can host any number of `VegetationRuntimeContainer` instances, including streamed chunks or addressable prefabs. Each container registers only active `VegetationTreeAuthoring` components inside its own hierarchy, and nested child containers own their own descendants.
 
-- Runtime registration is a frozen snapshot. After `VegetationRuntimeManager` is enabled, moving, rotating, or scaling `VegetationTreeAuthoring` instances is not synced automatically, including editor transform edits done after enable. Call `RefreshRuntimeRegistration()` or re-enable the manager after those changes.
+## Current `VegetationRuntimeContainer` limitations
+
+- Runtime registration is a frozen snapshot. After `VegetationRuntimeContainer` is enabled, moving, rotating, or scaling `VegetationTreeAuthoring` instances is not synced automatically, including editor transform edits done after enable. Call `RefreshRuntimeRegistration()` or re-enable the container after those changes.
 - Registration-affecting scene and authoring changes are also not live-synced. Adding or removing `VegetationTreeAuthoring` instances, changing blueprint or placement data, or swapping generated meshes after enable requires `RefreshRuntimeRegistration()`.
-- `GpuDecisionReadback` is a delayed non-blocking bridge, not a same-frame GPU-primary render path. The current manager implementation does not bootstrap a CPU reference frame while readback is pending, so the first frames can keep stale uploaded data or render nothing until a completed readback exists.
-- CPU reference output is still the default prepared-frame source. The GPU path is currently a validation and fallback bridge, not the final runtime architecture.
-- Detailed per-instance debug data in `LastFrameOutput` is captured only when diagnostics are enabled.
+- Each `VegetationRuntimeContainer` only registers active `VegetationTreeAuthoring` components in its own hierarchy. Nested child containers claim their own descendants, which is the intended setup for streaming/addressable chunks.
+- The container is GPU-resident only. It requires compute-shader support plus a valid `VegetationClassify.compute` import; there is no runtime CPU fallback or async-readback bridge in the production path anymore.
+- Production output is GPU-only. Exact CPU-side visible-instance lists do not exist anymore, and diagnostics are limited to profiler markers plus conservative uploaded batch snapshots from the runtime renderer.
 
 Includes:
 - distributable sample assets, prefabs, and baked meshes under [Samples~/Vegetation Demo](Packages/com.voxgeofol.vegetation/Samples~/Vegetation%20Demo)
@@ -53,7 +55,7 @@ Includes:
 - sample branch for standard tree, see [branch_leaves](Assets/Tree/Raw/branch_leaves_fullgeo.obj)
 - demo terrain with mass-placement, see scene [BigPineForest.unity](Assets/Scenes/PineForest/BigPineForest.unity)
 
-## Prerequisites
+## Prerequisites (this repo, not the vegetation package)
 
 ### Required
 
@@ -61,7 +63,7 @@ Includes:
 - git + git bash
 - Rider ( or MSBuild required, version 14+ )
 
-## What to change
+## What to change in order to get full agentic workflow
 
 - CI/Tests/Compilation
   - change versions and path to Unity Editor and Rider in: [rebuildSolutionFromUnityItself](./rebuildSolutionFromUnityItself.sh), [parseTestErrors](./parseTestErrors.sh), [rebuildSolutionWithRiderMsBuild](./rebuildSolutionWithRiderMsBuild.sh), [runTestsBash](./runTestsBash.sh)

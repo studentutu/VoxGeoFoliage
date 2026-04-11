@@ -4,6 +4,13 @@
 
 This document defines the production target inspired by Unreal Engine 5.7 foliage innovations (Assemblies, voxelized LOD, and hierarchical wind animation) for a high-performance vegetation system in Unity 6 URP.
 
+Current implementation note (`2026-04-11`):
+- The old MVP CPU fallback / async-readback runtime bridge is retired.
+- Production runtime is GPU-resident only through `VegetationRuntimeContainer`, `VegetationGpuDecisionPipeline`, and `VegetationIndirectRenderer`.
+- `VegetationRuntimeContainer` registers only active `VegetationTreeAuthoring` components inside its own hierarchy, and nested child containers own their own descendants. This is the intended streaming/addressables contract.
+- Runtime registration is still a frozen snapshot. Transform edits and other registration-affecting authoring changes require explicit `RefreshRuntimeRegistration()`.
+- The old CPU/decode parity layer was also removed from `Runtime/Rendering`, so historical sections below that mention temporary CPU fallback should be treated as superseded design history rather than the current runtime contract.
+
 The system is designed to:
 - scale to millions of whole-tree instances
 - preserve as much visible detail as possible near the camera
@@ -32,20 +39,18 @@ The runtime backend is `Graphics.RenderMeshIndirect` driven from a URP renderer 
 
 ## 1.1 High-Level Pipeline
 
-Editor Authoring -> Editor Bake -> Runtime Registration/Flattening -> GPU-primary cell visibility -> GPU tree classification -> GPU branch and hierarchy survival evaluation -> GPU-primary survivor decode -> CPU upload of indirect args and visible instance data -> optional URP indirect depth pass -> URP indirect color pass
+Editor Authoring -> Editor Bake -> Runtime Registration/Flattening -> GPU-primary cell visibility -> GPU tree classification -> GPU branch and hierarchy survival evaluation -> GPU-resident survivor decode and emission -> optional URP indirect depth pass -> URP indirect color pass
 
 Key  target principle: minimum draw-calls with minimum geometry.
 
 ## 1.2 MVP Runtime Decode Model
 
-Milestone 1 uses a temporary hybrid decode path with one strict default:
-- GPU is the primary owner of coarse visibility, LOD rules, hierarchy survival decisions, and frontier decode.
-- CPU fallback exists only as a temporary MVP backup path.
-- CPU fallback may only consume compact decision buffers through completed non-blocking async readback results.
-- CPU fallback decodes the persisted BFS hierarchy into exact visible mesh-part draws only when the GPU decode path is unavailable or explicitly disabled for validation/debugging.
+Milestone 1 now uses a GPU-resident decode path with one strict default:
+- GPU is the owner of coarse visibility, LOD rules, hierarchy survival decisions, frontier decode, and final indirect-emission buffers.
+- Runtime container does not expose a CPU fallback path anymore.
 - URP renders the final per-draw-slot instance lists via `RenderMeshIndirect`.
 
-This is an MVP compromise. After MVP, the intended direction is to move from BFS plus simple hybrid decode to DFS preorder plus subtree spans and push the final decode fully onto the GPU.
+The next architectural step after MVP is still to move from BFS to DFS preorder plus subtree spans for better GPU traversal and culling efficiency.
 
 ## 1.3 Core Rules
 

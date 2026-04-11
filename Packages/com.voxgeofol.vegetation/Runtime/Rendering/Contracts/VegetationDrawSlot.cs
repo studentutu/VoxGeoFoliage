@@ -40,20 +40,5 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         public Bounds LocalBounds { get; }
 
-        /// <summary>
-        /// [INTEGRATION] Builds the Phase E indirect-args seed from the visible count produced in Phase D.
-        /// </summary>
-        public VegetationIndirectArgsSeed BuildIndirectArgsSeed(uint instanceCount)
-        {
-            return new VegetationIndirectArgsSeed
-            {
-                DrawSlotIndex = SlotIndex,
-                IndexCountPerInstance = IndexCountPerInstance,
-                InstanceCount = instanceCount,
-                StartIndexLocation = StartIndexLocation,
-                BaseVertexLocation = BaseVertexLocation,
-                StartInstanceLocation = 0u
-            };
-        }
     }
 }

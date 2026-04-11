@@ -82,13 +82,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             private static readonly ProfilingSampler DepthPassSampler = new ProfilingSampler("VoxGeoFol.Vegetation.DepthPass");
             private static readonly ProfilingSampler ColorPassSampler = new ProfilingSampler("VoxGeoFol.Vegetation.ColorPass");
             private static readonly ProfilerMarker SetupMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderPass.Setup");
-            private static readonly ProfilerMarker DrawManagersCommandBufferMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawManagers.CommandBuffer");
-            private static readonly ProfilerMarker DrawManagersRasterMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawManagers.Raster");
+            private static readonly ProfilerMarker DrawContainersCommandBufferMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawContainers.CommandBuffer");
+            private static readonly ProfilerMarker DrawContainersRasterMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawContainers.Raster");
             private readonly VegetationRenderPassMode passMode;
-            private readonly List<VegetationRuntimeManager> managers = new List<VegetationRuntimeManager>();
-            private VegetationRuntimeManager[] managerSnapshot = Array.Empty<VegetationRuntimeManager>();
+            private readonly List<VegetationRuntimeContainer> containers = new List<VegetationRuntimeContainer>();
+            private VegetationRuntimeContainer[] containerSnapshot = Array.Empty<VegetationRuntimeContainer>();
             private Camera? camera;
-            private int managerSnapshotCount;
+            private int containerSnapshotCount;
             private string lastSetupDiagnostics = string.Empty;
             private static string lastDepthExecutionDiagnostics = string.Empty;
             private static string lastColorExecutionDiagnostics = string.Empty;
@@ -99,27 +99,27 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 profilingSampler = passMode == VegetationRenderPassMode.Depth ? DepthPassSampler : ColorPassSampler;
             }
 
-            public bool HasWork => camera != null && managerSnapshotCount > 0;
+            public bool HasWork => camera != null && containerSnapshotCount > 0;
 
             public void Setup(Camera targetCamera)
             {
                 using (SetupMarker.Auto())
                 {
                     camera = targetCamera;
-                    VegetationRuntimeManager.GetActiveManagers(managers);
-                    EnsureManagerSnapshotCapacity(managers.Count);
-                    managerSnapshotCount = managers.Count;
-                    for (int i = 0; i < managerSnapshotCount; i++)
+                    VegetationRuntimeContainer.GetActiveContainers(containers);
+                    EnsureContainerSnapshotCapacity(containers.Count);
+                    containerSnapshotCount = containers.Count;
+                    for (int i = 0; i < containerSnapshotCount; i++)
                     {
-                        managerSnapshot[i] = managers[i];
+                        containerSnapshot[i] = containers[i];
                     }
 
-                    if (!ShouldLogDiagnostics(managers, managers.Count))
+                    if (!ShouldLogDiagnostics(containers, containers.Count))
                     {
                         return;
                     }
 
-                    string summary = $"VegetationRenderPass setup pass={passMode} camera={targetCamera.name} managers={managers.Count}";
+                    string summary = $"VegetationRenderPass setup pass={passMode} camera={targetCamera.name} containers={containers.Count}";
                     if (summary != lastSetupDiagnostics)
                     {
                         lastSetupDiagnostics = summary;
@@ -143,7 +143,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     : "Vegetation Color Pass");
                 try
                 {
-                    DrawManagers(managerSnapshot, managerSnapshotCount, camera, passMode, commandBuffer);
+                    DrawContainers(containerSnapshot, containerSnapshotCount, camera, passMode, commandBuffer);
                     context.ExecuteCommandBuffer(commandBuffer);
                 }
                 finally
@@ -170,8 +170,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 {
                     passData.Camera = camera;
                     passData.PassMode = passMode;
-                    passData.Managers = managerSnapshot;
-                    passData.ManagerCount = managerSnapshotCount;
+                    passData.Containers = containerSnapshot;
+                    passData.ContainerCount = containerSnapshotCount;
 
                     if (passMode == VegetationRenderPassMode.Depth)
                     {
@@ -186,112 +186,112 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     builder.AllowPassCulling(false);
                     builder.SetRenderFunc(static (PassData data, RasterGraphContext context) =>
                     {
-                        DrawManagers(data.Managers, data.ManagerCount, data.Camera, data.PassMode, context.cmd);
+                        DrawContainers(data.Containers, data.ContainerCount, data.Camera, data.PassMode, context.cmd);
                     });
                 }
             }
 
-            private static void DrawManagers(
-                IReadOnlyList<VegetationRuntimeManager> managers,
-                int managerCount,
+            private static void DrawContainers(
+                IReadOnlyList<VegetationRuntimeContainer> containers,
+                int containerCount,
                 Camera camera,
                 VegetationRenderPassMode passMode,
                 CommandBuffer commandBuffer)
             {
-                using (DrawManagersCommandBufferMarker.Auto())
+                using (DrawContainersCommandBufferMarker.Auto())
                 {
-                    int activeManagerCount = 0;
-                    int preparedManagerCount = 0;
-                    int renderedManagerCount = 0;
+                    int activeContainerCount = 0;
+                    int preparedContainerCount = 0;
+                    int renderedContainerCount = 0;
                     int missingRendererCount = 0;
-                    for (int managerIndex = 0; managerIndex < managerCount; managerIndex++)
+                    for (int containerIndex = 0; containerIndex < containerCount; containerIndex++)
                     {
-                        VegetationRuntimeManager manager = managers[managerIndex];
-                        if (manager == null || !manager.isActiveAndEnabled)
+                        VegetationRuntimeContainer container = containers[containerIndex];
+                        if (container == null || !container.isActiveAndEnabled)
                         {
                             continue;
                         }
 
-                        activeManagerCount++;
-                        if (!manager.PrepareFrameForCamera(camera))
+                        activeContainerCount++;
+                        if (!container.PrepareFrameForCamera(camera))
                         {
                             continue;
                         }
 
-                        preparedManagerCount++;
-                        if (manager.IndirectRenderer == null)
+                        preparedContainerCount++;
+                        if (container.IndirectRenderer == null)
                         {
                             missingRendererCount++;
                             continue;
                         }
 
-                        manager.IndirectRenderer.Render(commandBuffer, camera, passMode);
-                        renderedManagerCount++;
+                        container.IndirectRenderer.Render(commandBuffer, camera, passMode);
+                        renderedContainerCount++;
                     }
 
-                    LogExecutionDiagnostics(camera, passMode, activeManagerCount, preparedManagerCount, renderedManagerCount, missingRendererCount, managers, managerCount);
+                    LogExecutionDiagnostics(camera, passMode, activeContainerCount, preparedContainerCount, renderedContainerCount, missingRendererCount, containers, containerCount);
                 }
             }
 
-            private static void DrawManagers(
-                IReadOnlyList<VegetationRuntimeManager> managers,
-                int managerCount,
+            private static void DrawContainers(
+                IReadOnlyList<VegetationRuntimeContainer> containers,
+                int containerCount,
                 Camera camera,
                 VegetationRenderPassMode passMode,
                 IRasterCommandBuffer commandBuffer)
             {
-                using (DrawManagersRasterMarker.Auto())
+                using (DrawContainersRasterMarker.Auto())
                 {
-                    int activeManagerCount = 0;
-                    int preparedManagerCount = 0;
-                    int renderedManagerCount = 0;
+                    int activeContainerCount = 0;
+                    int preparedContainerCount = 0;
+                    int renderedContainerCount = 0;
                     int missingRendererCount = 0;
-                    for (int managerIndex = 0; managerIndex < managerCount; managerIndex++)
+                    for (int containerIndex = 0; containerIndex < containerCount; containerIndex++)
                     {
-                        VegetationRuntimeManager manager = managers[managerIndex];
-                        if (manager == null || !manager.isActiveAndEnabled)
+                        VegetationRuntimeContainer container = containers[containerIndex];
+                        if (container == null || !container.isActiveAndEnabled)
                         {
                             continue;
                         }
 
-                        activeManagerCount++;
-                        if (!manager.PrepareFrameForCamera(camera))
+                        activeContainerCount++;
+                        if (!container.PrepareFrameForCamera(camera))
                         {
                             continue;
                         }
 
-                        preparedManagerCount++;
-                        if (manager.IndirectRenderer == null)
+                        preparedContainerCount++;
+                        if (container.IndirectRenderer == null)
                         {
                             missingRendererCount++;
                             continue;
                         }
 
-                        manager.IndirectRenderer.Render(commandBuffer, camera, passMode);
-                        renderedManagerCount++;
+                        container.IndirectRenderer.Render(commandBuffer, camera, passMode);
+                        renderedContainerCount++;
                     }
 
-                    LogExecutionDiagnostics(camera, passMode, activeManagerCount, preparedManagerCount, renderedManagerCount, missingRendererCount, managers, managerCount);
+                    LogExecutionDiagnostics(camera, passMode, activeContainerCount, preparedContainerCount, renderedContainerCount, missingRendererCount, containers, containerCount);
                 }
             }
 
             private static void LogExecutionDiagnostics(
                 Camera camera,
                 VegetationRenderPassMode passMode,
-                int activeManagerCount,
-                int preparedManagerCount,
-                int renderedManagerCount,
+                int activeContainerCount,
+                int preparedContainerCount,
+                int renderedContainerCount,
                 int missingRendererCount,
-                IReadOnlyList<VegetationRuntimeManager>? managers = null,
-                int managerCount = 0)
+                IReadOnlyList<VegetationRuntimeContainer>? containers = null,
+                int containerCount = 0)
             {
-                if (managers != null && !ShouldLogDiagnostics(managers, managerCount))
+                if (containers != null && !ShouldLogDiagnostics(containers, containerCount))
                 {
                     return;
                 }
 
                 string summary =
-                    $"VegetationRenderPass execute pass={passMode} camera={camera.name} activeManagers={activeManagerCount} preparedManagers={preparedManagerCount} renderedManagers={renderedManagerCount} missingRenderers={missingRendererCount}";
+                    $"VegetationRenderPass execute pass={passMode} camera={camera.name} activeContainers={activeContainerCount} preparedContainers={preparedContainerCount} renderedContainers={renderedContainerCount} missingRenderers={missingRendererCount}";
                 bool isDepthPass = passMode == VegetationRenderPassMode.Depth;
                 string previousSummary = isDepthPass ? lastDepthExecutionDiagnostics : lastColorExecutionDiagnostics;
                 if (summary == previousSummary)
@@ -308,7 +308,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     lastColorExecutionDiagnostics = summary;
                 }
 
-                if (renderedManagerCount == 0)
+                if (renderedContainerCount == 0)
                 {
                     UnityEngine.Debug.LogWarning(summary);
                 }
@@ -318,12 +318,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
             }
 
-            private static bool ShouldLogDiagnostics(IReadOnlyList<VegetationRuntimeManager> managers, int managerCount)
+            private static bool ShouldLogDiagnostics(IReadOnlyList<VegetationRuntimeContainer> containers, int containerCount)
             {
-                for (int i = 0; i < managerCount; i++)
+                for (int i = 0; i < containerCount; i++)
                 {
-                    VegetationRuntimeManager manager = managers[i];
-                    if (manager != null && manager.DiagnosticsEnabled)
+                    VegetationRuntimeContainer container = containers[i];
+                    if (container != null && container.DiagnosticsEnabled)
                     {
                         return true;
                     }
@@ -332,28 +332,28 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 return false;
             }
 
-            private void EnsureManagerSnapshotCapacity(int requiredCount)
+            private void EnsureContainerSnapshotCapacity(int requiredCount)
             {
-                if (managerSnapshot.Length >= requiredCount)
+                if (containerSnapshot.Length >= requiredCount)
                 {
                     return;
                 }
 
-                int newCapacity = Mathf.Max(1, managerSnapshot.Length);
+                int newCapacity = Mathf.Max(1, containerSnapshot.Length);
                 while (newCapacity < requiredCount)
                 {
                     newCapacity <<= 1;
                 }
 
-                managerSnapshot = new VegetationRuntimeManager[newCapacity];
+                containerSnapshot = new VegetationRuntimeContainer[newCapacity];
             }
 
             private sealed class PassData
             {
                 public Camera Camera = null!;
                 public VegetationRenderPassMode PassMode;
-                public VegetationRuntimeManager[] Managers = Array.Empty<VegetationRuntimeManager>();
-                public int ManagerCount;
+                public VegetationRuntimeContainer[] Containers = Array.Empty<VegetationRuntimeContainer>();
+                public int ContainerCount;
             }
         }
     }

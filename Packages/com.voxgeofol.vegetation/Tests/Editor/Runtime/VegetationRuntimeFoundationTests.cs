@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 using VoxGeoFol.Features.Vegetation.Authoring;
@@ -54,109 +53,53 @@ public sealed class VegetationRuntimeFoundationTests
     }
 
     [Test]
-    public void CpuReferenceEvaluator_L1Branch_ExpandsVisibleLeafAndKeepsFullTrunk()
+    public void IndirectRenderer_BindGpuResidentFrame_ExposesConservativeSnapshots()
     {
         VegetationTreeAuthoring authoring = CreateAuthoring("RuntimeTree", new Vector3(0f, 0f, 10f));
         VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
             .Build(new[] { authoring });
 
-        Camera camera = CreateCamera("RuntimeCamera", Vector3.zero, Quaternion.identity);
-        VegetationFrameDecisionState decisionState = new VegetationFrameDecisionState(registry);
-        VegetationFrameOutput frameOutput = registry.CreateFrameOutput();
-        VegetationCpuReferenceEvaluator evaluator = new VegetationCpuReferenceEvaluator();
+        int residentInstanceCapacity = 0;
+        for (int i = 0; i < registry.DrawSlotMaxInstanceCounts.Count; i++)
+        {
+            residentInstanceCapacity += registry.DrawSlotMaxInstanceCounts[i];
+        }
 
-        evaluator.EvaluateFrame(
-            registry,
-            camera.transform.position,
-            GeometryUtility.CalculateFrustumPlanes(camera),
-            decisionState,
-            frameOutput);
-
-        Assert.AreEqual(VegetationTreeRenderMode.Expanded, decisionState.TreeModes[0]);
-        Assert.AreEqual((int)VegetationRuntimeBranchTier.L1, decisionState.BranchDecisions[0].RuntimeTier);
-        Assert.AreEqual((int)VegetationNodeDecision.ExpandChildren, decisionState.NodeDecisions[0].Decision);
-        Assert.AreEqual((int)VegetationNodeDecision.EmitSelf, decisionState.NodeDecisions[1].Decision);
-
-        Dictionary<string, int> countsByLabel = CollectActiveSlotCounts(frameOutput);
-        Assert.AreEqual(1, countsByLabel["RuntimeTree_Blueprint:TrunkFull"]);
-        Assert.AreEqual(1, countsByLabel["RuntimeTree_Prototype:WoodL0"]);
-        Assert.AreEqual(1, countsByLabel["RuntimeTree_Prototype:ShellL1[1]"]);
-        Assert.IsFalse(countsByLabel.ContainsKey("RuntimeTree_Blueprint:Impostor"));
-    }
-
-    [Test]
-    public void CpuReferenceEvaluator_ImpostorBand_EmitsImpostorOnly()
-    {
-        VegetationTreeAuthoring authoring = CreateAuthoring("RuntimeTree", new Vector3(0f, 0f, 10f));
-        VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
-            .Build(new[] { authoring });
-
-        Camera camera = CreateCamera("RuntimeCamera", new Vector3(0f, 0f, -120f), Quaternion.identity);
-        VegetationFrameDecisionState decisionState = new VegetationFrameDecisionState(registry);
-        VegetationFrameOutput frameOutput = registry.CreateFrameOutput();
-        VegetationCpuReferenceEvaluator evaluator = new VegetationCpuReferenceEvaluator();
-
-        evaluator.EvaluateFrame(
-            registry,
-            camera.transform.position,
-            GeometryUtility.CalculateFrustumPlanes(camera),
-            decisionState,
-            frameOutput);
-
-        Assert.AreEqual(VegetationTreeRenderMode.Impostor, decisionState.TreeModes[0]);
-
-        Dictionary<string, int> countsByLabel = CollectActiveSlotCounts(frameOutput);
-        Assert.AreEqual(1, countsByLabel.Count);
-        Assert.AreEqual(1, countsByLabel["RuntimeTree_Blueprint:Impostor"]);
-    }
-
-    [Test]
-    public void IndirectRenderer_UploadFrameOutput_PreservesPerSlotCountsAndBounds()
-    {
-        VegetationTreeAuthoring authoring = CreateAuthoring("RuntimeTree", new Vector3(0f, 0f, 10f));
-        VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
-            .Build(new[] { authoring });
-
-        Camera camera = CreateCamera("RuntimeCamera", Vector3.zero, Quaternion.identity);
-        VegetationFrameDecisionState decisionState = new VegetationFrameDecisionState(registry);
-        VegetationFrameOutput frameOutput = registry.CreateFrameOutput();
-        new VegetationCpuReferenceEvaluator().EvaluateFrame(
-            registry,
-            camera.transform.position,
-            GeometryUtility.CalculateFrustumPlanes(camera),
-            decisionState,
-            frameOutput);
+        int indirectArgsUintCount = registry.DrawSlots.Count * (GraphicsBuffer.IndirectDrawIndexedArgs.size / sizeof(uint));
 
         using (VegetationIndirectRenderer indirectRenderer = new VegetationIndirectRenderer(registry, 7))
+        using (GraphicsBuffer instanceBuffer = new GraphicsBuffer(
+                   GraphicsBuffer.Target.Structured,
+                   Mathf.Max(1, residentInstanceCapacity),
+                   16))
+        using (GraphicsBuffer argsBuffer = new GraphicsBuffer(
+                   GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.IndirectArguments,
+                   Mathf.Max(1, indirectArgsUintCount),
+                   sizeof(uint)))
         {
-            indirectRenderer.UploadFrameOutput(frameOutput);
+            indirectRenderer.BindGpuResidentFrame(instanceBuffer, argsBuffer);
 
             List<VegetationIndirectDrawBatchSnapshot> snapshots = new List<VegetationIndirectDrawBatchSnapshot>();
             indirectRenderer.GetDebugSnapshots(snapshots);
-            Assert.AreEqual(frameOutput.ActiveSlotIndices.Count, snapshots.Count);
 
-            Dictionary<string, VegetationIndirectDrawBatchSnapshot> snapshotsByLabel = new Dictionary<string, VegetationIndirectDrawBatchSnapshot>(StringComparer.Ordinal);
-            for (int i = 0; i < snapshots.Count; i++)
+            int expectedSnapshotCount = 0;
+            for (int i = 0; i < registry.DrawSlotMaxInstanceCounts.Count; i++)
             {
-                snapshotsByLabel.Add(snapshots[i].DebugLabel, snapshots[i]);
+                if (registry.DrawSlotMaxInstanceCounts[i] > 0)
+                {
+                    expectedSnapshotCount++;
+                }
             }
 
-            Assert.AreEqual(1, snapshotsByLabel["RuntimeTree_Blueprint:TrunkFull"].InstanceCount);
-            Assert.AreEqual(1, snapshotsByLabel["RuntimeTree_Prototype:WoodL0"].InstanceCount);
-            Assert.AreEqual(1, snapshotsByLabel["RuntimeTree_Prototype:ShellL1[1]"].InstanceCount);
-
-            AssertBoundsEqual(
-                frameOutput,
-                "RuntimeTree_Blueprint:TrunkFull",
-                snapshotsByLabel["RuntimeTree_Blueprint:TrunkFull"].WorldBounds);
-            AssertBoundsEqual(
-                frameOutput,
-                "RuntimeTree_Prototype:WoodL0",
-                snapshotsByLabel["RuntimeTree_Prototype:WoodL0"].WorldBounds);
-            AssertBoundsEqual(
-                frameOutput,
-                "RuntimeTree_Prototype:ShellL1[1]",
-                snapshotsByLabel["RuntimeTree_Prototype:ShellL1[1]"].WorldBounds);
+            Assert.AreEqual(expectedSnapshotCount, snapshots.Count);
+            for (int i = 0; i < snapshots.Count; i++)
+            {
+                VegetationIndirectDrawBatchSnapshot snapshot = snapshots[i];
+                Assert.IsFalse(snapshot.HasExactInstanceCount);
+                Assert.AreEqual(0, snapshot.InstanceCount);
+                Bounds expectedBounds = registry.DrawSlotConservativeWorldBounds[snapshot.SlotIndex];
+                AssertBoundsEqual(snapshot.WorldBounds, expectedBounds);
+            }
         }
     }
 
@@ -172,63 +115,7 @@ public sealed class VegetationRuntimeFoundationTests
         Bounds actualBounds = VegetationRuntimeMathUtility.TransformBounds(localBounds, transformMatrix);
         Bounds expectedBounds = TransformBoundsByCornerSweep(localBounds, transformMatrix);
 
-        Assert.That(actualBounds.center.x, Is.EqualTo(expectedBounds.center.x).Within(0.0001f));
-        Assert.That(actualBounds.center.y, Is.EqualTo(expectedBounds.center.y).Within(0.0001f));
-        Assert.That(actualBounds.center.z, Is.EqualTo(expectedBounds.center.z).Within(0.0001f));
-        Assert.That(actualBounds.size.x, Is.EqualTo(expectedBounds.size.x).Within(0.0001f));
-        Assert.That(actualBounds.size.y, Is.EqualTo(expectedBounds.size.y).Within(0.0001f));
-        Assert.That(actualBounds.size.z, Is.EqualTo(expectedBounds.size.z).Within(0.0001f));
-    }
-
-    [Test]
-    public void GpuDecisionPipeline_MatchesCpuReferenceForL1ShellBranch()
-    {
-        if (!SystemInfo.supportsComputeShaders)
-        {
-            Assert.Ignore("Compute shaders are unavailable in this environment.");
-        }
-
-        ComputeShader? classifyShader = AssetDatabase.LoadAssetAtPath<ComputeShader>(
-            "Packages/com.voxgeofol.vegetation/Runtime/Shaders/VegetationClassify.compute");
-        if (classifyShader == null)
-        {
-            Assert.Ignore("VegetationClassify.compute could not be loaded.");
-        }
-
-        VegetationTreeAuthoring authoring = CreateAuthoring("RuntimeTree", new Vector3(0f, 0f, 10f));
-        VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
-            .Build(new[] { authoring });
-
-        Camera camera = CreateCamera("RuntimeCamera", Vector3.zero, Quaternion.identity);
-        Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(camera);
-
-        VegetationFrameDecisionState cpuState = new VegetationFrameDecisionState(registry);
-        VegetationFrameOutput cpuOutput = registry.CreateFrameOutput();
-        new VegetationCpuReferenceEvaluator().EvaluateFrame(registry, camera.transform.position, frustumPlanes, cpuState, cpuOutput);
-
-        VegetationGpuDecisionPipeline pipeline;
-        try
-        {
-            pipeline = new VegetationGpuDecisionPipeline(classifyShader!, registry);
-        }
-        catch (NotSupportedException exception)
-        {
-            Assert.Ignore(exception.Message);
-            return;
-        }
-
-        using (pipeline)
-        {
-            VegetationFrameDecisionState gpuState = pipeline.EvaluateFrameImmediate(camera.transform.position, frustumPlanes);
-            VegetationFrameOutput gpuOutput = registry.CreateFrameOutput();
-            VegetationDecisionDecoder.Decode(registry, gpuState, frustumPlanes, gpuOutput);
-
-            Assert.AreEqual(cpuState.TreeModes[0], gpuState.TreeModes[0]);
-            Assert.AreEqual(cpuState.BranchDecisions[0].RuntimeTier, gpuState.BranchDecisions[0].RuntimeTier);
-            Assert.AreEqual(cpuState.NodeDecisions[0].Decision, gpuState.NodeDecisions[0].Decision);
-            Assert.AreEqual(cpuState.NodeDecisions[1].Decision, gpuState.NodeDecisions[1].Decision);
-            CollectionAssert.AreEquivalent(CollectActiveSlotCounts(cpuOutput), CollectActiveSlotCounts(gpuOutput));
-        }
+        AssertBoundsEqual(actualBounds, expectedBounds);
     }
 
     private VegetationTreeAuthoring CreateAuthoring(string name, Vector3 worldPosition)
@@ -298,19 +185,6 @@ public sealed class VegetationRuntimeFoundationTests
         VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
         SetPrivateField(authoring, "blueprint", blueprint);
         return authoring;
-    }
-
-    private Camera CreateCamera(string name, Vector3 position, Quaternion rotation)
-    {
-        GameObject cameraObject = new GameObject(name);
-        createdObjects.Add(cameraObject);
-        cameraObject.transform.position = position;
-        cameraObject.transform.rotation = rotation;
-        Camera camera = cameraObject.AddComponent<Camera>();
-        camera.nearClipPlane = 0.1f;
-        camera.farClipPlane = 500f;
-        camera.fieldOfView = 60f;
-        return camera;
     }
 
     private BranchShellNode[] CreateShellHierarchy(Mesh rootMesh, Mesh leafMesh, int shellLevel)
@@ -413,19 +287,6 @@ public sealed class VegetationRuntimeFoundationTests
         return instance;
     }
 
-    private Dictionary<string, int> CollectActiveSlotCounts(VegetationFrameOutput frameOutput)
-    {
-        Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        for (int i = 0; i < frameOutput.ActiveSlotIndices.Count; i++)
-        {
-            int slotIndex = frameOutput.ActiveSlotIndices[i];
-            VegetationVisibleSlotOutput slotOutput = frameOutput.SlotOutputs[slotIndex];
-            counts.Add(slotOutput.DrawSlot.DebugLabel, slotOutput.InstanceCount);
-        }
-
-        return counts;
-    }
-
     private static Bounds TransformBoundsByCornerSweep(Bounds bounds, Matrix4x4 matrix)
     {
         Vector3 center = bounds.center;
@@ -452,25 +313,14 @@ public sealed class VegetationRuntimeFoundationTests
         return transformedBounds;
     }
 
-    private void AssertBoundsEqual(VegetationFrameOutput frameOutput, string drawLabel, Bounds actualBounds)
+    private static void AssertBoundsEqual(Bounds actualBounds, Bounds expectedBounds)
     {
-        for (int i = 0; i < frameOutput.ActiveSlotIndices.Count; i++)
-        {
-            int slotIndex = frameOutput.ActiveSlotIndices[i];
-            VegetationVisibleSlotOutput slotOutput = frameOutput.SlotOutputs[slotIndex];
-            if (slotOutput.DrawSlot.DebugLabel == drawLabel)
-            {
-                Assert.That(actualBounds.center.x, Is.EqualTo(slotOutput.VisibleBounds.center.x).Within(0.0001f));
-                Assert.That(actualBounds.center.y, Is.EqualTo(slotOutput.VisibleBounds.center.y).Within(0.0001f));
-                Assert.That(actualBounds.center.z, Is.EqualTo(slotOutput.VisibleBounds.center.z).Within(0.0001f));
-                Assert.That(actualBounds.size.x, Is.EqualTo(slotOutput.VisibleBounds.size.x).Within(0.0001f));
-                Assert.That(actualBounds.size.y, Is.EqualTo(slotOutput.VisibleBounds.size.y).Within(0.0001f));
-                Assert.That(actualBounds.size.z, Is.EqualTo(slotOutput.VisibleBounds.size.z).Within(0.0001f));
-                return;
-            }
-        }
-
-        Assert.Fail($"Visible slot '{drawLabel}' was not found in the current frame output.");
+        Assert.That(actualBounds.center.x, Is.EqualTo(expectedBounds.center.x).Within(0.0001f));
+        Assert.That(actualBounds.center.y, Is.EqualTo(expectedBounds.center.y).Within(0.0001f));
+        Assert.That(actualBounds.center.z, Is.EqualTo(expectedBounds.center.z).Within(0.0001f));
+        Assert.That(actualBounds.size.x, Is.EqualTo(expectedBounds.size.x).Within(0.0001f));
+        Assert.That(actualBounds.size.y, Is.EqualTo(expectedBounds.size.y).Within(0.0001f));
+        Assert.That(actualBounds.size.z, Is.EqualTo(expectedBounds.size.z).Within(0.0001f));
     }
 
     private static void SetPrivateField(object target, string fieldName, object? value)

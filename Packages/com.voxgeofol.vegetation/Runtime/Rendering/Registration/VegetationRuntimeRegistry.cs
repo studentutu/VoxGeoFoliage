@@ -90,66 +90,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         public int TotalNodeDecisionCapacity { get; }
 
-        internal VegetationDrawSlot[] DrawSlotsArray => drawSlots;
-
-        internal int[] DrawSlotMaxInstanceCountsArray => drawSlotMaxInstanceCounts;
-
-        internal Bounds[] DrawSlotConservativeWorldBoundsArray => drawSlotConservativeWorldBounds;
-
-        internal VegetationTreeBlueprintRuntime[] TreeBlueprintsArray => treeBlueprints;
-
-        internal VegetationTreeInstanceRuntime[] TreeInstancesArray => treeInstances;
-
-        internal VegetationSceneBranchRuntime[] SceneBranchesArray => sceneBranches;
-
         internal int[] NodeDrawSlotIndices => nodeDrawSlotIndices;
 
         internal Bounds[] NodeWorldBounds => nodeWorldBounds;
-
-        /// <summary>
-        /// [INTEGRATION] Creates the stable per-slot visible-output container that Phase D rebuilds every frame.
-        /// </summary>
-        public VegetationFrameOutput CreateFrameOutput(bool captureDebugInstances = true)
-        {
-            return new VegetationFrameOutput(DrawSlots, captureDebugInstances);
-        }
-
-        /// <summary>
-        /// [INTEGRATION] Resolves the per-branch node-decision slice for the selected runtime shell tier.
-        /// </summary>
-        public void GetDecisionRange(VegetationSceneBranchRuntime sceneBranch, VegetationRuntimeBranchTier runtimeTier, out int startIndex, out int count)
-        {
-            switch (runtimeTier)
-            {
-                case VegetationRuntimeBranchTier.L1:
-                    startIndex = sceneBranch.DecisionStartL1;
-                    count = sceneBranch.DecisionCountL1;
-                    return;
-                case VegetationRuntimeBranchTier.L2:
-                    startIndex = sceneBranch.DecisionStartL2;
-                    count = sceneBranch.DecisionCountL2;
-                    return;
-                case VegetationRuntimeBranchTier.L3:
-                    startIndex = sceneBranch.DecisionStartL3;
-                    count = sceneBranch.DecisionCountL3;
-                    return;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(runtimeTier), runtimeTier, "Node decisions exist only for shell runtime tiers L1/L2/L3.");
-            }
-        }
-
-        /// <summary>
-        /// [INTEGRATION] Resolves the prototype shell-node cache selected by one runtime shell tier.
-        /// </summary>
-        public IReadOnlyList<VegetationBranchShellNodeRuntimeBfs> GetShellNodes(VegetationRuntimeBranchTier runtimeTier)
-        {
-            return runtimeTier switch
-            {
-                VegetationRuntimeBranchTier.L1 => shellNodesL1,
-                VegetationRuntimeBranchTier.L2 => shellNodesL2,
-                VegetationRuntimeBranchTier.L3 => shellNodesL3,
-                _ => throw new ArgumentOutOfRangeException(nameof(runtimeTier), runtimeTier, "Shell-node runtime caches exist only for shell runtime tiers L1/L2/L3.")
-            };
-        }
     }
 }
