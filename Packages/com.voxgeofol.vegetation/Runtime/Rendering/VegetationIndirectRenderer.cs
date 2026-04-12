@@ -79,7 +79,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             {
                 if (disposed)
                 {
-                    throw new ObjectDisposedException(nameof(VegetationIndirectRenderer));
+                    return;
                 }
 
                 if (instanceBuffer == null)
@@ -136,7 +136,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             if (disposed)
             {
-                throw new ObjectDisposedException(nameof(VegetationIndirectRenderer));
+               return;
             }
 
             if (commandBuffer == null)
@@ -163,7 +163,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             if (disposed)
             {
-                throw new ObjectDisposedException(nameof(VegetationIndirectRenderer));
+                return;
             }
 
             if (commandBuffer == null)

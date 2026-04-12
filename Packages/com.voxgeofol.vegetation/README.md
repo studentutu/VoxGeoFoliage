@@ -68,7 +68,7 @@ Examples:
 4. `VegetationRendererFeature` added to the active URP renderer. Preview via scene view or Render graph viewer.
 5. `VegetationFoliageFeatureSettings.ClassifyShader` assigned to `VegetationClassify.compute`.
 6. Opaque URP SRP-compatible shaders only.
-7. Runtime vegetation shaders compatible with the package indirect-instance contract.
+7. Runtime vegetation shaders compatible with the package indirect-instance contract. The bundled package shaders now include main-light shadow attenuation plus a `ShadowCaster` pass.
 
 ## Setup
 
@@ -262,6 +262,7 @@ Per-frame worklists:
 11. The urgent runtime now reprioritizes inside one container with `TreeL3` floor plus nearest-first promotion, but there is still no global cross-container arbiter.
 12. Multi-container prioritization stays unresolved follow-up work; the dense-forest one-container design authority remains [../../DetailedDocs/urgentRedesign.md](../../DetailedDocs/urgentRedesign.md).
 13. Closed `SubScene` runtime loading requires `SubSceneAuthoring` on the same GameObject as `VegetationRuntimeContainer`; the plain container alone is only the classic-scene lifecycle provider.
+14. The bundled package shaders now include a `ShadowCaster` pass and main-light shadow attenuation, but the current indirect runtime still submits only depth and color passes. That means shader-level shadow support is ready, while full runtime vegetation shadow-atlas submission is still follow-up work.
 
 ## Supported Devices
 

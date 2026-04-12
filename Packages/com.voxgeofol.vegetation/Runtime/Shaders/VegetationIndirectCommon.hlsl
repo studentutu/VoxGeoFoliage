@@ -1,6 +1,8 @@
 #ifndef VOXGEOFOL_VEGETATION_INDIRECT_COMMON_INCLUDED
 #define VOXGEOFOL_VEGETATION_INDIRECT_COMMON_INCLUDED
 
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
 struct VegetationInstanceData
 {
     float4x4 objectToWorld;
@@ -14,6 +16,8 @@ struct VegetationInstanceData
 StructuredBuffer<VegetationInstanceData> _VegetationInstanceData;
 StructuredBuffer<uint> _VegetationSlotPackedStarts;
 uint _VegetationSlotIndex;
+float3 _LightDirection;
+float3 _LightPosition;
 
 VegetationInstanceData LoadVegetationInstance(uint svInstanceId)
 {
@@ -36,6 +40,21 @@ float3 DecodePackedLeafTint(uint packedLeafTint)
         (packedLeafTint & 255u) / 255.0f,
         ((packedLeafTint >> 8u) & 255u) / 255.0f,
         ((packedLeafTint >> 16u) & 255u) / 255.0f);
+}
+
+float4 GetVegetationShadowPositionHClip(float3 positionOS, float3 normalOS, VegetationInstanceData instanceData)
+{
+    float3 positionWS = TransformVegetationPosition(positionOS, instanceData);
+    float3 normalWS = TransformVegetationNormal(normalOS, instanceData);
+
+#if _CASTING_PUNCTUAL_LIGHT_SHADOW
+    float3 lightDirectionWS = normalize(_LightPosition - positionWS);
+#else
+    float3 lightDirectionWS = _LightDirection;
+#endif
+
+    float4 positionCS = TransformWorldToHClip(ApplyShadowBias(positionWS, normalWS, lightDirectionWS));
+    return ApplyShadowClamping(positionCS);
 }
 
 #endif
