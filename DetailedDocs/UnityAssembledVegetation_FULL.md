@@ -4,11 +4,14 @@
 
 This document defines the production target inspired by Unreal Engine 5.7 foliage innovations (Assemblies, voxelized LOD, and hierarchical wind animation) for a high-performance vegetation system in Unity 6 URP.
 
-Current implementation note (`2026-04-11`):
+Current implementation note (`2026-04-12`):
 - The old MVP CPU fallback / async-readback runtime bridge is retired.
 - Production runtime is GPU-resident only through `VegetationRuntimeContainer`, `VegetationGpuDecisionPipeline`, and `VegetationIndirectRenderer`.
 - `VegetationRuntimeContainer` now consumes an explicit serialized `VegetationTreeAuthoring` list. Every referenced authoring must live inside that container's hierarchy, and editor fill tooling excludes descendants claimed by nested child containers. This is the intended streaming/addressables contract.
 - Runtime registration is still a frozen snapshot. Transform edits and other registration-affecting authoring changes require explicit `RefreshRuntimeRegistration()`.
+- Runtime registration no longer duplicates per-scene shell-node world bounds or per-scene node-decision slices for every branch instance. Persisted shell hierarchies stay prototype-local.
+- Runtime uses tree spheres from registration for coarse tree classification, then generates branch bounds and shell-node bounds on GPU per frame from prototype-local bounds plus branch transforms.
+- Visible instances are now counted and packed into one hard-bounded shared GPU instance buffer every frame. `VegetationRuntimeContainer.maxVisibleInstanceCapacity` is the active runtime budget; overflow clamps instead of reallocating scene-scale per-slot or per-node memory.
 - The old CPU/decode parity layer was also removed from `Runtime/Rendering`, so historical sections below that mention temporary CPU fallback should be treated as superseded design history rather than the current runtime contract.
 
 The system is designed to:
@@ -39,7 +42,7 @@ The runtime backend is `Graphics.RenderMeshIndirect` driven from a URP renderer 
 
 ## 1.1 High-Level Pipeline
 
-Editor Authoring -> Editor Bake -> Runtime Registration/Flattening -> GPU-primary cell visibility -> GPU tree classification -> GPU branch and hierarchy survival evaluation -> GPU-resident survivor decode and emission -> optional URP indirect depth pass -> URP indirect color pass
+Editor Authoring -> Editor Bake -> Runtime Registration/Flattening -> GPU-primary cell visibility -> GPU tree classification -> GPU branch and hierarchy survival evaluation -> GPU-resident count/pack/emit -> optional URP indirect depth pass -> URP indirect color pass
 
 Key  target principle: minimum draw-calls with minimum geometry.
 
@@ -113,7 +116,7 @@ Allowed responsibilities:
 - classify trees and branch tiers
 - evaluate shell-node survival decisions
 - decode visible frontiers
-- build visible-instance lists, indirect args, and per-slot `worldBounds`
+- build visible-instance lists, indirect args, and conservative per-slot `worldBounds`
 - submit indirect draws
 
 Forbidden responsibilities:
@@ -236,7 +239,7 @@ Required invariants:
 - child bounds always stay inside parent bounds
 - node `localBounds` always contain the emitted mesh bounds for that node
 
-This is enough for MVP survivor decode, including the GPU-primary path and the temporary CPU fallback.
+This is enough for MVP direct GPU frontier traversal and emission.
 
 It is not enough for efficient subtree skipping at scale. After MVP, switch to DFS preorder plus subtree spans.
 
@@ -244,7 +247,7 @@ It is not enough for efficient subtree skipping at scale. After MVP, switch to D
 
 - Unity 6 URP Forward+
 - compute shaders for tree classification, branch decisions, and hierarchy survival decisions
-- GPU-primary survivor decode for MVP with a temporary non-blocking CPU fallback path
+- GPU-resident count/pack/emit of visible instances into one shared bounded buffer
 - `Graphics.RenderMeshIndirect`
 - per-draw-slot indirect args and visible instance buffers
 - URP renderer feature for depth and color pass integration
@@ -308,8 +311,9 @@ At runtime:
 - expanded trees enqueue branch work items
 - each branch work item chooses runtime `L0`, `L1`, `L2`, or `L3`
 - shell-mode branches evaluate the chosen hierarchy
-- GPU writes compact survival decisions
-- survivor decode reconstructs the visible frontier from those decisions on GPU by default and otherwise only through the temporary non-blocking CPU fallback path, then emits exact visible frontier meshes by draw slot
+- GPU counts required instances per draw slot
+- GPU packs all visible tree, branch, and shell outputs into one bounded shared visible-instance buffer
+- overflow is clamped against the shared visible-instance capacity instead of growing scene-scale buffers
 
 Current Phase D decision rule:
 - nodes outside the frustum are `Reject`
@@ -419,14 +423,15 @@ Required staged work:
 1. GPU-primary tree-level coarse visibility
 2. tree-level mode selection (`Culled`, `Expanded`, `Impostor`)
 3. branch-level tier selection (`L0/L1/L2/L3`)
-4. hierarchy survival decisions for shell tiers
-5. GPU-primary survivor decode
-6. CPU fallback bridge only when the GPU decode path is unavailable or explicitly disabled
-7. per-draw-slot indirect submission
+4. hierarchy traversal for shell tiers against prototype-local BFS data
+5. per-slot instance counting
+6. per-slot packed-start build for the shared visible-instance buffer
+7. direct GPU emission into the bounded shared visible-instance buffer
+8. per-draw-slot indirect submission
 
-## 5.2 Exact Runtime Node and Survival Payloads
+## 5.2 Exact Runtime Branch and Emission Payloads
 
-MVP decode requires two explicit decision contracts.
+MVP emission requires one explicit branch-decision contract plus one explicit shared-buffer packing contract.
 
 ### `BranchShellNodeRuntimeBfs`
 
@@ -451,25 +456,30 @@ Meaning:
 - uint runtimeTier        // L0, L1, L2, L3
 ```
 
-### `NodeDecisionGPU`
+### Shared per-frame packing state
 
 ```text
-- uint treeIndex
-- uint branchPlacementIndex
-- uint runtimeTier        // L1, L2, L3 only
-- uint nodeIndex
-- uint decision           // Reject, EmitSelf, ExpandChildren
+- uint slotRequestedInstanceCounts[drawSlotCount]
+- uint slotEmittedInstanceCounts[drawSlotCount]
+- uint slotPackedStarts[drawSlotCount]
+- VegetationIndirectInstanceData visibleInstances[maxVisibleInstanceCapacity]
+- IndirectArgs indirectArgs[drawSlotCount]
 ```
 
-GPU or CPU fallback uses `BranchDecisionGPU` and `NodeDecisionGPU` to reconstruct the final visible frontier.
+Meaning:
+- shell-node arrays stay prototype-local and are never duplicated into scene-wide per-node decision buffers
+- shell-tier branches traverse the selected BFS hierarchy directly on GPU from the chosen prototype-local shell array
+- tree, wood, foliage, and shell outputs all land in one shared visible-instance buffer
+- `slotPackedStarts` defines each draw slot's packed range inside that shared buffer
+- `VegetationRuntimeContainer.maxVisibleInstanceCapacity` is the hard scene budget for visible packed instances
 
 ## 5.3 Why BFS Is Acceptable For MVP
 
-BFS is acceptable for MVP because the decode path is still intentionally simple, whether the frontier is reconstructed by a temporary GPU queue or by the non-blocking CPU fallback after GPU rules are applied.
+BFS is acceptable for MVP because the current GPU path only needs immediate-child traversal to count and emit visible leaves directly from prototype-local shell hierarchies.
 
 MVP BFS strengths:
 - easy immediate-child lookup from `firstChildIndex + childMask`
-- simple queue-based decode on GPU or CPU
+- simple queue-based traversal in GPU count and emit passes
 - no need for subtree spans yet
 
 MVP BFS weaknesses:
@@ -481,21 +491,22 @@ After MVP, migrate to DFS preorder with subtree spans.
 
 ---
 
-# 6. GPU and CPU Decode Pipeline
+# 6. GPU Direct Emission Pipeline
 
 ## 6.1 Frame Stages
 
 Per frame:
 1. GPU updates coarse cell visibility
-2. GPU clears counters and staging buffers
-3. GPU classifies trees into `Culled`, `Expanded`, or `Impostor`
-4. GPU emits one far-mesh instance record for `Impostor` trees
-5. GPU emits one `BranchDecisionGPU` record for each surviving expanded branch placement
-6. GPU emits `NodeDecisionGPU` records for shell-tier branches
-7. GPU decodes the surviving frontier directly
-8. CPU fallback consumes the latest completed non-blocking readback of compact decision buffers only when the GPU decode path is unavailable or explicitly disabled
-9. CPU uploads per-draw-slot instance data and indirect args from GPU-decoded lists or from the CPU fallback decode result
-10. URP renders indirect depth and color passes
+2. GPU classifies trees into `Culled`, `Expanded`, or `Impostor`
+3. GPU classifies branch placements into `L0`, `L1`, `L2`, or `L3`
+4. GPU resets per-slot requested and emitted counters
+5. GPU counts tree-level emissions for trunks and impostors
+6. GPU counts branch-level emissions by traversing prototype-local shell hierarchies for shell tiers
+7. GPU builds `slotPackedStarts` for the bounded shared visible-instance buffer
+8. GPU emits trees into the packed visible-instance buffer
+9. GPU emits branch wood, foliage, and shell leaf instances directly into the packed visible-instance buffer
+10. GPU finalizes indirect args with instance counts clamped to remaining shared capacity
+11. URP renders indirect depth and color passes
 
 ## 6.2 Example Tree Classification Pseudocode
 
@@ -560,15 +571,18 @@ void ClassifyBranches(uint id : SV_DispatchThreadID)
 }
 ```
 
-## 6.4 Example Shell Hierarchy Survival Pseudocode
+## 6.4 Example Shell Hierarchy Count/Emit Pseudocode
 
 ```hlsl
 [numthreads(64, 1, 1)]
-void EvaluateHierarchyNodes(uint id : SV_DispatchThreadID)
+void EmitBranchTierInstances(uint id : SV_DispatchThreadID)
 {
     BranchDecisionGPU branch = _BranchDecisions[id];
     if (branch.runtimeTier == TierL0)
+    {
+        EmitSourceBranch(branch);
         return;
+    }
 
     uint nodeIndex = 0; // root of selected BFS hierarchy
     Queue<uint> frontier;
@@ -577,13 +591,19 @@ void EvaluateHierarchyNodes(uint id : SV_DispatchThreadID)
     while (frontier.NotEmpty())
     {
         uint current = frontier.Pop();
-        NodeDecision decision = EvaluateNodeDecision(branch, current);
-        EmitNodeDecision(branch, current, decision);
+        NodeVisibility visibility = EvaluateNodeVisibility(branch, current);
+        if (visibility == Reject)
+        {
+            continue;
+        }
 
-        if (decision == ExpandChildren)
+        if (NodeHasChildren(current))
         {
             PushImmediateChildren(frontier, current);
+            continue;
         }
+
+        EmitShellLeaf(branch, current);
     }
 }
 ```
@@ -593,9 +613,9 @@ Current Phase D implementation keeps this rule deterministic:
 - `ExpandChildren` for visible nodes that still have children
 - `EmitSelf` only for visible leaves
 
-## 6.5 Hybrid Survivor Decode
+## 6.5 Direct GPU Frontier Emission
 
-Hybrid decode is the authoritative MVP reconstruction step.
+Direct GPU frontier emission is the authoritative MVP reconstruction step.
 
 For each `BranchDecisionGPU`:
 - if runtime tier is `L0`, emit source branch `woodMesh + foliageMesh`
@@ -603,24 +623,18 @@ For each `BranchDecisionGPU`:
 - if runtime tier is `L2`, decode `shellNodesL1`
 - if runtime tier is `L3`, decode `shellNodesL2`
 
-For each `NodeDecisionGPU`:
-- `Reject` -> stop on that node
-- `EmitSelf` -> add that node's `shellDrawSlot` to the per-draw-slot visible list
-- `ExpandChildren` -> enqueue the node's contiguous immediate-child block using BFS contract
+Per-frame packing flow:
+- count how many instances each draw slot wants to emit
+- build one packed start offset per draw slot inside the shared visible-instance buffer
+- emit all tree, branch, and shell instances directly into that shared buffer
+- clamp final indirect instance counts when a draw slot would extend past the remaining shared capacity
 
-Preferred MVP path:
-- decode the visible frontier on GPU and append final per-draw-slot visible instance data directly
-
-CPU fallback path:
-- read back compact decision buffers through completed non-blocking async results only when the GPU decode path is unavailable or explicitly disabled
-- decode the visible frontier on CPU from the same BFS contract
-
-After survivor decode:
+After direct GPU emission:
 - select one trunk draw for each expanded tree:
   - if any surviving branch decision is `L0` or `L1`, emit `trunkMesh`
   - otherwise emit `trunkL3Mesh`
-- group all visible instances by exact mesh/material draw slot
-- upload instance transforms and indirect args
+- bind the shared visible-instance buffer plus `slotPackedStarts`
+- submit one indirect call per exact mesh/material draw slot
 - render one indirect call per draw slot
 
 ---
@@ -643,13 +657,15 @@ These buffers are optional runtime-side caches built from the runtime-facing aut
 
 - `ExpandedTrees`
 - `BranchDecisions`
-- `NodeDecisions`
-- decoded visible instance lists per draw slot (`GPU` preferred, `CPU` fallback)
+- `SlotRequestedInstanceCounts`
+- `SlotEmittedInstanceCounts`
+- `SlotPackedStarts`
+- bounded shared visible instance buffer
 - indirect argument buffers per draw slot
 
 ## 7.3 Flow
 
-Tree -> Expanded or Impostor -> BranchDecision -> NodeDecision -> CPU/GPU BFS decode -> DrawSlot -> Indirect call
+Tree -> Expanded or Impostor -> BranchDecision -> BFS count/emit from prototype-local shell data -> Packed shared buffer -> DrawSlot indirect call
 
 ---
 
@@ -703,7 +719,7 @@ Tree -> Expanded or Impostor -> BranchDecision -> NodeDecision -> CPU/GPU BFS de
 
 # 9. Developer Verification
 
-Milestone 1 should not add a large new runtime test plan yet. It must add strong developer-side verification for the hybrid decode path.
+Milestone 1 should not add a large new runtime test plan yet. It must add strong developer-side verification for the direct GPU emission path.
 
 Required developer verification:
 - dump one flattened hierarchy per tier and confirm:
@@ -714,10 +730,9 @@ Required developer verification:
   - child bounds stay inside parent bounds
   - mesh bounds stay inside node `localBounds`
 - log one frame of `BranchDecisionGPU` output and verify selected runtime tiers match authored distances
-- log one frame of `NodeDecisionGPU` output and verify the CPU-decoded frontier matches the emitted shell nodes for that camera position
-- compare per-draw-slot decoded instance counts against uploaded indirect args
-- verify the GPU decode path produces the same visible frontier as the CPU fallback on one captured frame
-- if CPU fallback is active, verify its readback path stays non-blocking and only consumes completed async results
+- capture one frame of packed per-slot counts and verify shell-tier leaves are emitted only from visible leaf nodes
+- compare packed per-draw-slot emitted instance counts against uploaded indirect args
+- verify visible packed instance count clamps cleanly when the shared capacity is exceeded
 - verify `L0` only appears inside the authored near band
 - verify `Impostor` only appears once tree distance reaches the impostor band
 - verify invalid generated meshes still render, while validation marks the asset invalid in tooling
@@ -744,14 +759,15 @@ This system targets large-scale vegetation in Unity by combining:
 - reusable authored branches
 - bounded baked shell hierarchies
 - GPU visibility and hierarchy survival decisions
-- GPU-primary BFS decode for MVP with a temporary CPU fallback
+- GPU-resident direct frontier emission into one bounded shared visible-instance buffer
 - exact per-draw-slot indirect submission
 
 The runtime authority is now:
 - runtime `L0/L1/L2/L3 + Impostor`
 - authored shell arrays shifted into runtime `L1/L2/L3`
 - BFS hierarchy flattening for MVP
-- GPU-primary survivor decode before indirect submission, with a temporary non-blocking CPU fallback
+- prototype-local shell caches plus per-frame GPU count/pack/emit
+- explicit `maxVisibleInstanceCapacity` as the hard runtime visible-instance budget
 - multiple indirect calls grouped by exact mesh/material slots, not one literal draw call
 
 ---

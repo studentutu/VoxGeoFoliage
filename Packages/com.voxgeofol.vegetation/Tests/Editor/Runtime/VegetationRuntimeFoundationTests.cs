@@ -30,7 +30,7 @@ public sealed class VegetationRuntimeFoundationTests
     }
 
     [Test]
-    public void RuntimeRegistryBuilder_AssignsCellsAndBranchDecisionSlicesDeterministically()
+    public void RuntimeRegistryBuilder_AssignsCellsAndKeepsPrototypeShellDataShared()
     {
         VegetationTreeAuthoring firstAuthoring = CreateAuthoring("Tree_A", new Vector3(0f, 0f, 10f));
         VegetationTreeAuthoring secondAuthoring = CreateAuthoring("Tree_B", new Vector3(120f, 0f, 10f));
@@ -43,13 +43,11 @@ public sealed class VegetationRuntimeFoundationTests
         Assert.AreEqual("Tree_B", registry.TreeInstances[1].Authoring.name);
         Assert.AreEqual(2, registry.SpatialGrid.Cells.Count);
         Assert.AreNotEqual(registry.TreeInstances[0].CellIndex, registry.TreeInstances[1].CellIndex);
-        Assert.AreEqual(12, registry.TotalNodeDecisionCapacity);
-        Assert.AreEqual(0, registry.SceneBranches[0].DecisionStartL1);
-        Assert.AreEqual(2, registry.SceneBranches[0].DecisionStartL2);
-        Assert.AreEqual(4, registry.SceneBranches[0].DecisionStartL3);
-        Assert.AreEqual(6, registry.SceneBranches[1].DecisionStartL1);
-        Assert.AreEqual(8, registry.SceneBranches[1].DecisionStartL2);
-        Assert.AreEqual(10, registry.SceneBranches[1].DecisionStartL3);
+        Assert.AreEqual(2, registry.SceneBranches.Count);
+        Assert.AreEqual(2, registry.ShellNodesL1.Count);
+        Assert.AreEqual(2, registry.ShellNodesL2.Count);
+        Assert.AreEqual(2, registry.ShellNodesL3.Count);
+        Assert.AreEqual(registry.SceneBranches[0].PrototypeIndex, registry.SceneBranches[1].PrototypeIndex);
     }
 
     [Test]
@@ -59,39 +57,27 @@ public sealed class VegetationRuntimeFoundationTests
         VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
             .Build(new[] { authoring });
 
-        int residentInstanceCapacity = 0;
-        for (int i = 0; i < registry.DrawSlotMaxInstanceCounts.Count; i++)
-        {
-            residentInstanceCapacity += registry.DrawSlotMaxInstanceCounts[i];
-        }
-
         int indirectArgsUintCount = registry.DrawSlots.Count * (GraphicsBuffer.IndirectDrawIndexedArgs.size / sizeof(uint));
 
         using (VegetationIndirectRenderer indirectRenderer = new VegetationIndirectRenderer(registry, 7))
         using (GraphicsBuffer instanceBuffer = new GraphicsBuffer(
                    GraphicsBuffer.Target.Structured,
-                   Mathf.Max(1, residentInstanceCapacity),
+                   64,
                    16))
         using (GraphicsBuffer argsBuffer = new GraphicsBuffer(
                    GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.IndirectArguments,
                    Mathf.Max(1, indirectArgsUintCount),
                    sizeof(uint)))
+        using (ComputeBuffer slotPackedStartsBuffer = new ComputeBuffer(
+                   Mathf.Max(1, registry.DrawSlots.Count),
+                   sizeof(uint)))
         {
-            indirectRenderer.BindGpuResidentFrame(instanceBuffer, argsBuffer);
+            indirectRenderer.BindGpuResidentFrame(instanceBuffer, argsBuffer, slotPackedStartsBuffer);
 
             List<VegetationIndirectDrawBatchSnapshot> snapshots = new List<VegetationIndirectDrawBatchSnapshot>();
             indirectRenderer.GetDebugSnapshots(snapshots);
 
-            int expectedSnapshotCount = 0;
-            for (int i = 0; i < registry.DrawSlotMaxInstanceCounts.Count; i++)
-            {
-                if (registry.DrawSlotMaxInstanceCounts[i] > 0)
-                {
-                    expectedSnapshotCount++;
-                }
-            }
-
-            Assert.AreEqual(expectedSnapshotCount, snapshots.Count);
+            Assert.AreEqual(registry.DrawSlots.Count, snapshots.Count);
             for (int i = 0; i < snapshots.Count; i++)
             {
                 VegetationIndirectDrawBatchSnapshot snapshot = snapshots[i];

@@ -28,9 +28,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly List<VegetationBranchShellNodeRuntimeBfs> shellNodesL3 = new List<VegetationBranchShellNodeRuntimeBfs>();
         private readonly List<VegetationTreeInstanceRuntime> treeInstances = new List<VegetationTreeInstanceRuntime>();
         private readonly List<VegetationSceneBranchRuntime> sceneBranches = new List<VegetationSceneBranchRuntime>();
-        private readonly List<int> nodeDrawSlotIndices = new List<int>();
-        private readonly List<Bounds> nodeWorldBounds = new List<Bounds>();
-        private int totalNodeDecisionCapacity;
 
         public VegetationRuntimeRegistryBuilder(Vector3 gridOrigin, Vector3 cellSize)
         {
@@ -86,32 +83,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     Vector3 branchSphereCenter = branchWorldBounds.center;
                     float branchSphereRadius = branchWorldBounds.extents.magnitude;
                     VegetationBranchPrototypeRuntime prototypeRuntime = branchPrototypes[prototypeIndex];
-                    int decisionStartL1 = totalNodeDecisionCapacity;
-                    Bounds shellWorldBoundsL1 = AppendSceneBranchNodeWorldData(
-                        nodeDrawSlotIndices,
-                        nodeWorldBounds,
-                        shellNodesL1,
-                        prototypeRuntime.ShellNodeStartIndexL1,
-                        prototypeRuntime.ShellNodeCountL1,
-                        branchWorldMatrix);
-                    int decisionStartL2 = totalNodeDecisionCapacity + prototypeRuntime.ShellNodeCountL1;
-                    Bounds shellWorldBoundsL2 = AppendSceneBranchNodeWorldData(
-                        nodeDrawSlotIndices,
-                        nodeWorldBounds,
-                        shellNodesL2,
-                        prototypeRuntime.ShellNodeStartIndexL2,
-                        prototypeRuntime.ShellNodeCountL2,
-                        branchWorldMatrix);
-                    int decisionStartL3 = totalNodeDecisionCapacity + prototypeRuntime.ShellNodeCountL1 + prototypeRuntime.ShellNodeCountL2;
-                    Bounds shellWorldBoundsL3 = AppendSceneBranchNodeWorldData(
-                        nodeDrawSlotIndices,
-                        nodeWorldBounds,
-                        shellNodesL3,
-                        prototypeRuntime.ShellNodeStartIndexL3,
-                        prototypeRuntime.ShellNodeCountL3,
-                        branchWorldMatrix);
 
-                    VegetationSceneBranchRuntime sceneBranch = new VegetationSceneBranchRuntime
+                    sceneBranches.Add(new VegetationSceneBranchRuntime
                     {
                         TreeIndex = treeInstances.Count,
                         BranchPlacementIndex = branchPlacementIndex,
@@ -121,34 +94,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         WoodDrawSlotL2 = prototypeRuntime.WoodDrawSlotL2,
                         WoodDrawSlotL3 = prototypeRuntime.WoodDrawSlotL3,
                         FoliageDrawSlotL0 = prototypeRuntime.FoliageDrawSlotL0,
-                        PackedLeafTint = prototypeRuntime.PackedLeafTint,
                         LocalToWorld = branchWorldMatrix,
-                        WorldToObject = branchWorldToObject,
-                        WorldBounds = branchWorldBounds,
-                        WoodWorldBoundsL0 = TransformDrawSlotBounds(prototypeRuntime.WoodDrawSlotL0, branchWorldMatrix),
-                        WoodWorldBoundsL1 = TransformDrawSlotBounds(prototypeRuntime.WoodDrawSlotL1, branchWorldMatrix),
-                        WoodWorldBoundsL2 = TransformDrawSlotBounds(prototypeRuntime.WoodDrawSlotL2, branchWorldMatrix),
-                        WoodWorldBoundsL3 = TransformDrawSlotBounds(prototypeRuntime.WoodDrawSlotL3, branchWorldMatrix),
-                        FoliageWorldBoundsL0 = TransformDrawSlotBounds(prototypeRuntime.FoliageDrawSlotL0, branchWorldMatrix),
-                        ShellWorldBoundsL1 = shellWorldBoundsL1,
-                        ShellWorldBoundsL2 = shellWorldBoundsL2,
-                        ShellWorldBoundsL3 = shellWorldBoundsL3,
                         SphereCenterWorld = branchSphereCenter,
                         BoundingSphereRadius = branchSphereRadius,
-                        DecisionStartL1 = decisionStartL1,
-                        DecisionCountL1 = prototypeRuntime.ShellNodeCountL1,
-                        DecisionStartL2 = decisionStartL2,
-                        DecisionCountL2 = prototypeRuntime.ShellNodeCountL2,
-                        DecisionStartL3 = decisionStartL3,
-                        DecisionCountL3 = prototypeRuntime.ShellNodeCountL3,
                         WoodUploadInstanceData = CreateUploadInstanceData(branchWorldMatrix, branchWorldToObject, 0u),
                         FoliageUploadInstanceData = CreateUploadInstanceData(branchWorldMatrix, branchWorldToObject, prototypeRuntime.PackedLeafTint)
-                    };
-
-                    totalNodeDecisionCapacity += prototypeRuntime.ShellNodeCountL1;
-                    totalNodeDecisionCapacity += prototypeRuntime.ShellNodeCountL2;
-                    totalNodeDecisionCapacity += prototypeRuntime.ShellNodeCountL3;
-                    sceneBranches.Add(sceneBranch);
+                    });
                 }
 
                 treeInstances.Add(new VegetationTreeInstanceRuntime
@@ -171,11 +122,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             VegetationSpatialGrid spatialGrid = VegetationSpatialGrid.Build(gridOrigin, cellSize, treeInstances);
-            BuildDrawSlotCapacityMetadata(out int[] drawSlotMaxInstanceCounts, out Bounds[] drawSlotConservativeWorldBounds);
             return new VegetationRuntimeRegistry(
                 drawSlots.ToArray(),
-                drawSlotMaxInstanceCounts,
-                drawSlotConservativeWorldBounds,
+                BuildDrawSlotConservativeBounds(),
                 lodProfiles.ToArray(),
                 treeBlueprints.ToArray(),
                 blueprintBranchPlacements.ToArray(),
@@ -185,62 +134,71 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 shellNodesL3.ToArray(),
                 treeInstances.ToArray(),
                 sceneBranches.ToArray(),
-                nodeDrawSlotIndices.ToArray(),
-                nodeWorldBounds.ToArray(),
-                spatialGrid,
-                totalNodeDecisionCapacity);
+                spatialGrid);
         }
 
-        private void BuildDrawSlotCapacityMetadata(out int[] drawSlotMaxInstanceCounts, out Bounds[] drawSlotConservativeWorldBounds)
+        private Bounds[] BuildDrawSlotConservativeBounds()
         {
             int slotCount = drawSlots.Count;
-            drawSlotMaxInstanceCounts = new int[slotCount];
-            drawSlotConservativeWorldBounds = new Bounds[slotCount];
+            Bounds[] drawSlotConservativeWorldBounds = new Bounds[slotCount];
             bool[] hasBounds = new bool[slotCount];
+            bool hasSceneBounds = false;
+            Bounds sceneBounds = default;
 
             for (int treeIndex = 0; treeIndex < treeInstances.Count; treeIndex++)
             {
                 VegetationTreeInstanceRuntime treeInstance = treeInstances[treeIndex];
                 VegetationTreeBlueprintRuntime blueprint = treeBlueprints[treeInstance.BlueprintIndex];
-                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, blueprint.ImpostorDrawSlot, treeInstance.ImpostorWorldBounds);
-                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, blueprint.TrunkFullDrawSlot, treeInstance.TrunkFullWorldBounds);
-                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, blueprint.TrunkL3DrawSlot, treeInstance.TrunkL3WorldBounds);
+
+                if (!hasSceneBounds)
+                {
+                    sceneBounds = treeInstance.WorldBounds;
+                    hasSceneBounds = true;
+                }
+                else
+                {
+                    sceneBounds.Encapsulate(treeInstance.WorldBounds);
+                }
+
+                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, blueprint.ImpostorDrawSlot, treeInstance.ImpostorWorldBounds);
+                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, blueprint.TrunkFullDrawSlot, treeInstance.TrunkFullWorldBounds);
+                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, blueprint.TrunkL3DrawSlot, treeInstance.TrunkL3WorldBounds);
             }
 
             for (int branchIndex = 0; branchIndex < sceneBranches.Count; branchIndex++)
             {
                 VegetationSceneBranchRuntime sceneBranch = sceneBranches[branchIndex];
-                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL0, sceneBranch.WoodWorldBoundsL0);
-                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL1, sceneBranch.WoodWorldBoundsL1);
-                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL2, sceneBranch.WoodWorldBoundsL2);
-                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL3, sceneBranch.WoodWorldBoundsL3);
-                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, sceneBranch.FoliageDrawSlotL0, sceneBranch.FoliageWorldBoundsL0);
+                VegetationBranchPrototypeRuntime prototype = branchPrototypes[sceneBranch.PrototypeIndex];
+                Bounds branchWorldBounds = TransformBounds(prototype.LocalBoundsCenter, prototype.LocalBoundsExtents, sceneBranch.LocalToWorld);
+
+                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL0, branchWorldBounds);
+                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL1, branchWorldBounds);
+                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL2, branchWorldBounds);
+                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL3, branchWorldBounds);
+                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, sceneBranch.FoliageDrawSlotL0, branchWorldBounds);
             }
 
-            for (int nodeIndex = 0; nodeIndex < nodeDrawSlotIndices.Count; nodeIndex++)
-            {
-                AccumulateSlot(drawSlotMaxInstanceCounts, drawSlotConservativeWorldBounds, hasBounds, nodeDrawSlotIndices[nodeIndex], nodeWorldBounds[nodeIndex]);
-            }
+            Bounds fallbackBounds = hasSceneBounds
+                ? sceneBounds
+                : new Bounds(Vector3.zero, Vector3.zero);
 
             for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
-                if (hasBounds[slotIndex])
+                if (!hasBounds[slotIndex])
                 {
-                    continue;
+                    drawSlotConservativeWorldBounds[slotIndex] = fallbackBounds;
                 }
-
-                drawSlotConservativeWorldBounds[slotIndex] = new Bounds(Vector3.zero, Vector3.zero);
             }
+
+            return drawSlotConservativeWorldBounds;
         }
 
         private static void AccumulateSlot(
-            int[] drawSlotMaxInstanceCounts,
             Bounds[] drawSlotConservativeWorldBounds,
             bool[] hasBounds,
             int slotIndex,
             Bounds worldBounds)
         {
-            drawSlotMaxInstanceCounts[slotIndex]++;
             if (!hasBounds[slotIndex])
             {
                 drawSlotConservativeWorldBounds[slotIndex] = worldBounds;
@@ -410,39 +368,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
         }
 
-        private Bounds AppendSceneBranchNodeWorldData(
-            List<int> targetDrawSlotIndices,
-            List<Bounds> targetWorldBounds,
-            List<VegetationBranchShellNodeRuntimeBfs> shellNodeSource,
-            int shellNodeStartIndex,
-            int shellNodeCount,
-            Matrix4x4 branchWorldMatrix)
-        {
-            if (shellNodeCount <= 0)
-            {
-                return default;
-            }
-
-            VegetationBranchShellNodeRuntimeBfs firstNode = shellNodeSource[shellNodeStartIndex];
-            Bounds combinedBounds = TransformDrawSlotBounds(firstNode.ShellDrawSlot, branchWorldMatrix);
-            targetDrawSlotIndices.Add(firstNode.ShellDrawSlot);
-            targetWorldBounds.Add(combinedBounds);
-
-            for (int i = 1; i < shellNodeCount; i++)
-            {
-                VegetationBranchShellNodeRuntimeBfs node = shellNodeSource[shellNodeStartIndex + i];
-                Bounds worldBounds = TransformDrawSlotBounds(node.ShellDrawSlot, branchWorldMatrix);
-                combinedBounds.Encapsulate(worldBounds);
-                targetDrawSlotIndices.Add(node.ShellDrawSlot);
-                targetWorldBounds.Add(worldBounds);
-            }
-
-            return combinedBounds;
-        }
-
         private Bounds TransformDrawSlotBounds(int drawSlotIndex, Matrix4x4 localToWorld)
         {
             return VegetationRuntimeMathUtility.TransformBounds(drawSlots[drawSlotIndex].LocalBounds, localToWorld);
+        }
+
+        private static Bounds TransformBounds(Vector3 localCenter, Vector3 localExtents, Matrix4x4 localToWorld)
+        {
+            return VegetationRuntimeMathUtility.TransformBounds(new Bounds(localCenter, localExtents * 2f), localToWorld);
         }
 
         private static VegetationIndirectInstanceData CreateUploadInstanceData(Matrix4x4 localToWorld, Matrix4x4 worldToObject, uint packedLeafTint)

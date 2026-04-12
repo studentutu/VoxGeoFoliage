@@ -16,6 +16,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     [DisallowMultipleComponent]
     public sealed class VegetationRuntimeContainer : MonoBehaviour
     {
+        // shared instance payload is about 144 bytes per visible instance
+        // so 262144 is roughly 36 MB just for the packed instance buffer
+        // Don’t raise it blindly.
+        // this is a chunk of data for a single container!
+        private const int DefaultMaxVisibleInstanceCapacity = 262144;
+
         private static readonly ProfilerMarker RefreshRuntimeRegistrationMarker =
             new ProfilerMarker("VoxGeoFol.VegetationRuntimeContainer.RefreshRuntimeRegistration");
 
@@ -38,12 +44,18 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         [SerializeField]
         private List<VegetationTreeAuthoring> registeredAuthorings = new List<VegetationTreeAuthoring>();
 
+        [Min(1)]
+        [Tooltip("Hard cap for GPU-visible vegetation instances packed into the shared runtime buffer each frame. Overflow is clamped instead of reallocating scene-scale buffers. Shared instance payload is approximately 144 bytes per visible instance.")]
+        [SerializeField]
+        private int maxVisibleInstanceCapacity = DefaultMaxVisibleInstanceCapacity;
+
         private readonly List<VegetationTreeAuthoring> activeRegisteredAuthorings = new List<VegetationTreeAuthoring>();
         private readonly Plane[] reusableFrustumPlanes = new Plane[6];
         private VegetationRuntimeRegistry? registry;
         private VegetationGpuDecisionPipeline? gpuDecisionPipeline;
         private VegetationIndirectRenderer? indirectRenderer;
         private int gpuPipelineShaderInstanceId = -1;
+        private int gpuPipelineVisibleInstanceCapacity = -1;
         private int lastPreparedCameraInstanceId = -1;
         private int lastPreparedRenderFrame = -1;
         private bool registrationDiagnosticsDirty = true;
@@ -203,7 +215,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 pipeline.PrepareResidentFrame(cameraWorldPosition, frustumPlanes);
                 indirectRenderer!.BindGpuResidentFrame(
                     pipeline.ResidentInstanceBuffer,
-                    pipeline.ResidentArgsBuffer);
+                    pipeline.ResidentArgsBuffer,
+                    pipeline.ResidentSlotPackedStartsBuffer);
                 return indirectRenderer.HasUploadedFrame;
             }
         }
@@ -227,15 +240,22 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     "VegetationRendererFeature requires VegetationFoliageFeatureSettings.ClassifyShader to be assigned. Legacy per-container compute-shader wiring was removed.");
             }
 
+            int effectiveVisibleInstanceCapacity = Mathf.Max(1, maxVisibleInstanceCapacity);
             int shaderInstanceId = classifyShader.GetInstanceID();
-            if (gpuDecisionPipeline != null && shaderInstanceId == gpuPipelineShaderInstanceId)
+            if (gpuDecisionPipeline != null &&
+                shaderInstanceId == gpuPipelineShaderInstanceId &&
+                effectiveVisibleInstanceCapacity == gpuPipelineVisibleInstanceCapacity)
             {
                 return;
             }
 
             ResetGpuDecisionPipeline();
-            gpuDecisionPipeline = new VegetationGpuDecisionPipeline(classifyShader, registry);
+            gpuDecisionPipeline = new VegetationGpuDecisionPipeline(
+                classifyShader,
+                registry,
+                effectiveVisibleInstanceCapacity);
             gpuPipelineShaderInstanceId = shaderInstanceId;
+            gpuPipelineVisibleInstanceCapacity = effectiveVisibleInstanceCapacity;
         }
 
         private void CollectRegisteredAuthorings(List<VegetationTreeAuthoring> target)
@@ -284,6 +304,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             gpuDecisionPipeline?.Dispose();
             gpuDecisionPipeline = null;
             gpuPipelineShaderInstanceId = -1;
+            gpuPipelineVisibleInstanceCapacity = -1;
         }
 
         private void ResetAuthoringRuntimeIndices()

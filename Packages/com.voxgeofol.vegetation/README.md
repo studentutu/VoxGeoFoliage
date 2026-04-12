@@ -3,7 +3,7 @@
 ## Quick Navigation
 
 - Basics: [Summary](#summary), [Highlights](#highlights), [Best-Fit Use Cases](#best-fit-use-cases), [Requirements](#requirements), [Setup](#setup)
-- Runtime: [Draw Calls And Draw Slots](#draw-calls-and-draw-slots), [Grass-Like Vegetation Strategies](#grass-like-vegetation-strategies), [Key Settings](#key-settings), [Runtime Pipeline](#runtime-pipeline), [Important Limitations](#important-limitations), [Supported Devices](#supported-devices)
+- Runtime: [Draw Calls And Draw Slots](#draw-calls-and-draw-slots), [Grass-Like Vegetation Strategies](#grass-like-vegetation-strategies), [Key Settings](#key-settings), [Capacity And Containers](#capacity-and-containers), [Runtime Pipeline](#runtime-pipeline), [Important Limitations](#important-limitations), [Supported Devices](#supported-devices)
 - [Included In This Repo](#included-in-this-repo)
 - [License](#license)
 - [Kudos](#kudos)
@@ -92,6 +92,23 @@ Examples:
    URP event for vegetation color submission. It controls ordering against the rest of the opaque pipeline.
 5. `VegetationFoliageFeatureSettings.EnableDiagnostics`
    Renderer-wide diagnostics toggle for every active container rendered by that feature.
+6. `VegetationRuntimeContainer.maxVisibleInstanceCapacity`
+   Per-container hard cap for visible packed instances. This does not define a global full-scene budget unless the whole scene is rendered through one container.
+
+## Capacity And Containers
+
+1. `VegetationRuntimeContainer.maxVisibleInstanceCapacity` applies to one container and only to the trees owned by that container.
+2. One container owns one runtime registry, one GPU decision pipeline, and one packed visible-instance buffer.
+3. If the whole forest lives under one container, that container budget behaves like a full-scene budget.
+4. If the forest is split across multiple containers, each container gets its own budget and its own packed visible-instance buffer.
+5. Splitting a `6000`-tree forest across multiple containers is valid and is the intended way to chunk large scenes for streaming/addressable ownership.
+6. Splitting is not free:
+   each container adds its own runtime registry, GPU pipeline state, indirect args, and packed instance buffer memory.
+7. There is currently no global cross-container budget coordinator and no global near-detail prioritization. If the camera sees many heavy containers at once, total memory and total visible-instance capacity are the sum of all container budgets.
+8. If one container overflows its own budget, the runtime clamps emissions inside that container. Raising the budget helps only that container.
+9. Current default `maxVisibleInstanceCapacity` is `262144`. Shared packed instance payload is approximately `144 bytes` per visible instance, so larger values increase GPU memory quickly.
+10. If near `L0/L1` detail disappears, first check whether one container owns too much visible content for its own budget before assuming the whole scene budget is too small. 
+- "Visible packed instances = final draw-ready per-slot instances after tree/branch classification and shell-leaf survival"
 
 ## Runtime Pipeline
 
@@ -110,6 +127,9 @@ Examples:
 6. Registration is frozen after enable. Changes require `RefreshRuntimeRegistration()`. Transform changes (position/rotation/scale) do not auto-sync (not even in editor). Either enable/disable the container (script) or force update via `RefreshRuntimeRegistration()`.
 7. Each container owns only active authorings from its serialized list, and nested child containers own their own descendants.
 8. Runtime diagnostics are renderer-wide through `VegetationFoliageFeatureSettings.EnableDiagnostics`.
+9. `maxVisibleInstanceCapacity` is per-container, not global. Multiple containers do not share one packed visible-instance buffer.
+10. Splitting one large forest across multiple containers can avoid one-container overflow, but it does not create a global coordinator. Memory, buffers, and capacity all scale with the number of visible containers.
+11. The runtime currently clamps overflow instead of reprioritizing cross-container or cross-slot content. There is no global `keep closest L0/L1 first` policy yet.
 
 ## Supported Devices
 

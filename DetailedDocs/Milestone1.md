@@ -55,8 +55,9 @@ The authoritative Milestone 1 runtime contract is now:
   - `distance = max(0, length(cameraWorldPosition - sphereCenterWorld) - sphereRadiusWorld)`
 - runtime shell-node visibility still uses authored node bounds
 - current Phase D shell-node rule is conservative and explicit: visible internal nodes `ExpandChildren`, visible leaves `EmitSelf`, and nodes outside the frustum `Reject`; finer intra-tier collapse is deferred
-- indirect submission uses scene-wide per exact draw slot and must rebuild `RenderMeshIndirect` `worldBounds` from visible data; fixed whole-scene bounds are forbidden in Milestone 1
+- indirect submission uses one exact draw slot registry for the whole runtime snapshot, with conservative per-slot `worldBounds` cached from registration and reused by `RenderMeshIndirect`
 - production runtime container is GPU-resident only; old CPU/readback decode is removed from the current rendering implementation and must not be reintroduced as a runtime fallback
+- visible instances are packed into one bounded shared GPU buffer; overflow clamps against `VegetationRuntimeContainer.maxVisibleInstanceCapacity`
 
 Any older BRG wording or tree-wide `R0/R1/R2/R3` runtime wording is obsolete.
 
@@ -79,7 +80,7 @@ Specific ownership authority:
 | Coarse far mesh generation from the original assembled tree | Hierarchical wind system |
 | Editor preview for `L0/L1/L2/L3/Impostor` plus shell-only views | Feature-grade placement tools |
 | GPU tree classification, branch tier selection, and node survival records | Random per-instance tint variation |
-| GPU-resident BFS survivor decode into final draw-slot lists | GPU frame double-buffering / one-frame latency optimization |
+| GPU-resident BFS count/pack/emit into a bounded shared visible-instance buffer | GPU frame double-buffering / one-frame latency optimization |
 | Spatial partitioning via uniform grid | Advanced occlusion beyond coarse frustum / optional `CullingGroup` |
 | `ScriptableRendererFeature` with indirect depth + color passes | Unity `LODGroup` |
 | RSUV-only prototype canopy tint payload | - |
@@ -121,7 +122,7 @@ This system does not use Unity `LODGroup`. LOD selection is owned by:
 - GPU tree classification
 - GPU branch tier selection
 - GPU shell-node survival decisions
-- GPU-resident BFS survivor decode for MVP
+- GPU-resident BFS count/pack/emit for MVP
 
 ---
 
@@ -295,7 +296,7 @@ BFS is acceptable for Milestone 1 because the current GPU path only needs immedi
 
 ---
 
-## Task 5: GPU Compute Classification and Survival Records [DONE]
+## Task 5: GPU Compute Classification and Direct Emission [DONE]
 
 ### 5.1 `VegetationClassify.compute`
 
@@ -316,7 +317,11 @@ Output buffers:
 - `_ExpandedTrees`
 - `_ImpostorTrees`
 - `_BranchDecisions`
-- `_NodeDecisions`
+- `_SlotRequestedInstanceCounts`
+- `_SlotEmittedInstanceCounts`
+- `_SlotPackedStarts`
+- `_VisibleInstances`
+- `_IndirectArgs`
 
 ### 5.2 Classification Steps
 
@@ -336,9 +341,11 @@ Output buffers:
    - else if branchDistance < l1Distance -> `L1`
    - else if branchDistance < l2Distance -> `L2`
    - else -> `L3`
-8. FOR each shell-tier branch:
-   - evaluate the selected authored BFS hierarchy
-   - emit `NodeDecisionGPU` records with `Reject`, `EmitSelf`, or `ExpandChildren`
+8. RESET per-slot counts
+9. COUNT tree and branch outputs per exact draw slot
+10. BUILD one packed start offset per draw slot in the shared visible-instance buffer
+11. EMIT tree and branch outputs directly into the shared visible-instance buffer
+12. FINALIZE indirect args with per-slot instance counts clamped to the remaining shared capacity
 ```
 
 ### 5.3 Runtime Data Structs
@@ -386,12 +393,12 @@ BranchDecisionGPU
   - uint branchPlacementIndex
   - uint runtimeTier
 
-NodeDecisionGPU
-  - uint treeIndex
-  - uint branchPlacementIndex
-  - uint runtimeTier
-  - uint nodeIndex
-  - uint decision
+Shared runtime emission state
+  - uint[] slotRequestedInstanceCounts
+  - uint[] slotEmittedInstanceCounts
+  - uint[] slotPackedStarts
+  - VegetationIndirectInstanceData[] visibleInstances
+  - IndirectArgs[] indirectArgs
 ```
 
 Branch classification ownership:
@@ -399,7 +406,7 @@ Branch classification ownership:
 
 ---
 
-## Task 6: Hybrid Survivor Decode and Indirect Submission [DONE]
+## Task 6: Direct GPU Frontier Emission and Indirect Submission [DONE]
 
 ### 6.1 Decode Rules
 
@@ -409,17 +416,19 @@ For each `BranchDecisionGPU`:
 - if tier is `L2`, decode authored `shellNodesL1`
 - if tier is `L3`, decode authored `shellNodesL2`
 
-For each `NodeDecisionGPU`:
-- `Reject` -> stop on that node
-- `EmitSelf` -> add that node's `shellDrawSlot`
-- `ExpandChildren` -> enqueue its contiguous immediate-child block using BFS contract
+Per-frame emission flow:
+- shell tiers traverse prototype-local BFS node arrays directly on GPU
+- visible internal nodes expand to children
+- visible leaves emit one shell instance into the packed shared buffer
+- final indirect args use the packed slot starts plus clamped instance counts
 
 ### 6.2 Final Submission Rule
 
-GPU decode is the required MVP path. The production runtime container consumes GPU-written shared instance and indirect-args buffers directly and does not route visible-frontier data back through a CPU fallback path.
+Direct GPU emission is the required MVP path. The production runtime container consumes GPU-written shared instance and indirect-args buffers directly and does not route visible-frontier data back through a CPU fallback path.
 
 Submission ownership:
 - use the single-source runtime submission contract from `UnityAssembledVegetation_FULL.md`; this milestone only tracks that the implementation must follow it
+- runtime submission is bounded by `VegetationRuntimeContainer.maxVisibleInstanceCapacity`
 
 Milestone 1 does not claim one literal global draw call.
 
@@ -481,7 +490,7 @@ Required gate checklist done:
 - `ShellBakeSettings` and `ImpostorBakeSettings` on both exact tree-blueprint assets pass validation without depending on last-resort `MeshLodUtility` fallback
 - validator/tests verify BFS child ordering against ascending octant-bit order, not only contiguous child blocks, depth, and bounds
 - runtime flattening contract is frozen: branch placement runtime data must carry authored bounds center plus bounding sphere radius, runtime branch classification uses per-placement sphere-surface distance, shell-node visibility keeps authored node bounds, and `LODProfileSO` uses the 5-band `l0/l1/l2/impostor/absoluteCull` contract
-- runtime submission contract is frozen: use scene-wide per exact draw slot with per-slot bounds rebuilt from visible data; fixed whole-scene bounds are forbidden
+- runtime submission contract is frozen: use scene-wide exact draw slots with conservative per-slot bounds cached from registration; visible-instance memory must remain hard-bounded
 - compile validation is rerun and the Unity EditMode vegetation suite is rerun once the long Unity path is available
 
 ---
@@ -515,14 +524,11 @@ Perf stabilization update (`2026-04-11`):
 - the constant per-frame GC from `VegetationRuntimeMathUtility.TransformBounds` corner-array allocation was removed from the Phase E visible-bounds path
 - `VegetationRendererFeature` no longer allocates `managers.ToArray()` per render-graph pass
 - profiler markers now cover runtime frame prep, decode, indirect upload, slot-capacity growth, and render-pass submission so Playground captures can isolate the next hot stage
-- the completed-GPU-readback consume path no longer does a full branch/node reset before overwriting those buffers from readback payloads
-- visible-cell ordering from GPU readback now rebuilds in place from the mask instead of allocating a temporary `int[]`
-- Phase E decode now writes slim debug-visible payload plus final `VegetationIndirectInstanceData` in one step, and `VegetationIndirectRenderer` uploads that direct data instead of repacking every visible instance again on the CPU
-- profiler markers now also split GPU readback consume, cell/tree/decision copies, and per-slot instance-buffer vs args-buffer upload so the remaining spike can be attributed to a specific substage
-- `VegetationDecisionDecoder.DecodeTrees` now rejects whole trees before branch traversal, rejects whole shell tiers before scanning node decisions, and consumes precomputed per-tree/per-branch/per-node world bounds from runtime registration instead of rebuilding transformed draw-slot bounds in the decode hot loop
-- runtime registration now also caches per-tree/per-branch upload payloads (`VegetationIndirectInstanceData`), and the old runtime frame-output path disables per-instance debug capture unless diagnostics are enabled so the decode path does not duplicate debug-visible payload on normal rendering frames
-- `VegetationGpuDecisionPipeline` now also owns the main runtime decode/emission path: after GPU classification it resets per-slot indirect args, emits exact visible instance payloads into one shared GPU instance buffer using fixed per-slot slices from runtime registration, finalizes one indirect-args record per draw slot, and `VegetationIndirectRenderer` consumes those GPU-written buffers directly
-- `VegetationRuntimeContainer` now runs GPU-resident only and bypasses `VegetationDecisionDecoder.DecodeTrees` on the main runtime path; legacy CPU/decode parity remains editor-only test tooling and no longer exists as a runtime container fallback
+- `VegetationGpuDecisionPipeline` now owns the main runtime count/pack/emit path: after GPU classification it resets per-slot counters, counts exact visible instances per draw slot, builds packed slot starts, emits exact visible instance payloads into one shared GPU instance buffer, and finalizes one indirect-args record per draw slot
+- `VegetationIndirectRenderer` now consumes one shared visible-instance buffer plus per-slot packed-start offsets instead of fixed per-slot instance slices
+- runtime registration no longer duplicates scene-wide shell-node world bounds or node-decision buffers; shell hierarchies stay prototype-local and branch/shell bounds are generated on GPU per frame from prototype-local bounds plus branch transforms
+- runtime submission now uses conservative per-slot bounds from registration, not per-frame visible-data bounds rebuilding
+- `VegetationRuntimeContainer` now exposes `maxVisibleInstanceCapacity` as the hard runtime-visible budget and the main runtime path clamps overflow instead of reallocating scene-scale capacity
 - final production cleanup removed the remaining editor-only decode/upload helpers from `Runtime/Rendering` and deleted the old runtime Scene-view debug MonoBehaviour
 
 Phase E landing caveats at the time:
@@ -566,8 +572,8 @@ Validation status:
 1. `D1` Freeze the runtime-side data contracts that Phase D owns:
    - flattened tree/tree-blueprint/branch-placement/prototype payloads
    - BFS shell-node runtime payloads
-   - branch-decision and node-decision payloads
-   - per-slot visible-instance output, indirect-arg seed input, and visible-data bounds payloads for Phase E
+   - branch-decision payloads
+   - per-slot count/pack state, visible-instance output, indirect-arg input, and conservative bounds payloads for Phase E
 2. `D2` Implement `VegetationSpatialGrid`:
    - deterministic tree-to-cell registration
    - authoritative cell bounds and visible-cell query output
@@ -580,23 +586,23 @@ Validation status:
 4. `D4` Implement a deterministic CPU reference mirror for the runtime rules:
    - tree mode classification (`Culled` / `Expanded` / `Impostor`)
    - branch tier selection (`L0/L1/L2/L3`)
-   - shell-node decisions (`Reject` / `EmitSelf` / `ExpandChildren`)
-   - trunk selection and BFS frontier decode into per-slot visible-instance outputs
+   - shell-node visibility rule (`Reject` / `EmitSelf` / `ExpandChildren`)
+   - trunk selection and BFS frontier expectation for verification
 5. `D5` Implement the GPU-primary visibility/classification/decision path against the same contracts:
    - visible-cell upload
    - tree classification
    - branch tier selection
-   - shell-node decision production
-   - GPU-primary frontier decode or equivalent final visible-list emission
+   - shell-tier BFS traversal on GPU
+   - GPU-primary count/pack/emit into final visible-list buffers
 6. `D6` Stabilize the Phase E handoff surface:
    - expose per-slot visible-instance data
-   - expose indirect-args seed inputs
-   - expose per-slot visible-data bounds rebuilt from visible outputs
+   - expose indirect-args and packed-start inputs
+   - expose conservative per-slot bounds from runtime registration
    - keep `RenderMeshIndirect` submission out of Phase D
 7. `D7` Add developer verification for Phase D:
    - spatial-grid EditMode coverage
-   - classification/decode parity checks between CPU mirror and GPU path
-   - frame-capture logging for branch decisions, node decisions, and per-slot counts
+   - classification/emission parity checks between CPU mirror expectations and GPU path
+   - frame-capture logging for branch decisions and per-slot counts
 8. `D8` Compile check + targeted manual verification
 
 Current caveat:
@@ -610,10 +616,10 @@ Status clarification (`2026-04-10`):
 - Post-MVP validation depth, package-consumer hardening, wind, and material extensibility are tracked in Milestone 2 instead of being kept as fake-open Milestone 1 work.
 
 1. `E1` Freeze render-side ownership and pass contracts before implementation:
-   - `VegetationIndirectRenderer` owns per-slot visible buffers, indirect args, and visible-data `worldBounds`
+   - `VegetationIndirectRenderer` owns shared visible buffers, indirect args, packed-start binding, and conservative per-slot `worldBounds`
    - `VegetationRendererFeature` owns URP pass scheduling, render-pass integration, and the shared `VegetationClassify.compute` asset reference, not classification authority
    - `VegetationRuntimeContainer` owns scene/runtime wiring, explicit serialized authoring ownership, and the handoff from stable Phase D outputs into rendering
-   - fixed whole-scene bounds and BRG-style shortcuts remain forbidden
+   - conservative registration-time bounds are allowed; scene-wide brute-force whole-forest bounds as the only bound remain forbidden
 2. `E2` Implement the shader suite with one consistent instance-input contract:
    - `VegetationCanopyLit.shader`
    - `VegetationTrunkLit.shader`
@@ -622,9 +628,10 @@ Status clarification (`2026-04-10`):
    - opaque-only, RSUV-compatible, and no hidden per-shader divergence in instance payload layout
 3. `E3` Implement `VegetationIndirectRenderer` consumption of the Phase D outputs:
    - exact draw-slot registry consume path
-   - per-slot visible-instance buffer upload
-   - per-slot indirect-args build/final upload
-   - per-slot `worldBounds` rebuild from visible data only
+   - shared visible-instance buffer binding
+   - per-slot packed-start binding
+   - per-slot indirect-args consume
+   - conservative per-slot `worldBounds` consume
 4. `E4` Implement `VegetationRuntimeContainer` runtime/renderer wiring:
    - scene registration of authored vegetation instances through an explicit serialized authorings list
    - lifetime/reset of runtime caches and GPU resources
@@ -639,8 +646,8 @@ Status clarification (`2026-04-10`):
    - verify the full solution in editor through scene render validation, uploaded-batch diagnostics, and profiler captures
    - expanded trees render trunk, branch wood, source foliage, and shell tiers on the correct runtime bands
    - impostor trees render `impostorMesh` only
-   - per-slot visible counts match uploaded indirect args and rebuilt `worldBounds`
-   - one captured debug frame confirms GPU batch output matches the expected visible frontier
+   - per-slot visible counts match uploaded indirect args and packed slot starts
+   - one captured debug frame confirms GPU batch output matches the expected visible frontier within the configured shared-capacity budget
 7. `E7` Compile check + manual verification
 
 ---
@@ -654,8 +661,8 @@ Status clarification (`2026-04-10`):
 - `impostorMesh` is auto-generated from the original assembled tree
 - Editor preview shows runtime `L0/L1/L2/L3/Impostor` correctly
 - Runtime tree classification selects `Expanded` or `Impostor` correctly
-- GPU emits branch tier and node survival records
-- GPU-primary survivor decode reconstructs final visible draw-slot lists correctly without any runtime CPU fallback path
+- GPU emits branch tier records and directly packs final visible draw-slot lists into the shared bounded buffer
+- GPU-primary count/pack/emit reconstructs final visible draw-slot lists correctly without any runtime CPU fallback path
 - Indirect rendering draws trunk, branch wood, branch foliage, shell tiers, and far mesh correctly, and `Impostor` mode draws `impostorMesh` only
 - Generated outputs remain persisted even when validation marks them invalid
 

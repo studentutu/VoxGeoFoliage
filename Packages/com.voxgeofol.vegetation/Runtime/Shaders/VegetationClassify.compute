@@ -1,7 +1,10 @@
 #pragma kernel ClassifyCells
 #pragma kernel ClassifyTrees
-#pragma kernel ClassifyBranchesAndNodes
-#pragma kernel ResetIndirectArgs
+#pragma kernel ClassifyBranches
+#pragma kernel ResetSlotCounts
+#pragma kernel CountTrees
+#pragma kernel CountBranches
+#pragma kernel BuildSlotStarts
 #pragma kernel EmitTrees
 #pragma kernel EmitBranches
 #pragma kernel FinalizeIndirectArgs
@@ -71,22 +74,13 @@ struct BranchGpu
     float3 sphereCenterWorld;
     float boundingSphereRadius;
     float4x4 localToWorld;
-    int decisionStartL1;
-    int decisionCountL1;
-    int decisionStartL2;
-    int decisionCountL2;
-    int decisionStartL3;
-    int decisionCountL3;
     int woodDrawSlotL1;
     int woodDrawSlotL2;
     int woodDrawSlotL3;
     int foliageDrawSlotL0;
-    BoundsGpu worldBounds;
-    BoundsGpu woodWorldBoundsL0;
-    BoundsGpu woodWorldBoundsL1;
-    BoundsGpu woodWorldBoundsL2;
-    BoundsGpu woodWorldBoundsL3;
-    BoundsGpu foliageWorldBoundsL0;
+    int padding0;
+    int padding1;
+    int padding2;
     VegetationInstanceData woodUploadInstanceData;
     VegetationInstanceData foliageUploadInstanceData;
 };
@@ -99,6 +93,10 @@ struct PrototypeGpu
     int shellNodeCountL2;
     int shellNodeStartIndexL3;
     int shellNodeCountL3;
+    float3 localBoundsCenter;
+    float padding0;
+    float3 localBoundsExtents;
+    float padding1;
 };
 
 struct ShellNodeGpu
@@ -121,35 +119,12 @@ struct BranchDecisionGpu
     int runtimeTier;
 };
 
-struct NodeDecisionGpu
-{
-    int treeIndex;
-    int branchInstanceIndex;
-    int branchPlacementIndex;
-    int runtimeTier;
-    int nodeIndex;
-    int decision;
-};
-
-struct NodeRenderGpu
-{
-    int drawSlotIndex;
-    int padding0;
-    int padding1;
-    int padding2;
-    BoundsGpu worldBounds;
-};
-
 struct SlotGpu
 {
-    uint startInstance;
-    uint maxInstanceCount;
     uint indexCountPerInstance;
     uint startIndexLocation;
     uint baseVertexIndex;
     uint padding0;
-    uint padding1;
-    uint padding2;
 };
 
 StructuredBuffer<CellGpu> _Cells;
@@ -160,14 +135,14 @@ StructuredBuffer<PrototypeGpu> _Prototypes;
 StructuredBuffer<ShellNodeGpu> _ShellNodesL1;
 StructuredBuffer<ShellNodeGpu> _ShellNodesL2;
 StructuredBuffer<ShellNodeGpu> _ShellNodesL3;
-StructuredBuffer<NodeRenderGpu> _NodeRenderData;
 StructuredBuffer<SlotGpu> _Slots;
 
 RWStructuredBuffer<uint> _CellVisibility;
 RWStructuredBuffer<int> _TreeModes;
 RWStructuredBuffer<BranchDecisionGpu> _BranchDecisions;
-RWStructuredBuffer<NodeDecisionGpu> _NodeDecisions;
-RWStructuredBuffer<uint> _SlotInstanceCounts;
+RWStructuredBuffer<uint> _SlotRequestedInstanceCounts;
+RWStructuredBuffer<uint> _SlotEmittedInstanceCounts;
+RWStructuredBuffer<uint> _SlotPackedStarts;
 RWStructuredBuffer<VegetationInstanceData> _VisibleInstances;
 RWByteAddressBuffer _IndirectArgs;
 
@@ -176,8 +151,8 @@ float4 _FrustumPlanes[6];
 int _CellCount;
 int _TreeCount;
 int _BranchCount;
-int _NodeDecisionCount;
 int _DrawSlotCount;
+int _VisibleInstanceCapacity;
 
 static const int TreeModeCulled = 0;
 static const int TreeModeExpanded = 1;
@@ -187,9 +162,6 @@ static const int BranchTierL0 = 0;
 static const int BranchTierL1 = 1;
 static const int BranchTierL2 = 2;
 static const int BranchTierL3 = 3;
-static const int NodeDecisionReject = 0;
-static const int NodeDecisionEmitSelf = 1;
-static const int NodeDecisionExpandChildren = 2;
 
 bool TestFrustumAabb(float3 center, float3 extents)
 {
@@ -229,123 +201,9 @@ void ComputeWorldBounds(float4x4 localToWorld, float3 localCenter, float3 localE
     worldExtents = abs(worldAxisX) + abs(worldAxisY) + abs(worldAxisZ);
 }
 
-void WriteRejectSlice(int branchInstanceIndex, int treeIndex, int branchPlacementIndex, int decisionStart, int decisionCount, int runtimeTier)
-{
-    for (int nodeIndex = 0; nodeIndex < decisionCount; nodeIndex++)
-    {
-        NodeDecisionGpu record;
-        record.treeIndex = treeIndex;
-        record.branchInstanceIndex = branchInstanceIndex;
-        record.branchPlacementIndex = branchPlacementIndex;
-        record.runtimeTier = runtimeTier;
-        record.nodeIndex = nodeIndex;
-        record.decision = NodeDecisionReject;
-        _NodeDecisions[decisionStart + nodeIndex] = record;
-    }
-}
-
-ShellNodeGpu GetShellNodeForTier(int runtimeTier, int shellNodeIndex)
-{
-    if (runtimeTier == BranchTierL1)
-    {
-        return _ShellNodesL1[shellNodeIndex];
-    }
-
-    if (runtimeTier == BranchTierL2)
-    {
-        return _ShellNodesL2[shellNodeIndex];
-    }
-
-    return _ShellNodesL3[shellNodeIndex];
-}
-
-void WriteSelectedSlice(
-    int branchInstanceIndex,
-    int treeIndex,
-    int branchPlacementIndex,
-    int decisionStart,
-    int decisionCount,
-    int runtimeTier,
-    int shellStartIndex,
-    float4x4 localToWorld)
-{
-    for (int nodeIndex = 0; nodeIndex < decisionCount; nodeIndex++)
-    {
-        ShellNodeGpu node = GetShellNodeForTier(runtimeTier, shellStartIndex + nodeIndex);
-        float3 worldCenter;
-        float3 worldExtents;
-        ComputeWorldBounds(localToWorld, node.localCenter, node.localExtents, worldCenter, worldExtents);
-
-        int decision = NodeDecisionReject;
-        if (TestFrustumAabb(worldCenter, worldExtents))
-        {
-            decision = (node.childMask != 0u && node.firstChildIndex >= 0)
-                ? NodeDecisionExpandChildren
-                : NodeDecisionEmitSelf;
-        }
-
-        NodeDecisionGpu record;
-        record.treeIndex = treeIndex;
-        record.branchInstanceIndex = branchInstanceIndex;
-        record.branchPlacementIndex = branchPlacementIndex;
-        record.runtimeTier = runtimeTier;
-        record.nodeIndex = nodeIndex;
-        record.decision = decision;
-        _NodeDecisions[decisionStart + nodeIndex] = record;
-    }
-}
-
-void EmitInstance(uint slotIndex, VegetationInstanceData instanceData)
-{
-    SlotGpu slot = _Slots[slotIndex];
-    if (slot.maxInstanceCount == 0u)
-    {
-        return;
-    }
-
-    uint localOffset;
-    InterlockedAdd(_SlotInstanceCounts[slotIndex], 1u, localOffset);
-    if (localOffset >= slot.maxInstanceCount)
-    {
-        return;
-    }
-
-    _VisibleInstances[slot.startInstance + localOffset] = instanceData;
-}
-
 uint GetIndirectArgsByteOffset(uint slotIndex)
 {
     return slotIndex * 20u;
-}
-
-int ResolveDecisionStart(BranchGpu branch, int runtimeTier)
-{
-    if (runtimeTier == BranchTierL1)
-    {
-        return branch.decisionStartL1;
-    }
-
-    if (runtimeTier == BranchTierL2)
-    {
-        return branch.decisionStartL2;
-    }
-
-    return branch.decisionStartL3;
-}
-
-int ResolveDecisionCount(BranchGpu branch, int runtimeTier)
-{
-    if (runtimeTier == BranchTierL1)
-    {
-        return branch.decisionCountL1;
-    }
-
-    if (runtimeTier == BranchTierL2)
-    {
-        return branch.decisionCountL2;
-    }
-
-    return branch.decisionCountL3;
 }
 
 int ResolveWoodDrawSlot(BranchGpu branch, int runtimeTier)
@@ -366,6 +224,147 @@ int ResolveWoodDrawSlot(BranchGpu branch, int runtimeTier)
     }
 
     return branch.woodDrawSlotL3;
+}
+
+int ResolveShellNodeStart(PrototypeGpu prototype, int runtimeTier)
+{
+    if (runtimeTier == BranchTierL1)
+    {
+        return prototype.shellNodeStartIndexL1;
+    }
+
+    if (runtimeTier == BranchTierL2)
+    {
+        return prototype.shellNodeStartIndexL2;
+    }
+
+    return prototype.shellNodeStartIndexL3;
+}
+
+int ResolveShellNodeCount(PrototypeGpu prototype, int runtimeTier)
+{
+    if (runtimeTier == BranchTierL1)
+    {
+        return prototype.shellNodeCountL1;
+    }
+
+    if (runtimeTier == BranchTierL2)
+    {
+        return prototype.shellNodeCountL2;
+    }
+
+    return prototype.shellNodeCountL3;
+}
+
+ShellNodeGpu GetShellNodeForTier(int runtimeTier, int shellNodeIndex)
+{
+    if (runtimeTier == BranchTierL1)
+    {
+        return _ShellNodesL1[shellNodeIndex];
+    }
+
+    if (runtimeTier == BranchTierL2)
+    {
+        return _ShellNodesL2[shellNodeIndex];
+    }
+
+    return _ShellNodesL3[shellNodeIndex];
+}
+
+bool IsVisibleLeafNode(ShellNodeGpu node, float4x4 localToWorld)
+{
+    if (node.childMask != 0u && node.firstChildIndex >= 0)
+    {
+        return false;
+    }
+
+    float3 worldCenter;
+    float3 worldExtents;
+    ComputeWorldBounds(localToWorld, node.localCenter, node.localExtents, worldCenter, worldExtents);
+    return TestFrustumAabb(worldCenter, worldExtents);
+}
+
+void CountInstance(uint slotIndex)
+{
+    uint ignored;
+    InterlockedAdd(_SlotRequestedInstanceCounts[slotIndex], 1u, ignored);
+}
+
+void EmitInstance(uint slotIndex, VegetationInstanceData instanceData)
+{
+    uint localOffset;
+    InterlockedAdd(_SlotEmittedInstanceCounts[slotIndex], 1u, localOffset);
+    uint packedIndex = _SlotPackedStarts[slotIndex] + localOffset;
+    if (packedIndex >= (uint)_VisibleInstanceCapacity)
+    {
+        return;
+    }
+
+    _VisibleInstances[packedIndex] = instanceData;
+}
+
+void CountBranchInstances(BranchGpu branch, BranchDecisionGpu branchDecision)
+{
+    PrototypeGpu prototype = _Prototypes[branch.prototypeIndex];
+    float3 branchWorldCenter;
+    float3 branchWorldExtents;
+    ComputeWorldBounds(branch.localToWorld, prototype.localBoundsCenter, prototype.localBoundsExtents, branchWorldCenter, branchWorldExtents);
+    if (!TestFrustumAabb(branchWorldCenter, branchWorldExtents))
+    {
+        return;
+    }
+
+    if (branchDecision.runtimeTier == BranchTierL0)
+    {
+        CountInstance((uint)branch.woodDrawSlotL0);
+        CountInstance((uint)branch.foliageDrawSlotL0);
+        return;
+    }
+
+    CountInstance((uint)ResolveWoodDrawSlot(branch, branchDecision.runtimeTier));
+
+    int shellNodeStart = ResolveShellNodeStart(prototype, branchDecision.runtimeTier);
+    int shellNodeCount = ResolveShellNodeCount(prototype, branchDecision.runtimeTier);
+    for (int localNodeIndex = 0; localNodeIndex < shellNodeCount; localNodeIndex++)
+    {
+        ShellNodeGpu node = GetShellNodeForTier(branchDecision.runtimeTier, shellNodeStart + localNodeIndex);
+        if (IsVisibleLeafNode(node, branch.localToWorld))
+        {
+            CountInstance((uint)node.shellDrawSlot);
+        }
+    }
+}
+
+void EmitBranchInstances(BranchGpu branch, BranchDecisionGpu branchDecision)
+{
+    PrototypeGpu prototype = _Prototypes[branch.prototypeIndex];
+    float3 branchWorldCenter;
+    float3 branchWorldExtents;
+    ComputeWorldBounds(branch.localToWorld, prototype.localBoundsCenter, prototype.localBoundsExtents, branchWorldCenter, branchWorldExtents);
+    if (!TestFrustumAabb(branchWorldCenter, branchWorldExtents))
+    {
+        return;
+    }
+
+    if (branchDecision.runtimeTier == BranchTierL0)
+    {
+        EmitInstance((uint)branch.woodDrawSlotL0, branch.woodUploadInstanceData);
+        EmitInstance((uint)branch.foliageDrawSlotL0, branch.foliageUploadInstanceData);
+        return;
+    }
+
+    EmitInstance((uint)ResolveWoodDrawSlot(branch, branchDecision.runtimeTier), branch.woodUploadInstanceData);
+
+    int shellNodeStart = ResolveShellNodeStart(prototype, branchDecision.runtimeTier);
+    int shellNodeCount = ResolveShellNodeCount(prototype, branchDecision.runtimeTier);
+    for (int localNodeIndex = 0; localNodeIndex < shellNodeCount; localNodeIndex++)
+    {
+        ShellNodeGpu node = GetShellNodeForTier(branchDecision.runtimeTier, shellNodeStart + localNodeIndex);
+        if (IsVisibleLeafNode(node, branch.localToWorld))
+        {
+            EmitInstance((uint)node.shellDrawSlot, branch.foliageUploadInstanceData);
+        }
+    }
 }
 
 [numthreads(64, 1, 1)]
@@ -406,7 +405,7 @@ void ClassifyTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
 }
 
 [numthreads(64, 1, 1)]
-void ClassifyBranchesAndNodes(uint3 dispatchThreadId : SV_DispatchThreadID)
+void ClassifyBranches(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     uint branchInstanceIndex = dispatchThreadId.x;
     if (branchInstanceIndex >= (uint)_BranchCount)
@@ -417,10 +416,6 @@ void ClassifyBranchesAndNodes(uint3 dispatchThreadId : SV_DispatchThreadID)
     BranchGpu branch = _Branches[branchInstanceIndex];
     TreeGpu tree = _Trees[branch.treeIndex];
     int treeMode = _TreeModes[branch.treeIndex];
-
-    WriteRejectSlice(branchInstanceIndex, branch.treeIndex, branch.branchPlacementIndex, branch.decisionStartL1, branch.decisionCountL1, BranchTierL1);
-    WriteRejectSlice(branchInstanceIndex, branch.treeIndex, branch.branchPlacementIndex, branch.decisionStartL2, branch.decisionCountL2, BranchTierL2);
-    WriteRejectSlice(branchInstanceIndex, branch.treeIndex, branch.branchPlacementIndex, branch.decisionStartL3, branch.decisionCountL3, BranchTierL3);
 
     BranchDecisionGpu branchDecision;
     branchDecision.treeIndex = branch.treeIndex;
@@ -436,7 +431,7 @@ void ClassifyBranchesAndNodes(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     LodProfileGpu lodProfile = _LodProfiles[tree.lodProfileIndex];
     float branchDistance = ComputeSphereSurfaceDistance(branch.sphereCenterWorld, branch.boundingSphereRadius);
-    int runtimeTier = branchDistance < lodProfile.l0Distance
+    branchDecision.runtimeTier = branchDistance < lodProfile.l0Distance
         ? BranchTierL0
         : branchDistance < lodProfile.l1Distance
             ? BranchTierL1
@@ -444,50 +439,11 @@ void ClassifyBranchesAndNodes(uint3 dispatchThreadId : SV_DispatchThreadID)
                 ? BranchTierL2
                 : BranchTierL3;
 
-    branchDecision.runtimeTier = runtimeTier;
     _BranchDecisions[branchInstanceIndex] = branchDecision;
-
-    PrototypeGpu prototype = _Prototypes[branch.prototypeIndex];
-    if (runtimeTier == BranchTierL1)
-    {
-        WriteSelectedSlice(
-            branchInstanceIndex,
-            branch.treeIndex,
-            branch.branchPlacementIndex,
-            branch.decisionStartL1,
-            branch.decisionCountL1,
-            BranchTierL1,
-            prototype.shellNodeStartIndexL1,
-            branch.localToWorld);
-    }
-    else if (runtimeTier == BranchTierL2)
-    {
-        WriteSelectedSlice(
-            branchInstanceIndex,
-            branch.treeIndex,
-            branch.branchPlacementIndex,
-            branch.decisionStartL2,
-            branch.decisionCountL2,
-            BranchTierL2,
-            prototype.shellNodeStartIndexL2,
-            branch.localToWorld);
-    }
-    else if (runtimeTier == BranchTierL3)
-    {
-        WriteSelectedSlice(
-            branchInstanceIndex,
-            branch.treeIndex,
-            branch.branchPlacementIndex,
-            branch.decisionStartL3,
-            branch.decisionCountL3,
-            BranchTierL3,
-            prototype.shellNodeStartIndexL3,
-            branch.localToWorld);
-    }
 }
 
 [numthreads(64, 1, 1)]
-void ResetIndirectArgs(uint3 dispatchThreadId : SV_DispatchThreadID)
+void ResetSlotCounts(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     uint slotIndex = dispatchThreadId.x;
     if (slotIndex >= (uint)_DrawSlotCount)
@@ -495,15 +451,79 @@ void ResetIndirectArgs(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    SlotGpu slot = _Slots[slotIndex];
-    _SlotInstanceCounts[slotIndex] = 0u;
-    uint argsOffset = GetIndirectArgsByteOffset(slotIndex);
-    _IndirectArgs.Store4(argsOffset, uint4(
-        slot.indexCountPerInstance,
-        0u,
-        slot.startIndexLocation,
-        slot.baseVertexIndex));
-    _IndirectArgs.Store(argsOffset + 16u, 0u);
+    _SlotRequestedInstanceCounts[slotIndex] = 0u;
+    _SlotEmittedInstanceCounts[slotIndex] = 0u;
+    _SlotPackedStarts[slotIndex] = 0u;
+}
+
+[numthreads(64, 1, 1)]
+void CountTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint treeIndex = dispatchThreadId.x;
+    if (treeIndex >= (uint)_TreeCount)
+    {
+        return;
+    }
+
+    TreeGpu tree = _Trees[treeIndex];
+    int treeMode = _TreeModes[treeIndex];
+    if (treeMode == TreeModeCulled || !TestFrustumBounds(tree.worldBounds))
+    {
+        return;
+    }
+
+    if (treeMode == TreeModeImpostor)
+    {
+        CountInstance((uint)tree.impostorDrawSlot);
+        return;
+    }
+
+    bool useFullTrunk = false;
+    for (int branchOffset = 0; branchOffset < tree.sceneBranchCount; branchOffset++)
+    {
+        BranchDecisionGpu branchDecision = _BranchDecisions[tree.sceneBranchStartIndex + branchOffset];
+        if (branchDecision.runtimeTier == BranchTierL0 || branchDecision.runtimeTier == BranchTierL1)
+        {
+            useFullTrunk = true;
+            break;
+        }
+    }
+
+    CountInstance(useFullTrunk ? (uint)tree.trunkFullDrawSlot : (uint)tree.trunkL3DrawSlot);
+}
+
+[numthreads(64, 1, 1)]
+void CountBranches(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint branchIndex = dispatchThreadId.x;
+    if (branchIndex >= (uint)_BranchCount)
+    {
+        return;
+    }
+
+    BranchDecisionGpu branchDecision = _BranchDecisions[branchIndex];
+    if (branchDecision.runtimeTier == BranchTierInactive)
+    {
+        return;
+    }
+
+    CountBranchInstances(_Branches[branchIndex], branchDecision);
+}
+
+[numthreads(1, 1, 1)]
+void BuildSlotStarts(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    if (dispatchThreadId.x != 0u)
+    {
+        return;
+    }
+
+    uint runningStart = 0u;
+    for (int slotIndex = 0; slotIndex < _DrawSlotCount; slotIndex++)
+    {
+        _SlotPackedStarts[slotIndex] = runningStart;
+        runningStart += _SlotRequestedInstanceCounts[slotIndex];
+    }
 }
 
 [numthreads(64, 1, 1)]
@@ -557,34 +577,7 @@ void EmitBranches(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    BranchGpu branch = _Branches[branchIndex];
-    if (!TestFrustumBounds(branch.worldBounds))
-    {
-        return;
-    }
-
-    if (branchDecision.runtimeTier == BranchTierL0)
-    {
-        EmitInstance((uint)branch.woodDrawSlotL0, branch.woodUploadInstanceData);
-        EmitInstance((uint)branch.foliageDrawSlotL0, branch.foliageUploadInstanceData);
-        return;
-    }
-
-    EmitInstance((uint)ResolveWoodDrawSlot(branch, branchDecision.runtimeTier), branch.woodUploadInstanceData);
-
-    int decisionStart = ResolveDecisionStart(branch, branchDecision.runtimeTier);
-    int decisionCount = ResolveDecisionCount(branch, branchDecision.runtimeTier);
-    for (int localNodeIndex = 0; localNodeIndex < decisionCount; localNodeIndex++)
-    {
-        int decisionIndex = decisionStart + localNodeIndex;
-        if (_NodeDecisions[decisionIndex].decision != NodeDecisionEmitSelf)
-        {
-            continue;
-        }
-
-        NodeRenderGpu node = _NodeRenderData[decisionIndex];
-        EmitInstance((uint)node.drawSlotIndex, branch.foliageUploadInstanceData);
-    }
+    EmitBranchInstances(_Branches[branchIndex], branchDecision);
 }
 
 [numthreads(64, 1, 1)]
@@ -597,6 +590,20 @@ void FinalizeIndirectArgs(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     SlotGpu slot = _Slots[slotIndex];
-    uint clampedCount = min(_SlotInstanceCounts[slotIndex], slot.maxInstanceCount);
-    _IndirectArgs.Store(GetIndirectArgsByteOffset(slotIndex) + 4u, clampedCount);
+    uint start = _SlotPackedStarts[slotIndex];
+    uint attemptedCount = _SlotEmittedInstanceCounts[slotIndex];
+    uint availableCount = 0u;
+    if (start < (uint)_VisibleInstanceCapacity)
+    {
+        availableCount = (uint)_VisibleInstanceCapacity - start;
+    }
+
+    uint instanceCount = min(attemptedCount, availableCount);
+    uint argsOffset = GetIndirectArgsByteOffset(slotIndex);
+    _IndirectArgs.Store4(argsOffset, uint4(
+        slot.indexCountPerInstance,
+        instanceCount,
+        slot.startIndexLocation,
+        slot.baseVertexIndex));
+    _IndirectArgs.Store(argsOffset + 16u, 0u);
 }

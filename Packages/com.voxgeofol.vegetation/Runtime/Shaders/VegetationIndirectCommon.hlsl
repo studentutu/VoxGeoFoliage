@@ -12,11 +12,12 @@ struct VegetationInstanceData
 };
 
 StructuredBuffer<VegetationInstanceData> _VegetationInstanceData;
-uint _VegetationInstanceStart;
+StructuredBuffer<uint> _VegetationSlotPackedStarts;
+uint _VegetationSlotIndex;
 
 VegetationInstanceData LoadVegetationInstance(uint svInstanceId)
 {
-    return _VegetationInstanceData[_VegetationInstanceStart + svInstanceId];
+    return _VegetationInstanceData[_VegetationSlotPackedStarts[_VegetationSlotIndex] + svInstanceId];
 }
 
 float3 TransformVegetationPosition(float3 positionOS, VegetationInstanceData instanceData)

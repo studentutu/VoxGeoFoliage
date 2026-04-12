@@ -3635,6 +3635,7 @@ MonoBehaviour:
   - {fileID: 707125831}
   - {fileID: 1142704452}
   - {fileID: 2085827122}
+  maxVisibleInstanceCapacity: 262144
 --- !u!1001 &1142704448
 PrefabInstance:
   m_ObjectHideFlags: 0
