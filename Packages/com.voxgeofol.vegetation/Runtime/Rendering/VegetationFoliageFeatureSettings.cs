@@ -30,7 +30,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         [Tooltip("When enabled, vegetation renders for SceneView cameras.")]
         public bool RenderSceneViewCameras = true;
 
-        [Tooltip("Emits renderer-wide runtime diagnostics for registration, preparation, and indirect submission.")]
+        [Tooltip("Emits renderer-wide runtime diagnostics for registration, preparation, indirect submission, branch/shell/visible-instance telemetry, and one-shot emitted-slot readback for architecture review.")]
         public bool EnableDiagnostics;
 
         /// <summary>

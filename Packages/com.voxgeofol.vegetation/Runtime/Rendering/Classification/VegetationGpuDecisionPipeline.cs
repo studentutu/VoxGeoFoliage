@@ -23,6 +23,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private static readonly ProfilerMarker EmitTreeInstancesMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.EmitTreeInstances");
         private static readonly ProfilerMarker EmitBranchInstancesMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.EmitBranchInstances");
         private static readonly ProfilerMarker FinalizeIndirectArgsMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.FinalizeIndirectArgs");
+        private static readonly int BranchGpuStrideBytes = Marshal.SizeOf<BranchGpu>();
+        private static readonly int PrototypeGpuStrideBytes = Marshal.SizeOf<PrototypeGpu>();
+        private static readonly int ShellNodeGpuStrideBytes = Marshal.SizeOf<ShellNodeGpu>();
+        private static readonly int BranchDecisionRecordStrideBytes = Marshal.SizeOf<VegetationBranchDecisionRecord>();
+        private static readonly int VisibleInstanceStrideBytesInternal = Marshal.SizeOf<VegetationIndirectInstanceData>();
         private readonly ComputeShader classifyShader;
         private readonly VegetationRuntimeRegistry registry;
         private readonly int classifyCellsKernel;
@@ -54,6 +59,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private GraphicsBuffer residentInstanceBuffer = null!;
         private GraphicsBuffer residentArgsBuffer = null!;
         private readonly Vector4[] frustumPlaneVectors = new Vector4[6];
+        private uint[] slotEmittedCountsReadback = Array.Empty<uint>();
         private bool residentFramePrepared;
         private bool disposed;
 
@@ -64,6 +70,54 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public ComputeBuffer ResidentSlotPackedStartsBuffer => slotPackedStartsBuffer;
 
         public bool HasResidentFramePrepared => residentFramePrepared;
+
+        public int SceneBranchRecordCount => registry.SceneBranches.Count;
+
+        public int BlueprintCount => registry.TreeBlueprints.Count;
+
+        public int AllocatedBranchBufferElementCount => Mathf.Max(1, registry.SceneBranches.Count);
+
+        public long BranchBufferBytes => checked((long)AllocatedBranchBufferElementCount * BranchGpuStrideBytes);
+
+        public int AllocatedBranchDecisionBufferElementCount => Mathf.Max(1, registry.SceneBranches.Count);
+
+        public long BranchDecisionBufferBytes => checked((long)AllocatedBranchDecisionBufferElementCount * BranchDecisionRecordStrideBytes);
+
+        public int BranchPrototypeCount => registry.BranchPrototypes.Count;
+
+        public int AllocatedPrototypeBufferElementCount => Mathf.Max(1, registry.BranchPrototypes.Count);
+
+        public long PrototypeBufferBytes => checked((long)AllocatedPrototypeBufferElementCount * PrototypeGpuStrideBytes);
+
+        public int ShellNodeCountL1 => registry.ShellNodesL1.Count;
+
+        public int AllocatedShellNodeBufferElementCountL1 => Mathf.Max(1, registry.ShellNodesL1.Count);
+
+        public long ShellNodesL1BufferBytes => checked((long)AllocatedShellNodeBufferElementCountL1 * ShellNodeGpuStrideBytes);
+
+        public int ShellNodeCountL2 => registry.ShellNodesL2.Count;
+
+        public int AllocatedShellNodeBufferElementCountL2 => Mathf.Max(1, registry.ShellNodesL2.Count);
+
+        public long ShellNodesL2BufferBytes => checked((long)AllocatedShellNodeBufferElementCountL2 * ShellNodeGpuStrideBytes);
+
+        public int ShellNodeCountL3 => registry.ShellNodesL3.Count;
+
+        public int AllocatedShellNodeBufferElementCountL3 => Mathf.Max(1, registry.ShellNodesL3.Count);
+
+        public long ShellNodesL3BufferBytes => checked((long)AllocatedShellNodeBufferElementCountL3 * ShellNodeGpuStrideBytes);
+
+        public long TotalBranchTelemetryBufferBytes => checked(
+            BranchBufferBytes +
+            BranchDecisionBufferBytes +
+            PrototypeBufferBytes +
+            ShellNodesL1BufferBytes +
+            ShellNodesL2BufferBytes +
+            ShellNodesL3BufferBytes);
+
+        public int VisibleInstanceStrideBytes => VisibleInstanceStrideBytesInternal;
+
+        public long VisibleInstanceCapacityBytes => checked((long)visibleInstanceCapacity * VisibleInstanceStrideBytesInternal);
 
         public VegetationGpuDecisionPipeline(ComputeShader classifyShader, VegetationRuntimeRegistry registry, int visibleInstanceCapacity)
         {
@@ -209,6 +263,45 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             disposed = true;
             ReleaseResources();
+            slotEmittedCountsReadback = Array.Empty<uint>();
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Reads back one prepared-frame summary from emitted slot counts so diagnostics can inspect slot pressure without exposing CPU instance mirrors.
+        /// </summary>
+        public void ReadbackPreparedFrameTelemetry(out int nonZeroEmittedSlotCount, out long emittedVisibleInstanceCount)
+        {
+            if (!residentFramePrepared)
+            {
+                throw new InvalidOperationException("Prepared-frame telemetry requires a resident frame.");
+            }
+
+            int slotCount = registry.DrawSlots.Count;
+            if (slotCount <= 0)
+            {
+                nonZeroEmittedSlotCount = 0;
+                emittedVisibleInstanceCount = 0L;
+                return;
+            }
+
+            EnsureSlotEmittedCountsReadbackCapacity(slotCount);
+            slotEmittedInstanceCountBuffer.GetData(slotEmittedCountsReadback, 0, 0, slotCount);
+
+            int localNonZeroSlotCount = 0;
+            long localEmittedVisibleInstanceCount = 0L;
+            for (int slotIndex = 0; slotIndex < slotCount; slotIndex++)
+            {
+                uint emittedCount = slotEmittedCountsReadback[slotIndex];
+                if (emittedCount > 0u)
+                {
+                    localNonZeroSlotCount++;
+                }
+
+                localEmittedVisibleInstanceCount += emittedCount;
+            }
+
+            nonZeroEmittedSlotCount = localNonZeroSlotCount;
+            emittedVisibleInstanceCount = localEmittedVisibleInstanceCount;
         }
 
         private void UploadStaticData()
@@ -436,6 +529,16 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private static ComputeBuffer CreateStructuredBuffer<T>(int count) where T : struct
         {
             return new ComputeBuffer(count, Marshal.SizeOf<T>());
+        }
+
+        private void EnsureSlotEmittedCountsReadbackCapacity(int requiredSlotCount)
+        {
+            if (slotEmittedCountsReadback.Length >= requiredSlotCount)
+            {
+                return;
+            }
+
+            slotEmittedCountsReadback = new uint[requiredSlotCount];
         }
 
         private void ReleaseResources()

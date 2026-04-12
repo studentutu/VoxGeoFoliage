@@ -96,9 +96,32 @@ Examples:
 4. `VegetationRendererFeature.ColorPassEvent`
    URP event for vegetation color submission. It controls ordering against the rest of the opaque pipeline.
 5. `VegetationFoliageFeatureSettings.EnableDiagnostics`
-   Renderer-wide diagnostics toggle for every active container rendered by that feature.
+   Renderer-wide diagnostics toggle for every active container rendered by that feature. This is also the switch for current runtime-review telemetry in the Unity Console.
 6. `VegetationRuntimeContainer.maxVisibleInstanceCapacity`
    Per-container hard cap for visible packed instances. This does not define a global full-scene budget unless the whole scene is rendered through one container.
+
+## Diagnostics
+
+1. Open the URP renderer data asset that contains `VegetationRendererFeature`.
+2. Expand `VegetationRendererFeature` settings.
+3. Enable `VegetationFoliageFeatureSettings.EnableDiagnostics`.
+4. Enter Play Mode or render through SceneView/Game cameras with vegetation enabled.
+5. Read the Unity Console output from `AuthoringContainerRuntime`, `VegetationRenderPass`, and `VegetationIndirectRenderer`.
+
+Current shipped diagnostics include:
+
+1. Registration counts for `trees`, `TreeBlueprints[]`, `SceneBranches[]`, `BranchPrototypes[]`, `ShellNodesL1/L2/L3[]`, `drawSlots`, and `cells`.
+2. Exact allocated GPU bytes for branch-review buffers:
+   `branchBufferBytes`, `branchDecisionBufferBytes`, `prototypeBufferBytes`, `shellNodesL1BufferBytes`, `shellNodesL2BufferBytes`, `shellNodesL3BufferBytes`, `totalBranchTelemetryBufferBytes`, `visibleInstanceStrideBytes`, and `visibleInstanceCapacityBytes`.
+3. One-shot prepared-frame readback totals:
+   `nonZeroEmittedSlots`, `emittedVisibleInstances`, and `emittedVisibleInstanceBytes`.
+4. Allocated element counts beside the raw byte totals so zero-count buffers are still interpreted correctly when the runtime allocates `Mathf.Max(1, count)` elements.
+
+Scope note:
+
+1. This is current runtime-review telemetry only.
+2. `nonZeroEmittedSlots` and emitted visible-instance totals come from one synchronous CPU readback of `_SlotEmittedInstanceCounts`, so leave diagnostics off outside review.
+3. It does not implement the later acceptance-model telemetry from `DetailedDocs/urgentRedesign.md` such as promoted-tree counts or per-bucket acceptance.
 
 ## Capacity And Containers
 

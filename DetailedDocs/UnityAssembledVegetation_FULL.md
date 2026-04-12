@@ -773,6 +773,7 @@ Tree -> Expanded or Impostor -> flat branch span -> BranchDecision -> shell-tier
 - the shared `VegetationClassify.compute` asset reference through feature settings
 - indirect depth pass
 - indirect color pass
+- `VegetationFoliageFeatureSettings.EnableDiagnostics` as the current shipped runtime-review telemetry gate for registration, preparation, indirect submission, exact branch/shell/visible-instance byte logs, and one-shot emitted-slot readback
 - optional later optimization hook points for depth-aware culling or other submission reductions after prioritization is stable
 
 `VegetationRuntimeContainer` still owns runtime registration and GPU-frame preparation; urgent dense-forest work should keep that path focused on accepted-content prioritization first. It is not a BRG wrapper.
@@ -780,6 +781,26 @@ Tree -> Expanded or Impostor -> flat branch span -> BranchDecision -> shell-tier
 ---
 
 # 9. Developer Verification
+
+## 9.0 How To Enable Current Runtime-Review Telemetry
+
+1. Open the URP renderer data asset that contains `VegetationRendererFeature`.
+2. Enable `VegetationFoliageFeatureSettings.EnableDiagnostics`.
+3. Render vegetation through a Game or SceneView camera.
+4. Read Unity Console entries from `AuthoringContainerRuntime`.
+
+Current shipped telemetry includes:
+- `TreeBlueprints[]` count
+- `SceneBranches[]` count
+- `BranchPrototypes[]` and `ShellNodesL1/L2/L3[]` counts
+- exact allocated GPU bytes for `branchBuffer`, `branchDecisionBuffer`, prototype buffer, shell-node buffers, and the visible-instance capacity buffer
+- `totalBranchTelemetryBufferBytes`
+- one-shot prepared-frame readback for `nonZeroEmittedSlots`, `emittedVisibleInstances`, and `emittedVisibleInstanceBytes`
+
+Scope note:
+- this is current runtime-review telemetry only
+- `nonZeroEmittedSlots` and emitted visible-instance totals use one synchronous CPU readback of `_SlotEmittedInstanceCounts`, so leave diagnostics disabled outside review
+- it does not replace the later redesign telemetry for promoted trees, acceptance buckets, or overflow outcomes
 
 Milestone 1 should not add a large new runtime test plan yet. It must add strong developer-side verification for the direct GPU emission path.
 

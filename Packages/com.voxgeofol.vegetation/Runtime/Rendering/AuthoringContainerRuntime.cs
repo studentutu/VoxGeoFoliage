@@ -47,6 +47,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private int lastPreparationWarningCameraInstanceId = -1;
         private int lastPreparationWarningDrawSlotCount = -1;
         private bool lastPreparationWarningUploadedFrame;
+        private bool gpuPipelineTelemetryDiagnosticsDirty = true;
+        private bool preparedFrameTelemetryDiagnosticsDirty = true;
         private bool isRegistered;
         private bool isDisposed;
 
@@ -136,6 +138,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                 ResetGpuDecisionPipeline();
                 registrationDiagnosticsDirty = true;
+                gpuPipelineTelemetryDiagnosticsDirty = true;
+                preparedFrameTelemetryDiagnosticsDirty = true;
                 lastPreparedCameraInstanceId = -1;
                 lastPreparedRenderFrame = -1;
                 lastPreparationMissingStateCameraInstanceId = -1;
@@ -155,6 +159,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             indirectRenderer = null;
             registry = null;
             registrationDiagnosticsDirty = true;
+            gpuPipelineTelemetryDiagnosticsDirty = true;
+            preparedFrameTelemetryDiagnosticsDirty = true;
             lastPreparedCameraInstanceId = -1;
             lastPreparedRenderFrame = -1;
             lastPreparationDiagnosticsCameraInstanceId = -1;
@@ -199,7 +205,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 GeometryUtility.CalculateFrustumPlanes(camera, reusableFrustumPlanes);
                 Vector3 cameraWorldPosition = camera.transform.position;
                 bool uploadedFrame =
-                    PrepareGpuResidentFrame(cameraWorldPosition, reusableFrustumPlanes, classifyShader);
+                    PrepareGpuResidentFrame(cameraWorldPosition, reusableFrustumPlanes, classifyShader, diagnosticsEnabled);
 
                 lastPreparedCameraInstanceId = cameraInstanceId;
                 lastPreparedRenderFrame = renderFrame;
@@ -249,17 +255,23 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             RefreshRuntimeRegistration();
         }
 
-        private bool PrepareGpuResidentFrame(Vector3 cameraWorldPosition, Plane[] frustumPlanes, ComputeShader? classifyShader)
+        private bool PrepareGpuResidentFrame(
+            Vector3 cameraWorldPosition,
+            Plane[] frustumPlanes,
+            ComputeShader? classifyShader,
+            bool diagnosticsEnabled)
         {
             using (PrepareGpuResidentFrameMarker.Auto())
             {
                 EnsureGpuDecisionPipeline(classifyShader);
                 VegetationGpuDecisionPipeline pipeline = gpuDecisionPipeline!;
+                LogGpuPipelineTelemetry(diagnosticsEnabled, pipeline);
                 pipeline.PrepareResidentFrame(cameraWorldPosition, frustumPlanes);
                 indirectRenderer!.BindGpuResidentFrame(
                     pipeline.ResidentInstanceBuffer,
                     pipeline.ResidentArgsBuffer,
                     pipeline.ResidentSlotPackedStartsBuffer);
+                LogPreparedFrameTelemetry(diagnosticsEnabled, pipeline);
                 return indirectRenderer.HasUploadedFrame;
             }
         }
@@ -300,6 +312,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 maxVisibleInstanceCapacity);
             gpuPipelineShaderInstanceId = shaderInstanceId;
             gpuPipelineVisibleInstanceCapacity = maxVisibleInstanceCapacity;
+            gpuPipelineTelemetryDiagnosticsDirty = true;
+            preparedFrameTelemetryDiagnosticsDirty = true;
         }
 
         private void ResetGpuDecisionPipeline()
@@ -308,6 +322,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             gpuDecisionPipeline = null;
             gpuPipelineShaderInstanceId = -1;
             gpuPipelineVisibleInstanceCapacity = -1;
+            gpuPipelineTelemetryDiagnosticsDirty = true;
+            preparedFrameTelemetryDiagnosticsDirty = true;
         }
 
         private void ResetAuthoringRuntimeIndices()
@@ -334,7 +350,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             builder.Append(" configuredAuthorings=").Append(authorings.Count);
             builder.Append(" activeAuthorings=").Append(activeAuthorings);
             builder.Append(" trees=").Append(registry.TreeInstances.Count);
+            builder.Append(" blueprints=").Append(registry.TreeBlueprints.Count);
             builder.Append(" branches=").Append(registry.SceneBranches.Count);
+            builder.Append(" branchPrototypes=").Append(registry.BranchPrototypes.Count);
+            builder.Append(" shellNodesL1=").Append(registry.ShellNodesL1.Count);
+            builder.Append(" shellNodesL2=").Append(registry.ShellNodesL2.Count);
+            builder.Append(" shellNodesL3=").Append(registry.ShellNodesL3.Count);
             builder.Append(" drawSlots=").Append(registry.DrawSlots.Count);
             builder.Append(" cells=").Append(registry.SpatialGrid.Cells.Count);
 
@@ -347,6 +368,68 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             registrationDiagnosticsDirty = false;
             Debug.Log(builder.ToString(), diagnosticsContext);
+        }
+
+        private void LogGpuPipelineTelemetry(bool diagnosticsEnabled, VegetationGpuDecisionPipeline pipeline)
+        {
+            if (!diagnosticsEnabled || !gpuPipelineTelemetryDiagnosticsDirty || registry == null)
+            {
+                return;
+            }
+
+            StringBuilder builder = new StringBuilder(512);
+            builder.Append("AuthoringContainerRuntime telemetry");
+            builder.Append(" container=").Append(debugName);
+            builder.Append(" provider=").Append(providerKind);
+            builder.Append(" blueprints=").Append(pipeline.BlueprintCount);
+            builder.Append(" sceneBranches=").Append(pipeline.SceneBranchRecordCount);
+            builder.Append(" branchBufferElements=").Append(pipeline.AllocatedBranchBufferElementCount);
+            builder.Append(" branchBufferBytes=").Append(pipeline.BranchBufferBytes);
+            builder.Append(" branchDecisionBufferElements=").Append(pipeline.AllocatedBranchDecisionBufferElementCount);
+            builder.Append(" branchDecisionBufferBytes=").Append(pipeline.BranchDecisionBufferBytes);
+            builder.Append(" branchPrototypes=").Append(pipeline.BranchPrototypeCount);
+            builder.Append(" prototypeBufferElements=").Append(pipeline.AllocatedPrototypeBufferElementCount);
+            builder.Append(" prototypeBufferBytes=").Append(pipeline.PrototypeBufferBytes);
+            builder.Append(" shellNodesL1=").Append(pipeline.ShellNodeCountL1);
+            builder.Append(" shellNodesL1BufferElements=").Append(pipeline.AllocatedShellNodeBufferElementCountL1);
+            builder.Append(" shellNodesL1BufferBytes=").Append(pipeline.ShellNodesL1BufferBytes);
+            builder.Append(" shellNodesL2=").Append(pipeline.ShellNodeCountL2);
+            builder.Append(" shellNodesL2BufferElements=").Append(pipeline.AllocatedShellNodeBufferElementCountL2);
+            builder.Append(" shellNodesL2BufferBytes=").Append(pipeline.ShellNodesL2BufferBytes);
+            builder.Append(" shellNodesL3=").Append(pipeline.ShellNodeCountL3);
+            builder.Append(" shellNodesL3BufferElements=").Append(pipeline.AllocatedShellNodeBufferElementCountL3);
+            builder.Append(" shellNodesL3BufferBytes=").Append(pipeline.ShellNodesL3BufferBytes);
+            builder.Append(" totalBranchTelemetryBufferBytes=").Append(pipeline.TotalBranchTelemetryBufferBytes);
+            builder.Append(" visibleInstanceCapacity=").Append(maxVisibleInstanceCapacity);
+            builder.Append(" visibleInstanceStrideBytes=").Append(pipeline.VisibleInstanceStrideBytes);
+            builder.Append(" visibleInstanceCapacityBytes=").Append(pipeline.VisibleInstanceCapacityBytes);
+            Debug.Log(builder.ToString(), diagnosticsContext);
+            gpuPipelineTelemetryDiagnosticsDirty = false;
+        }
+
+        private void LogPreparedFrameTelemetry(bool diagnosticsEnabled, VegetationGpuDecisionPipeline pipeline)
+        {
+            if (!diagnosticsEnabled || !preparedFrameTelemetryDiagnosticsDirty || registry == null)
+            {
+                return;
+            }
+
+            pipeline.ReadbackPreparedFrameTelemetry(out int nonZeroEmittedSlotCount, out long emittedVisibleInstanceCount);
+            long emittedVisibleInstanceBytes = checked(emittedVisibleInstanceCount * pipeline.VisibleInstanceStrideBytes);
+
+            StringBuilder builder = new StringBuilder(256);
+            builder.Append("AuthoringContainerRuntime preparedFrameTelemetry");
+            builder.Append(" container=").Append(debugName);
+            builder.Append(" provider=").Append(providerKind);
+            builder.Append(" blueprints=").Append(pipeline.BlueprintCount);
+            builder.Append(" registeredDrawSlots=").Append(registry.DrawSlots.Count);
+            builder.Append(" nonZeroEmittedSlots=").Append(nonZeroEmittedSlotCount);
+            builder.Append(" emittedVisibleInstances=").Append(emittedVisibleInstanceCount);
+            builder.Append(" emittedVisibleInstanceBytes=").Append(emittedVisibleInstanceBytes);
+            builder.Append(" visibleInstanceCapacity=").Append(maxVisibleInstanceCapacity);
+            builder.Append(" visibleInstanceCapacityBytes=").Append(pipeline.VisibleInstanceCapacityBytes);
+            Debug.Log(builder.ToString(), diagnosticsContext);
+            preparedFrameTelemetryDiagnosticsDirty = false;
         }
 
         private void LogPreparationDiagnostics(Camera camera, bool uploadedFrame, bool diagnosticsEnabled)

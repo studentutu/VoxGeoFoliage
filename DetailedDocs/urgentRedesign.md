@@ -163,6 +163,43 @@ Operational consequence:
 - the urgent redesign must intercept between tree classification and branch work
 - targeted branch-shell BFS is only worth adding after that interception exists
 
+## observed dense-forest telemetry review
+
+One current shipped dense-forest sample already proves the next architectural constraint:
+
+- `trees=6087`
+- `sceneBranches=316524`
+- `branchPrototypes=1`
+- `shellNodesL1/L2/L3=759/1/1`
+- `drawSlots=768`
+- `branchBufferBytes=130407888`
+- `branchDecisionBufferBytes=5064384`
+- `totalBranchTelemetryBufferBytes=135508856`
+- `visibleInstanceCapacity=262144`, which is `37748736` bytes at the current `144`-byte visible-instance stride
+
+What this means:
+
+- `SceneBranches[]` is bounded and owned. It is not an exponential frame-growth bug.
+- Bounded is still not cheap enough here. One repeated dense container is already spending about `129.2 MiB` on branch-review buffers before the shared visible-instance capacity buffer.
+- The visible-instance capacity buffer adds about `36.0 MiB` more at the current default, so one dense container is already reserving about `165.2 MiB` before material copies and other renderer state.
+- `drawSlots=768` with one branch prototype and `759` L1 shell nodes means submission pressure is being driven mainly by shell-node slot identity, not by species diversity.
+- `shellNodesL2=1` and `shellNodesL3=1` are suspicious. This looks like an authored or bake-time shell-tier collapse, not a healthy multi-tier hierarchy.
+
+Issues this can cause:
+
+- high per-container GPU memory reservation even before accepted content is emitted
+- branch classify/count/emit still touches `316524` flat scene-branch records every frame when only a much smaller near subset is visually important
+- high indirect submission pressure because the current renderer keeps registered draw slots active once the frame is bound
+- misleading branch-shell BFS conclusions if the shell tiers are degenerate; the runtime will look flatter and less hierarchical than intended
+- abrupt `L1 -> L2/L3` visual collapse and unstable mid/far canopy quality if the authored shell bake really is `759/1/1`
+
+Design consequence:
+
+- keep `SceneBranches[]` only as the current bounded registration snapshot for now
+- do not treat it as the permanent dense-forest static owner
+- after prioritization lands, either replace it with a lighter `SceneBranchRef[]` or derive `PromotedBranchWorkItems` directly from `TreeInstances[] + TreeBlueprints[] + BranchPrototypes[]`
+- current runtime-review telemetry behind `EnableDiagnostics` must expose `blueprints`, `nonZeroEmittedSlots`, `emittedVisibleInstances`, `emittedVisibleInstanceBytes`, and `visibleInstanceCapacityBytes` so later redesign decisions are based on measured pressure instead of guesswork
+
 ## best alternatives
 
 - Tree-presence proxy first, then nearest-tree promotion.
@@ -450,7 +487,8 @@ Required validation scenario:
   - overflow never drops arbitrary trees due to slot order
 
 Telemetry priority:
-- add telemetry only after the acceptance logic above is implemented and stable
+- keep current shipped runtime-review telemetry behind `EnableDiagnostics` for architecture review
+- add later acceptance-model telemetry only after the acceptance logic above is implemented and stable
 
 ### 9. Migration plan
 
