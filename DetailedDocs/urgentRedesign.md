@@ -57,7 +57,8 @@ Reason for the scope cut:
 | `Draw slot` | Shipped | `VegetationRuntimeRegistry.DrawSlots`, `BuildSlotStarts`, `VegetationIndirectRenderer` | One exact runtime bucket defined by `Mesh + Material + MaterialKind`. One draw slot owns one slot index, one indirect-args record, one packed-range start, and one potential indirect submission per pass. |
 | `Indirect submission` | Shipped | `VegetationIndirectRenderer.Render()` | One final `DrawMeshInstancedIndirect` call for one active draw slot in one pass. This is downstream from visible-instance acceptance. |
 | `Tree branch span` | Shipped | `VegetationTreeInstanceRuntime.SceneBranchStartIndex + SceneBranchCount`, tree/branch kernels | One tree points to its contiguous branch slice inside the flat `SceneBranches[]` array. This is not a full-tree hierarchy. |
-| `Branch-shell BFS metadata` | Shipped limitation | `VegetationBranchShellNodeRuntimeBfs`, `ShellNodesL1/L2/L3`, compute upload | `FirstChildIndex + ChildMask` child-link metadata exists per shell tier, but the shipped shader still does not use it for real frontier traversal or subtree skip. |
+| `Scene branch record` | Shipped | `VegetationRuntimeRegistry.SceneBranches[]`, branch classify/count/emit | One bounded static registration record for one scene branch placement. It is not a final submission owner. |
+| `Branch-shell BFS metadata` | Shipped limitation | `VegetationBranchShellNodeRuntimeBfs`, `ShellNodesL1/L2/L3`, compute upload | `FirstChildIndex + ChildMask` child-link metadata exists per shell tier, but the shipped shader still does not use it for real frontier traversal or subtree skip. This is branch-shell BFS, not tree BFS. |
 | `PresenceProxyOnly` | Planned redesign | This document, Stage `C.5` | Tree is accepted only as one whole-tree proxy for this frame and must skip branch kernels entirely. |
 | `PromotedExpanded` | Planned redesign | This document, Stages `C.5`, `C.6`, `D` | Tree is accepted for expensive branch-level work this frame. |
 | `Promoted-tree compaction` | Planned redesign | This document, Stage `C.5` | Build a dense promoted-tree worklist before branch kernels so non-promoted trees never pay branch traversal cost. |
@@ -77,9 +78,9 @@ VegetationRuntimeContainer.registeredAuthorings
 -> VegetationRuntimeRegistry
    -> DrawSlots[]                 exact mesh + material + material-kind buckets
    -> TreeInstances[]             one per active tree
-   -> SceneBranches[]             flat branch array for all active trees
-   -> BranchPrototypes[]          per-prototype decode data
-   -> ShellNodesL1/L2/L3[]        prototype-local branch-shell BFS metadata
+   -> SceneBranches[]             bounded static registration snapshot for all active tree branches in flat branch array
+   -> BranchPrototypes[]          reusable per-prototype decode data
+   -> ShellNodesL1/L2/L3[]        reusable prototype-local branch-shell BFS metadata
    -> SpatialGrid                 tree-cell ownership for visibility classification
 ```
 
@@ -113,6 +114,30 @@ Camera
 -> final URP indirect submissions
 ```
 
+### current ownership split
+
+Static registry owners:
+
+- `SpatialGrid`
+  Owns tree-to-cell registration and visible-cell query bounds only.
+- `TreeInstances[]`
+  Owns per-tree static scene registration and the handle into the flat branch array.
+- `SceneBranches[]`
+  Owns one bounded static scene-branch registration record per placed branch in the container snapshot. It grows linearly during `RefreshRuntimeRegistration()`. It is not a final submission owner.
+- `BranchPrototypes[] + ShellNodesL1/L2/L3[]`
+  Own reusable branch module decode data and reusable branch-shell BFS metadata.
+- `DrawSlots[]`
+  Own final submission identities only.
+
+Per-frame worklists:
+
+- `cellVisibilityBuffer`, `treeModesBuffer`, `branchDecisionBuffer`
+  Current frame classification outputs derived from the static registry.
+- `residentInstanceBuffer`, `residentArgsBuffer`, `slotPackedStartsBuffer`
+  Current frame accepted-content and submission outputs.
+- future `PromotedTreeIndices` and `PromotedBranchWorkItems`
+  Compact worklists that should replace full-scene branch dispatch once tree prioritization lands.
+
 ### redesign insertion point
 
 ```text
@@ -128,7 +153,7 @@ ClassifyTrees
 -> nearest-tree promotion to PromotedExpanded
 -> promoted-tree compaction
 -> branch classify/count/emit for promoted trees only
--> later targeted BFS for promoted shell branches only
+-> later targeted branch-shell BFS for promoted shell branches only
 -> final count/pack/emit of accepted content
 ```
 
@@ -136,7 +161,7 @@ Operational consequence:
 
 - today the runtime can cheaply reject whole trees at the tree sphere stage, but once a tree stays expanded it still pulls branch work from a flat branch span
 - the urgent redesign must intercept between tree classification and branch work
-- targeted BFS is only worth adding after that interception exists
+- targeted branch-shell BFS is only worth adding after that interception exists
 
 ## best alternatives
 
@@ -291,7 +316,7 @@ This is the simple pre-pass needed to trim decisions as much as possible:
 - only promoted near trees pay per-branch cost
 - shell traversal is skipped entirely for non-promoted trees
 
-#### Stage C.6: targeted BFS for promoted shell branches only
+#### Stage C.6: targeted branch-shell BFS for promoted shell branches only
 
 After promoted-tree compaction is in place, finally use the existing branch-shell BFS metadata in a targeted way.
 
@@ -326,8 +351,8 @@ Non-goals:
 
 Hard rule:
 
-- tree-level prioritization and promoted-tree compaction must land before targeted BFS work starts
-- otherwise the runtime will still waste work touching too many expanded trees and the BFS stage will be solving the wrong problem
+- tree-level prioritization and promoted-tree compaction must land before targeted branch-shell BFS work starts
+- otherwise the runtime will still waste work touching too many expanded trees and the branch-shell BFS stage will be solving the wrong problem
 
 #### Stage D: branch detail buckets inside promoted trees
 
@@ -439,7 +464,7 @@ Telemetry priority:
 
 #### Phase 2 - fuller detail quality
 
-- replace shell-tier flat scans with targeted BFS frontier traversal for promoted shell branches only
+- replace shell-tier flat scans with targeted branch-shell BFS frontier traversal for promoted shell branches only
 - add branch priority rings for promoted trees
 - add demotion logic when promoted-tree completeness is unstable
 

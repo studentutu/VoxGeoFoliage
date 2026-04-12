@@ -123,6 +123,7 @@ Examples:
 | `VegetationTreeAuthoringRuntime` | Shipped | `VegetationRuntimeContainer.BuildRuntimeTreeAuthorings()` -> `AuthoringContainerRuntime` | Runtime-safe tree snapshot used so registration does not depend on live `MonoBehaviour` traversal. |
 | `VegetationRuntimeRegistry` | Shipped | Built by `VegetationRuntimeRegistryBuilder`, then consumed by GPU pipeline and indirect renderer | Frozen flattened runtime snapshot for one container. |
 | `Tree branch span` | Shipped | `VegetationTreeInstanceRuntime.SceneBranchStartIndex + SceneBranchCount` | One tree points to its contiguous slice inside the flat `SceneBranches[]` array. |
+| `Scene branch record` | Shipped | `VegetationRuntimeRegistry.SceneBranches[]`, branch classify/count/emit | One bounded static registration record for one scene branch placement. It is not a final submission owner. |
 | `Draw slot` | Shipped | `VegetationRuntimeRegistry.DrawSlots`, slot counters, `VegetationIndirectRenderer` | Exact `Mesh + Material + MaterialKind` batch identity. One slot owns one slot index, one indirect-args record, and one potential indirect submission per pass. |
 | `Visible instance` | Shipped | Packed into `residentInstanceBuffer`; bounded by `VegetationRuntimeContainer.maxVisibleInstanceCapacity` | Final draw-ready instance payload written by the compute path. Many visible instances can map to one draw slot. |
 | `Indirect submission` | Shipped | `VegetationIndirectRenderer.Render()` depth/color calls | One final `DrawMeshInstancedIndirect` call for one active draw slot in one pass. This is downstream from visible-instance acceptance. |
@@ -146,9 +147,9 @@ VegetationRuntimeContainer.registeredAuthorings
 -> VegetationRuntimeRegistry
    -> DrawSlots[]                 exact mesh + material + material-kind buckets
    -> TreeInstances[]             one per active tree
-   -> SceneBranches[]             flat branch array for all active trees
-   -> BranchPrototypes[]          per-prototype decode data
-   -> ShellNodesL1/L2/L3[]        prototype-local branch-shell BFS metadata
+   -> SceneBranches[]             bounded static registration snapshot for all active tree branches in flat branch array
+   -> BranchPrototypes[]          reusable per-prototype decode data
+   -> ShellNodesL1/L2/L3[]        reusable prototype-local branch-shell BFS metadata
    -> SpatialGrid                 tree-cell ownership for visibility classification
 ```
 
@@ -182,11 +183,36 @@ Camera
 -> final URP indirect submissions
 ```
 
+### Static Registry Owners vs Per-Frame Worklists
+
+Static registry owners:
+
+1. `SpatialGrid`
+   Owns tree-to-cell registration and visible-cell query boundaries. It does not own branch decode or final submissions.
+2. `TreeInstances[]`
+   Owns per-tree static scene registration plus the `SceneBranchStartIndex + SceneBranchCount` handle into the flat branch array.
+3. `SceneBranches[]`
+   Owns one bounded static scene-branch registration record per placed branch in the container snapshot. It grows linearly with active tree authorings and blueprint branch placements during `RefreshRuntimeRegistration()`. It is not a final draw owner.
+4. `BranchPrototypes[] + ShellNodesL1/L2/L3[]`
+   Own reusable branch module decode data plus reusable branch-shell BFS metadata.
+5. `DrawSlots[]`
+   Own final submission identities only: exact `Mesh + Material + MaterialKind` buckets and per-slot indirect-args layout.
+
+Per-frame worklists:
+
+1. `cellVisibilityBuffer`, `treeModesBuffer`, and `branchDecisionBuffer`
+   Frame-local classification outputs derived from the static registry.
+2. `residentInstanceBuffer` and `residentArgsBuffer`
+   Frame-local accepted-content outputs used for indirect submission.
+3. planned `PromotedTreeIndices` and `PromotedBranchWorkItems`
+   Future compacted worklists that should replace full-scene branch dispatch for the urgent redesign.
+
 ### What This Means Operationally
 
 1. `VegetationRuntimeContainer.maxVisibleInstanceCapacity` limits packed visible instances, not draw slots.
 2. `DrawSlots.Count` controls how many potential indirect submissions exist for a container, but the current shipped renderer still keeps every registered slot active once the frame is bound.
-3. Tree selection and branch selection currently happen before any urgent prioritization logic, so dense-forest overflow is still structurally driven by slot-order packing.
+3. `SceneBranches[]` is a bounded registration snapshot, not an exponential frame-growth structure. Its real problem today is that branch kernels still use the full array as the work surface every frame.
+4. Tree selection and branch selection currently happen before any urgent prioritization logic, so dense-forest overflow is still structurally driven by slot-order packing.
 
 ## Runtime Pipeline
 

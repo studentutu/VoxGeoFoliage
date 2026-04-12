@@ -5,7 +5,8 @@ using UnityEngine;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// Runtime-side flattened scene branch instance payload owned by one tree's contiguous branch span.
+    /// Static runtime registration record for one scene branch placement owned by one tree's contiguous branch span.
+    /// It is bounded by registration size and is not a final indirect-submission owner.
     /// </summary>
     public struct VegetationSceneBranchRuntime
     {

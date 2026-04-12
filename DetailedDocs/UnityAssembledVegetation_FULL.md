@@ -60,7 +60,7 @@ The next architectural steps after MVP are:
 - split expanded-tree work into `PresenceProxyOnly` versus `PromotedExpanded` before branch kernels
 - compact promoted trees before any branch work
 - replace flat shell-tier scans with real hierarchy traversal
-- then move from BFS to DFS preorder plus subtree spans for better GPU traversal and culling efficiency
+- then move from branch-shell BFS to DFS preorder plus subtree spans for better GPU traversal and culling efficiency
 
 ## 1.3 Core Rules
 
@@ -91,8 +91,11 @@ The next architectural steps after MVP are:
 - `Tree branch span`
   The current runtime tree contract is a flat contiguous branch range through `SceneBranchStartIndex + SceneBranchCount`. It is not a tree-wide octree/BVH/BFS hierarchy.
 
+- `Scene branch record`
+  `SceneBranches[]` is one bounded static registration record per placed branch in the runtime snapshot. It is not a final submission owner.
+
 - `Branch-shell BFS metadata`
-  The runtime stores `firstChildIndex + childMask` for branch shell tiers, but the current shipped shader does not yet use those links for true frontier traversal or subtree skip.
+  The runtime stores `firstChildIndex + childMask` for branch shell tiers, but the current shipped shader does not yet use those links for true frontier traversal or subtree skip. This is branch-shell BFS, not tree BFS.
 
 ---
 
@@ -151,6 +154,33 @@ Forbidden responsibilities:
 - mutating authoring assets or generated meshes
 - any `AssetDatabase` usage
 - any editor bake, preview, validation, or generated-mesh persistence work
+
+### Static Registry Owners vs Per-Frame Worklists
+
+Static registry owners:
+- `SpatialGrid`
+  Tree-to-cell registration and visible-cell query boundaries only.
+- `TreeInstances[]`
+  Per-tree static scene registration plus the `SceneBranchStartIndex + SceneBranchCount` handle into the flat branch array.
+- `SceneBranches[]`
+  One bounded static scene-branch registration record per placed branch in the container snapshot. Count grows linearly with active tree authorings and blueprint branch placements during registration rebuild.
+- `BranchPrototypes[] + ShellNodesL1/L2/L3[]`
+  Reusable branch module decode data and reusable branch-shell BFS metadata.
+- `DrawSlots[]`
+  Final submission identities only.
+
+Per-frame worklists:
+- cell visibility masks
+- tree mode decisions
+- branch decisions
+- packed visible instances
+- indirect args
+- future promoted-tree and promoted-branch compact worklists
+
+Hard rule:
+- static registry owners may grow only during explicit registration rebuild
+- per-frame worklists must stay bounded by the active registry or by explicit runtime budgets
+- `SceneBranches[]` is allowed to remain as a bounded static owner, but it should stop being the permanent full-scene per-frame work surface once promoted-tree compaction lands
 
 ---
 
@@ -252,9 +282,9 @@ Branch reconstruction rules:
 - At `L0/L1/L2/L3` always try to simplify backside when obscured by higher level.
 - If a branch placement enters runtime `L1/L2/L3`, choose exactly one hierarchy tier for that branch in that frame and emit the surviving frontier from that tier.
 
-## 2.5 MVP BFS Hierarchy Contract
+## 2.5 MVP Branch-Shell BFS Hierarchy Contract
 
-The persisted shell arrays are currently treated as BFS-flattened hierarchies for MVP decode.
+The persisted shell arrays are currently treated as branch-shell BFS-flattened hierarchies for MVP decode.
 
 Required invariants:
 - root node is always index `0`
@@ -439,7 +469,7 @@ Runtime may also build optional cached data from those fields during scene regis
 - draw-slot registries
 - tree coarse bounds
 - per-placement branch bounds center plus bounding sphere radius
-- flattened BFS shell-node payloads per authored shell tier
+- flattened branch-shell BFS shell-node payloads per authored shell tier
 
 Runtime per-frame may use authored asset references directly and/or these cached runtime structures, depending on which path is simpler and faster.
 
@@ -506,10 +536,10 @@ Meaning:
 - `VegetationRuntimeContainer.maxVisibleInstanceCapacity` is the hard scene budget for visible packed instances
 - current renderer can issue one indirect submission per draw slot in a pass
 
-## 5.3 What BFS Metadata Provides Today
+## 5.3 What Branch-Shell BFS Metadata Provides Today
 
 Current shipped reality:
-- BFS shell-node metadata is persisted and uploaded prototype-local
+- branch-shell BFS metadata is persisted and uploaded prototype-local
 - the shader uses node bounds, leaf/non-leaf state, and draw-slot identity
 - the shader does not yet walk child links to build a visible frontier
 
@@ -798,7 +828,7 @@ This system targets large-scale vegetation in Unity by combining:
 The runtime authority is now:
 - runtime `L0/L1/L2/L3 + Impostor`
 - authored shell arrays shifted into runtime `L1/L2/L3`
-- BFS hierarchy flattening for MVP
+- branch-shell BFS hierarchy flattening for MVP
 - prototype-local shell caches plus per-frame GPU count/pack/emit
 - explicit `maxVisibleInstanceCapacity` as the hard runtime visible-instance budget
 - multiple indirect calls grouped by exact mesh/material slots, not one literal draw call

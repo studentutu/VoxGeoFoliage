@@ -7,8 +7,9 @@ using UnityEngine;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// Frozen runtime contract built from scene authoring data.
-    /// It stores exact draw-slot registries, flat tree branch spans, and prototype-local shell metadata.
+    /// Frozen runtime registration snapshot built from scene authoring data.
+    /// It stores the static registry owners: exact draw-slot registries, flat tree branch spans, bounded scene-branch records, and prototype-local branch-shell metadata.
+    /// Per-frame classification worklists and accepted-content buffers are owned later by the GPU pipeline, not by this registry.
     /// </summary>
     public sealed class VegetationRuntimeRegistry
     {
