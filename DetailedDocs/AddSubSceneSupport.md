@@ -445,5 +445,6 @@ This work is done only when all of the following are true:
 - DOTS support lives in a separate DOTS-specific assembly
 - main vegetation assembly remains DOTS-free
 - `SubScene` load and unload deterministically create and dispose runtime state
+- updated package readme on how to use Unity sub-scene and the package (via additional `SubSceneAuthoring` on the same `VegetationRuntimeContainer`). Updated memory bank!
 
 If the final result still needs live authoring `GameObject`s for `SubScene` runtime registration, the design failed.
