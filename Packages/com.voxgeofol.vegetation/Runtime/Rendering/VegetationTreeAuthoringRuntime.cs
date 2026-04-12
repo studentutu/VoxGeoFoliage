@@ -27,11 +27,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 throw new ArgumentException("Stable tree id hash must be valid.", nameof(stableTreeIdHash));
             }
 
-            if (string.IsNullOrWhiteSpace(debugName))
-            {
-                throw new ArgumentException("Debug name must be present.", nameof(debugName));
-            }
-
             StableTreeIdHash = stableTreeIdHash;
             DebugName = debugName;
             Blueprint = blueprint ?? throw new ArgumentNullException(nameof(blueprint));

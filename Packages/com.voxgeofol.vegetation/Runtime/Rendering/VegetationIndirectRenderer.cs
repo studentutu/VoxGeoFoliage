@@ -20,6 +20,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private static readonly ProfilerMarker RenderMarker = new ProfilerMarker("VoxGeoFol.VegetationIndirectRenderer.Render");
         private readonly SlotResources[] slotResources;
         private readonly List<int> activeSlotIndices = new List<int>();
+        private readonly VegetationCommandBufferIndirectDrawWrapper commandBufferDrawWrapper = new VegetationCommandBufferIndirectDrawWrapper();
+        private readonly VegetationRasterCommandBufferIndirectDrawWrapper rasterCommandBufferDrawWrapper = new VegetationRasterCommandBufferIndirectDrawWrapper();
         private int lastDepthRenderCameraInstanceId = -1;
         private int lastDepthRenderUploadedSlotCount = -1;
         private int lastDepthRenderRenderedSlotCount = -1;
@@ -84,22 +86,22 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                 if (instanceBuffer == null)
                 {
-                    throw new ArgumentNullException(nameof(instanceBuffer));
+                   return;
                 }
 
                 if (argsBuffer == null)
                 {
-                    throw new ArgumentNullException(nameof(argsBuffer));
+                    return;
                 }
 
                 if (slotPackedStartsBuffer == null)
                 {
-                    throw new ArgumentNullException(nameof(slotPackedStartsBuffer));
+                    return;
                 }
 
                 if (slotEmittedInstanceCountsBuffer == null)
                 {
-                    throw new ArgumentNullException(nameof(slotEmittedInstanceCountsBuffer));
+                    return;
                 }
 
                 gpuResidentArgsBuffer = argsBuffer;
@@ -136,24 +138,16 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             if (disposed)
             {
-               return;
+                return;
             }
 
             if (commandBuffer == null)
             {
-                throw new ArgumentNullException(nameof(commandBuffer));
+                return;
             }
 
-            RenderInternal(camera, passMode, (slot, material) =>
-            {
-                commandBuffer.DrawMeshInstancedIndirect(
-                    slot.DrawSlot.Mesh,
-                    0,
-                    material,
-                    0,
-                    ResolveArgsBuffer(slot),
-                    slot.ResolveArgsBufferOffset());
-            }, diagnosticsEnabled);
+            rasterCommandBufferDrawWrapper.RefreshCommandBuffer(commandBuffer);
+            RenderInternal(camera, passMode, rasterCommandBufferDrawWrapper, diagnosticsEnabled);
         }
 
         /// <summary>
@@ -168,40 +162,47 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             if (commandBuffer == null)
             {
-                throw new ArgumentNullException(nameof(commandBuffer));
+                return;
             }
 
-            RenderInternal(camera, passMode, (slot, material) =>
-            {
-                commandBuffer.DrawMeshInstancedIndirect(
-                    slot.DrawSlot.Mesh,
-                    0,
-                    material,
-                    0,
-                    ResolveArgsBuffer(slot),
-                    slot.ResolveArgsBufferOffset());
-            }, diagnosticsEnabled);
+            commandBufferDrawWrapper.RefreshCommandBuffer(commandBuffer);
+            RenderInternal(camera, passMode, commandBufferDrawWrapper, diagnosticsEnabled);
         }
 
         private void RenderInternal(
             Camera camera,
             VegetationRenderPassMode passMode,
-            Action<SlotResources, Material> issueDraw,
+            IVegetationIndirectDrawWrapper drawWrapper,
             bool diagnosticsEnabled)
         {
             using (RenderMarker.Auto())
             {
                 if (camera == null)
                 {
-                    throw new ArgumentNullException(nameof(camera));
+                    return;
                 }
 
+                if (drawWrapper == null)
+                {
+                    return;
+                }
+
+                if(gpuResidentArgsBuffer == null)
+                {
+                    return;
+                }
+
+                GraphicsBuffer argsBuffer = gpuResidentArgsBuffer;
                 int renderedSlotCount = 0;
                 for (int activeSlotOffset = 0; activeSlotOffset < activeSlotIndices.Count; activeSlotOffset++)
                 {
                     SlotResources slot = slotResources[activeSlotIndices[activeSlotOffset]];
                     Material material = passMode == VegetationRenderPassMode.Depth ? slot.DepthMaterial : slot.ColorMaterial;
-                    issueDraw(slot, material);
+                    drawWrapper.DrawMeshInstancedIndirect(
+                        slot.DrawSlot.Mesh,
+                        material,
+                        argsBuffer,
+                        slot.ResolveArgsBufferOffset());
                     renderedSlotCount++;
                 }
 
@@ -216,7 +217,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             if (target == null)
             {
-                throw new ArgumentNullException(nameof(target));
+                return;
             }
 
             target.Clear();
@@ -252,11 +253,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             activeSlotIndices.Clear();
             lastBoundInstanceBuffer = null;
             lastBoundSlotPackedStartsBuffer = null;
-        }
-
-        private GraphicsBuffer ResolveArgsBuffer(SlotResources slot)
-        {
-            return gpuResidentArgsBuffer ?? throw new InvalidOperationException("GPU-resident args buffer has not been bound.");
         }
 
         private sealed class SlotResources : IDisposable

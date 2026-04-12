@@ -208,12 +208,20 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     }
 
                     builder.AllowPassCulling(false);
-                    builder.SetRenderFunc(static (PassData data, RasterGraphContext context) =>
-                    {
-                        data.RenderPass.DrawContainers(data.Containers, data.ContainerCount, data.Camera, data.ClassifyShader,
-                            data.DiagnosticsEnabled, data.PassMode, context.cmd);
-                    });
+                    builder.SetRenderFunc<PassData>(ExecuteRasterPass);
                 }
+            }
+
+            private static void ExecuteRasterPass(PassData data, RasterGraphContext context)
+            {
+                data.RenderPass.DrawContainers(
+                    data.Containers,
+                    data.ContainerCount,
+                    data.Camera,
+                    data.ClassifyShader,
+                    data.DiagnosticsEnabled,
+                    data.PassMode,
+                    context.cmd);
             }
 
             private void DrawContainers(

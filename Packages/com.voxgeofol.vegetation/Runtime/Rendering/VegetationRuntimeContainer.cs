@@ -135,7 +135,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             if (camera == null)
             {
-                throw new ArgumentNullException(nameof(camera));
+                return false;
             }
 
             EnsureRuntimeOwner();

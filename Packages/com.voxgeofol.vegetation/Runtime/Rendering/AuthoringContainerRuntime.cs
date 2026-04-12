@@ -68,12 +68,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 throw new ArgumentException("Container id must be present.", nameof(containerId));
             }
 
-            if (string.IsNullOrWhiteSpace(debugName))
-            {
-                throw new ArgumentException("Debug name must be present.", nameof(debugName));
-            }
-
-            this.authorings = authorings ?? throw new ArgumentNullException(nameof(authorings));
+            this.authorings = authorings ?? new List<VegetationTreeAuthoringRuntime>();
             this.containerId = containerId;
             this.providerKind = providerKind;
             this.debugName = debugName;
@@ -101,7 +96,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// </summary>
         public bool Activate()
         {
-            ThrowIfDisposed();
+            if (isDisposed)
+            {
+                return false;
+            }
             if (isRegistered)
             {
                 return true;
@@ -116,7 +114,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// </summary>
         public void RefreshRuntimeRegistration()
         {
-            ThrowIfDisposed();
+            if (isDisposed)
+            {
+                return;
+            }
+
             if (!isRegistered)
             {
                 return;
@@ -177,10 +179,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             using (PrepareFrameForCameraMarker.Auto())
             {
-                ThrowIfDisposed();
+                if (isDisposed)
+                {
+                    return false;
+                }
+
                 if (camera == null)
                 {
-                    throw new ArgumentNullException(nameof(camera));
+                    return false;
                 }
 
                 if (!isRegistered)
@@ -235,14 +241,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             isRegistered = false;
             ResetRuntimeState();
-        }
-
-        private void ThrowIfDisposed()
-        {
-            if (isDisposed)
-            {
-                throw new ObjectDisposedException(nameof(AuthoringContainerRuntime));
-            }
         }
 
         private void EnsureRuntimeRegistration()

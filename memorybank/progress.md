@@ -20,6 +20,7 @@ Purpose: track the active milestone, the current blockers, and the next concrete
 - Added urgent-path telemetry for visible trees, accepted `TreeL3`, promoted trees, rejected promotions, expanded branch work-item count, accepted tier-cost usage, and non-zero emitted slots.
 - Removed the per-frame CPU active-slot compaction from `BindGpuResidentFrame()` after it regressed the hot path to a constant multi-millisecond stall. Non-zero emitted slots remain diagnostics-only telemetry until submission compaction can return without a synchronous bind-path readback.
 - Added shader-level shadow support to the bundled package materials: main-light shadow attenuation in the forward pass and `ShadowCaster` passes for canopy, trunk, and far-mesh shaders. Production indirect runtime shadow-atlas submission is still unresolved follow-up work.
+- Removed the per-call delegate capture from `VegetationIndirectRenderer.RenderInternal()` by introducing explicit command-buffer draw wrappers for `CommandBuffer` and `IRasterCommandBuffer`, and normalized the render-graph callback in `VegetationRendererFeature` to a static method.
 - Recompiled through both `Compile by Rider MSBuild` and `Fully Compile by Unity` with no compile errors.
 
 ### Next Validation

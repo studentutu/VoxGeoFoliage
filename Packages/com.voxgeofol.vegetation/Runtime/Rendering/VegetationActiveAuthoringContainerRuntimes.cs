@@ -24,7 +24,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             if (runtime == null)
             {
-                throw new ArgumentNullException(nameof(runtime));
+                return false;
             }
 
             if (ActiveRuntimesByContainerId.TryGetValue(runtime.ContainerId, out AuthoringContainerRuntime? existingRuntime))
@@ -58,7 +58,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             if (runtime == null)
             {
-                throw new ArgumentNullException(nameof(runtime));
+                return;
             }
 
             if (!ActiveRuntimesByContainerId.TryGetValue(runtime.ContainerId, out AuthoringContainerRuntime? existingRuntime) ||
@@ -78,7 +78,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             if (target == null)
             {
-                throw new ArgumentNullException(nameof(target));
+                return;
             }
 
             target.Clear();
@@ -106,8 +106,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             ActiveRuntimesByContainerId[incomingRuntime.ContainerId] = incomingRuntime;
             existingRuntime.HandleRegistrySuperseded();
-            Debug.LogWarning(
-                $"Vegetation runtime owner replaced containerId={incomingRuntime.ContainerId} old={existingRuntime.ProviderKind} new={incomingRuntime.ProviderKind} debugName={incomingRuntime.DebugName}");
         }
 
         private static int CompareProviderPrecedence(
