@@ -1,7 +1,7 @@
 {
   "name": "com.studentutu.vegetation",
   "displayName": "Voxelized Vegetation",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "unity": "6000.3",
   "license": "MIT",
   "description": "Unreal-inspired branch-assembled vegetation rendering for Unity 6.",

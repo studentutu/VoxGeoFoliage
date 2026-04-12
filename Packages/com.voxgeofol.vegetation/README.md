@@ -79,8 +79,10 @@ Examples:
 5. Use `Fill Registered Authorings` on each container.
 6. Classic-scene flow:
    leave `VegetationRuntimeContainer` enabled and it will create its runtime owner on `OnEnable()`.
-7. Closed `SubScene` runtime flow:
+7. Dots unity `SubScene` flow:
    add `SubSceneAuthoring` on the same GameObject as `VegetationRuntimeContainer` before baking/loading the `SubScene`.
+   Enable/Disabling `VegetationRuntimeContainer` will not change `SubSceneAuthoring`.
+   `SubSceneAuthoring` and  unity `SubScene` will not be shown in scene view, so in order to view both - make subscene editable and use enabled `VegetationRuntimeContainer`. 
 8. Call `RefreshRuntimeRegistration()` after transform, hierarchy, blueprint, placement, or generated-mesh changes.
 
 ## Key Settings

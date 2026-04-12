@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.2] - 2026-04-12
+
+- Added hard-cap on the size of the individual container draw-slot array
+- Added support for Unity sub-scene workflow (via added component `SubSceneAuthoring`)
+
 ## [0.1.1] - 2026-04-11
 
 - updated docs
