@@ -625,6 +625,7 @@ Answer: no.
 Answer: skip for now. Ask again when full urgent redesign landed and verified.
 
 ## Repo notes (clean after big feature/design is done)
+
 - Project-local custom vegetation materials are not first-class yet because runtime rendering still resolves final materials through `VegetationIndirectMaterialFactory` rather than an explicit compatible-material contract.
 - `TreeInstances[]` is now the approved redesign target for urgent-path acceptance ownership. It should own tree-first visibility, `TreeL3` floor identity, and nearest-first promotion decisions, while branch-expanded work is generated only for promoted trees from reusable blueprint placements, compact branch prototype tier meshes with separate canopy/wood per level, and a compact per-frame promoted-tree branch worklist instead of `SceneBranches[]`.
 - The current redesign authority no longer treats branch-shell BFS as the next urgent step. Urgent task `#1` is  tree-first acceptance with guaranteed `TreeL3` floor plus nearest-first promotion into branch-expanded `L2/L1/L0`, with `L0` defined as survived original branches and BFS removed from the production path.
@@ -639,7 +640,7 @@ Urgent path keeps one hard runtime budget only:
 - Runtime has two separate limits that must not be conflated: `VegetationRuntimeContainer.maxVisibleInstanceCapacity` is the per-container packed visible-instance cap, while `registry.DrawSlots.Count` is the draw-slot submission surface produced by unique mesh/material/material-kind combinations.
 - Current shipped hierarchy state is weaker than the old docs implied: tree runtime data is still a flat branch span (`SceneBranchStartIndex + SceneBranchCount`), and branch-shell BFS metadata is uploaded prototype-local but not traversed through child links in the shader yet.
 - `registry.SceneBranches[]` is currently a bounded static registration snapshot, not an exponential or unowned frame-growth structure. It grows linearly with active tree authorings and blueprint branch placements during registration rebuild, then stays fixed until the next `RefreshRuntimeRegistration()`.
-- That is no longer enough to justify keeping `registry.SceneBranches[]`. The approved urgent redesign removes pre-populated `SceneBranches[]` and runtime shell-node ownership from the default path instead of preserving a slimmer scene-branch surface.
+- The approved urgent redesign removes pre-populated `SceneBranches[]` and runtime shell-node ownership from the default path instead of preserving a slimmer scene-branch surface.
 
 ---
 
