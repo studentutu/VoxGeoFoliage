@@ -13,10 +13,18 @@ using VoxGeoFol.Features.Vegetation.Rendering;
 public sealed class VegetationRuntimeFoundationTests
 {
     private readonly List<UnityEngine.Object> createdObjects = new List<UnityEngine.Object>();
+    private readonly List<IDisposable> createdDisposables = new List<IDisposable>();
 
     [TearDown]
     public void TearDown()
     {
+        for (int i = createdDisposables.Count - 1; i >= 0; i--)
+        {
+            createdDisposables[i].Dispose();
+        }
+
+        createdDisposables.Clear();
+
         for (int i = createdObjects.Count - 1; i >= 0; i--)
         {
             UnityEngine.Object createdObject = createdObjects[i];
@@ -34,13 +42,16 @@ public sealed class VegetationRuntimeFoundationTests
     {
         VegetationTreeAuthoring firstAuthoring = CreateAuthoring("Tree_A", new Vector3(0f, 0f, 10f));
         VegetationTreeAuthoring secondAuthoring = CreateAuthoring("Tree_B", new Vector3(120f, 0f, 10f));
+        Hash128 containerIdHash = Hash128.Compute("RuntimeRegistryBuilder_AssignsCells");
+        VegetationTreeAuthoringRuntime firstRuntimeAuthoring = CreateRuntimeAuthoring(firstAuthoring, containerIdHash, 0);
+        VegetationTreeAuthoringRuntime secondRuntimeAuthoring = CreateRuntimeAuthoring(secondAuthoring, containerIdHash, 1);
 
         VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
-            .Build(new[] { secondAuthoring, firstAuthoring });
+            .Build(new[] { firstRuntimeAuthoring, secondRuntimeAuthoring });
 
         Assert.AreEqual(2, registry.TreeInstances.Count);
-        Assert.AreEqual("Tree_A", registry.TreeInstances[0].Authoring.name);
-        Assert.AreEqual("Tree_B", registry.TreeInstances[1].Authoring.name);
+        Assert.AreEqual("Tree_A", registry.TreeInstances[0].Authoring.DebugName);
+        Assert.AreEqual("Tree_B", registry.TreeInstances[1].Authoring.DebugName);
         Assert.AreEqual(2, registry.SpatialGrid.Cells.Count);
         Assert.AreNotEqual(registry.TreeInstances[0].CellIndex, registry.TreeInstances[1].CellIndex);
         Assert.AreEqual(2, registry.SceneBranches.Count);
@@ -54,8 +65,10 @@ public sealed class VegetationRuntimeFoundationTests
     public void IndirectRenderer_BindGpuResidentFrame_ExposesConservativeSnapshots()
     {
         VegetationTreeAuthoring authoring = CreateAuthoring("RuntimeTree", new Vector3(0f, 0f, 10f));
+        VegetationTreeAuthoringRuntime runtimeAuthoring =
+            CreateRuntimeAuthoring(authoring, Hash128.Compute("IndirectRenderer_BindGpuResidentFrame"), 0);
         VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
-            .Build(new[] { authoring });
+            .Build(new[] { runtimeAuthoring });
 
         int indirectArgsUintCount = registry.DrawSlots.Count * (GraphicsBuffer.IndirectDrawIndexedArgs.size / sizeof(uint));
 
@@ -102,6 +115,36 @@ public sealed class VegetationRuntimeFoundationTests
         Bounds expectedBounds = TransformBoundsByCornerSweep(localBounds, transformMatrix);
 
         AssertBoundsEqual(actualBounds, expectedBounds);
+    }
+
+    [Test]
+    public void ActiveRuntimeRegistry_ClassicProviderReplacesSubSceneProviderForSameContainerId()
+    {
+        VegetationTreeAuthoring authoring = CreateAuthoring("SharedTree", new Vector3(0f, 0f, 10f));
+        Hash128 containerIdHash = Hash128.Compute("SharedRuntimeRegistryContainer");
+        VegetationTreeAuthoringRuntime runtimeAuthoring = CreateRuntimeAuthoring(authoring, containerIdHash, 0);
+        AuthoringContainerRuntime subSceneRuntime = CreateRuntimeOwner(
+            containerIdHash.ToString(),
+            VegetationRuntimeProviderKind.SubScene,
+            "SharedSubScene",
+            runtimeAuthoring);
+        AuthoringContainerRuntime classicRuntime = CreateRuntimeOwner(
+            containerIdHash.ToString(),
+            VegetationRuntimeProviderKind.ClassicScene,
+            "SharedClassic",
+            runtimeAuthoring);
+
+        Assert.IsTrue(subSceneRuntime.Activate());
+
+        List<AuthoringContainerRuntime> activeRuntimes = new List<AuthoringContainerRuntime>();
+        VegetationActiveAuthoringContainerRuntimes.GetActive(activeRuntimes);
+        Assert.AreEqual(1, activeRuntimes.Count);
+        Assert.AreSame(subSceneRuntime, activeRuntimes[0]);
+
+        Assert.IsTrue(classicRuntime.Activate());
+        VegetationActiveAuthoringContainerRuntimes.GetActive(activeRuntimes);
+        Assert.AreEqual(1, activeRuntimes.Count);
+        Assert.AreSame(classicRuntime, activeRuntimes[0]);
     }
 
     private VegetationTreeAuthoring CreateAuthoring(string name, Vector3 worldPosition)
@@ -171,6 +214,40 @@ public sealed class VegetationRuntimeFoundationTests
         VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
         SetPrivateField(authoring, "blueprint", blueprint);
         return authoring;
+    }
+
+    private VegetationTreeAuthoringRuntime CreateRuntimeAuthoring(
+        VegetationTreeAuthoring authoring,
+        Hash128 containerIdHash,
+        int sourceOrder)
+    {
+        return new VegetationTreeAuthoringRuntime(
+            VegetationRuntimeIdentityUtility.BuildTreeIdHash(containerIdHash, sourceOrder),
+            authoring.name,
+            authoring.Blueprint ?? throw new InvalidOperationException($"{authoring.name} is missing blueprint."),
+            authoring.transform.localToWorldMatrix,
+            true,
+            authoring);
+    }
+
+    private AuthoringContainerRuntime CreateRuntimeOwner(
+        string containerId,
+        VegetationRuntimeProviderKind providerKind,
+        string debugName,
+        params VegetationTreeAuthoringRuntime[] runtimeTrees)
+    {
+        AuthoringContainerRuntime runtimeOwner = new AuthoringContainerRuntime(
+            containerId,
+            providerKind,
+            debugName,
+            null,
+            0,
+            Vector3.zero,
+            new Vector3(64f, 64f, 64f),
+            32,
+            runtimeTrees);
+        createdDisposables.Add(runtimeOwner);
+        return runtimeOwner;
     }
 
     private BranchShellNode[] CreateShellHierarchy(Mesh rootMesh, Mesh leafMesh, int shellLevel)

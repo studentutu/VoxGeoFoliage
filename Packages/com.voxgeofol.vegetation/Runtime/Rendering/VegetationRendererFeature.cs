@@ -87,8 +87,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawContainers.Raster");
 
             private readonly VegetationRenderPassMode passMode;
-            private readonly List<VegetationRuntimeContainer> containers = new List<VegetationRuntimeContainer>();
-            private VegetationRuntimeContainer[] containerSnapshot = Array.Empty<VegetationRuntimeContainer>();
+            private readonly List<AuthoringContainerRuntime> containers = new List<AuthoringContainerRuntime>();
+            private AuthoringContainerRuntime[] containerSnapshot = Array.Empty<AuthoringContainerRuntime>();
             private Camera? camera;
             private ComputeShader? classifyShader;
             private bool diagnosticsEnabled;
@@ -117,7 +117,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     camera = targetCamera;
                     classifyShader = targetClassifyShader;
                     diagnosticsEnabled = targetDiagnosticsEnabled;
-                    VegetationRuntimeContainer.GetActiveContainers(containers);
+                    VegetationActiveAuthoringContainerRuntimes.GetActive(containers);
                     EnsureContainerSnapshotCapacity(containers.Count);
                     containerSnapshotCount = containers.Count;
                     for (int i = 0; i < containerSnapshotCount; i++)
@@ -217,7 +217,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             private void DrawContainers(
-                IReadOnlyList<VegetationRuntimeContainer> containers,
+                IReadOnlyList<AuthoringContainerRuntime> containers,
                 int containerCount,
                 Camera camera,
                 ComputeShader? classifyShader,
@@ -233,8 +233,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     int missingRendererCount = 0;
                     for (int containerIndex = 0; containerIndex < containerCount; containerIndex++)
                     {
-                        VegetationRuntimeContainer container = containers[containerIndex];
-                        if (container == null || !container.isActiveAndEnabled)
+                        AuthoringContainerRuntime container = containers[containerIndex];
+                        if (container == null)
                         {
                             continue;
                         }
@@ -262,7 +262,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             private void DrawContainers(
-                IReadOnlyList<VegetationRuntimeContainer> containers,
+                IReadOnlyList<AuthoringContainerRuntime> containers,
                 int containerCount,
                 Camera camera,
                 ComputeShader? classifyShader,
@@ -278,8 +278,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     int missingRendererCount = 0;
                     for (int containerIndex = 0; containerIndex < containerCount; containerIndex++)
                     {
-                        VegetationRuntimeContainer container = containers[containerIndex];
-                        if (container == null || !container.isActiveAndEnabled)
+                        AuthoringContainerRuntime container = containers[containerIndex];
+                        if (container == null)
                         {
                             continue;
                         }
@@ -362,7 +362,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     newCapacity <<= 1;
                 }
 
-                containerSnapshot = new VegetationRuntimeContainer[newCapacity];
+                containerSnapshot = new AuthoringContainerRuntime[newCapacity];
             }
 
             private sealed class PassData
@@ -372,7 +372,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 public ComputeShader? ClassifyShader;
                 public bool DiagnosticsEnabled;
                 public VegetationRenderPassMode PassMode;
-                public VegetationRuntimeContainer[] Containers = Array.Empty<VegetationRuntimeContainer>();
+                public AuthoringContainerRuntime[] Containers = Array.Empty<AuthoringContainerRuntime>();
                 public int ContainerCount;
             }
         }

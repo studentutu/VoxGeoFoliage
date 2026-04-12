@@ -2,15 +2,13 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
-using Unity.Profiling;
 using VoxGeoFol.Features.Vegetation.Authoring;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// [INTEGRATION] Runtime orchestration hub for registration and frame preparation and renderer ownership.
+    /// [INTEGRATION] Classic-scene lifecycle provider that converts serialized vegetation authorings into one runtime owner.
     /// </summary>
     [ExecuteAlways]
     [DisallowMultipleComponent]
@@ -21,18 +19,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         // Don’t raise it blindly.
         // this is a chunk of data for a single container!
         private const int DefaultMaxVisibleInstanceCapacity = 262144;
-
-        private static readonly ProfilerMarker RefreshRuntimeRegistrationMarker =
-            new ProfilerMarker("VoxGeoFol.VegetationRuntimeContainer.RefreshRuntimeRegistration");
-
-        private static readonly ProfilerMarker PrepareFrameForCameraMarker =
-            new ProfilerMarker("VoxGeoFol.VegetationRuntimeContainer.PrepareFrameForCamera");
-
-        private static readonly ProfilerMarker PrepareGpuResidentFrameMarker =
-            new ProfilerMarker("VoxGeoFol.VegetationRuntimeContainer.PrepareGpuResidentFrame");
-
-        private static readonly List<VegetationRuntimeContainer> ActiveContainersInternal =
-            new List<VegetationRuntimeContainer>();
 
         [Tooltip("World-space origin of the frozen spatial grid built during runtime registration.")]
         [SerializeField] private Vector3 gridOrigin = Vector3.zero;
@@ -49,31 +35,35 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         [SerializeField]
         private int maxVisibleInstanceCapacity = DefaultMaxVisibleInstanceCapacity;
 
-        private readonly List<VegetationTreeAuthoring> activeRegisteredAuthorings = new List<VegetationTreeAuthoring>();
-        private readonly Plane[] reusableFrustumPlanes = new Plane[6];
-        private VegetationRuntimeRegistry? registry;
-        private VegetationGpuDecisionPipeline? gpuDecisionPipeline;
-        private VegetationIndirectRenderer? indirectRenderer;
-        private int gpuPipelineShaderInstanceId = -1;
-        private int gpuPipelineVisibleInstanceCapacity = -1;
-        private int lastPreparedCameraInstanceId = -1;
-        private int lastPreparedRenderFrame = -1;
-        private bool registrationDiagnosticsDirty = true;
-        private int lastPreparationDiagnosticsCameraInstanceId = -1;
-        private int lastPreparationDiagnosticsDrawSlotCount = -1;
-        private bool lastPreparationDiagnosticsUploadedFrame;
-        private int lastPreparationMissingStateCameraInstanceId = -1;
-        private int lastPreparationWarningCameraInstanceId = -1;
-        private int lastPreparationWarningDrawSlotCount = -1;
-        private bool lastPreparationWarningUploadedFrame;
+        private readonly List<VegetationTreeAuthoringRuntime> runtimeAuthorings = new List<VegetationTreeAuthoringRuntime>();
+        private AuthoringContainerRuntime? runtimeOwner;
 
-        public VegetationRuntimeRegistry? Registry => registry;
+        public Vector3 GridOrigin => gridOrigin;
 
-        public VegetationIndirectRenderer? IndirectRenderer => indirectRenderer;
+        public Vector3 CellSize => cellSize;
 
-        public bool HasPreparedFrame => indirectRenderer != null && indirectRenderer.HasUploadedFrame;
+        public IReadOnlyList<VegetationTreeAuthoring> RegisteredAuthorings => registeredAuthorings;
 
-        public static void GetActiveContainers(List<VegetationRuntimeContainer> target)
+        public int MaxVisibleInstanceCapacity => Mathf.Max(1, maxVisibleInstanceCapacity);
+
+        public int RenderLayer => gameObject.layer;
+
+        public Hash128 ContainerIdHash => VegetationRuntimeIdentityUtility.BuildContainerIdHash(gameObject);
+
+        public string ContainerId => ContainerIdHash.ToString();
+
+        public VegetationRuntimeRegistry? Registry => runtimeOwner?.Registry;
+
+        public VegetationIndirectRenderer? IndirectRenderer => runtimeOwner?.IndirectRenderer;
+
+        public bool HasPreparedFrame => runtimeOwner != null && runtimeOwner.HasPreparedFrame;
+
+        public AuthoringContainerRuntime? RuntimeOwner => runtimeOwner;
+
+        /// <summary>
+        /// [INTEGRATION] Converts serialized authorings into runtime-safe tree records shared by classic-scene and SubScene providers.
+        /// </summary>
+        public void BuildRuntimeTreeAuthorings(List<VegetationTreeAuthoringRuntime> target)
         {
             if (target == null)
             {
@@ -81,186 +71,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             target.Clear();
-            for (int i = 0; i < ActiveContainersInternal.Count; i++)
-            {
-                VegetationRuntimeContainer? container = ActiveContainersInternal[i];
-                if (container != null && container.isActiveAndEnabled)
-                {
-                    target.Add(container);
-                }
-            }
-        }
-
-        /// <summary>
-        /// [INTEGRATION] Rebuilds the full Phase D runtime registration snapshot from the configured vegetation authorings list.
-        /// </summary>
-        public void RefreshRuntimeRegistration()
-        {
-            using (RefreshRuntimeRegistrationMarker.Auto())
-            {
-                ResetAuthoringRuntimeIndices();
-
-                CollectRegisteredAuthorings(activeRegisteredAuthorings);
-                VegetationRuntimeRegistryBuilder builder = new VegetationRuntimeRegistryBuilder(gridOrigin, cellSize);
-                registry = builder.Build(activeRegisteredAuthorings);
-                indirectRenderer?.Dispose();
-                indirectRenderer = new VegetationIndirectRenderer(registry, gameObject.layer);
-
-                for (int treeIndex = 0; treeIndex < registry.TreeInstances.Count; treeIndex++)
-                {
-                    registry.TreeInstances[treeIndex].Authoring.RefreshRuntimeTreeIndex(treeIndex);
-                }
-
-                ResetGpuDecisionPipeline();
-                registrationDiagnosticsDirty = true;
-                lastPreparedCameraInstanceId = -1;
-                lastPreparedRenderFrame = -1;
-                lastPreparationMissingStateCameraInstanceId = -1;
-                lastPreparationWarningCameraInstanceId = -1;
-                lastPreparationWarningDrawSlotCount = -1;
-            }
-        }
-
-        /// <summary>
-        /// [INTEGRATION] Clears runtime-only registration state and releases GPU resources without touching authoring assets.
-        /// </summary>
-        public void ResetRuntimeState()
-        {
-            ResetAuthoringRuntimeIndices();
-            ResetGpuDecisionPipeline();
-            indirectRenderer?.Dispose();
-            indirectRenderer = null;
-            registry = null;
-            registrationDiagnosticsDirty = true;
-            lastPreparedCameraInstanceId = -1;
-            lastPreparedRenderFrame = -1;
-            lastPreparationDiagnosticsCameraInstanceId = -1;
-            lastPreparationDiagnosticsDrawSlotCount = -1;
-            lastPreparationMissingStateCameraInstanceId = -1;
-            lastPreparationWarningCameraInstanceId = -1;
-            lastPreparationWarningDrawSlotCount = -1;
-        }
-
-        /// <summary>
-        /// [INTEGRATION] Prepares exactly one camera-visible frame snapshot and uploads it into the Phase E indirect renderer.
-        /// </summary>
-        public bool PrepareFrameForCamera(Camera camera, ComputeShader? classifyShader, bool diagnosticsEnabled)
-        {
-            using (PrepareFrameForCameraMarker.Auto())
-            {
-                if (camera == null)
-                {
-                    throw new ArgumentNullException(nameof(camera));
-                }
-
-                EnsureRuntimeRegistration();
-                if (registry == null || indirectRenderer == null)
-                {
-                    return false;
-                }
-
-                LogRegistrationDiagnostics(activeRegisteredAuthorings, diagnosticsEnabled);
-                int renderFrame = Time.renderedFrameCount;
-                int cameraInstanceId = camera.GetInstanceID();
-                if (lastPreparedRenderFrame == renderFrame && lastPreparedCameraInstanceId == cameraInstanceId)
-                {
-                    return HasPreparedFrame;
-                }
-
-                GeometryUtility.CalculateFrustumPlanes(camera, reusableFrustumPlanes);
-                Vector3 cameraWorldPosition = camera.transform.position;
-                bool uploadedFrame =
-                    PrepareGpuResidentFrame(cameraWorldPosition, reusableFrustumPlanes, classifyShader);
-
-                lastPreparedCameraInstanceId = cameraInstanceId;
-                lastPreparedRenderFrame = renderFrame;
-                LogPreparationDiagnostics(camera, uploadedFrame, diagnosticsEnabled);
-                return uploadedFrame;
-            }
-        }
-
-        private void OnEnable()
-        {
-            if (!ActiveContainersInternal.Contains(this))
-            {
-                ActiveContainersInternal.Add(this);
-            }
-
-            RefreshRuntimeRegistration();
-        }
-
-        private void OnDisable()
-        {
-            ActiveContainersInternal.Remove(this);
-            ResetRuntimeState();
-        }
-
-        private void EnsureRuntimeRegistration()
-        {
-            if (registry != null && indirectRenderer != null)
-            {
-                return;
-            }
-
-            RefreshRuntimeRegistration();
-        }
-
-        private bool PrepareGpuResidentFrame(Vector3 cameraWorldPosition, Plane[] frustumPlanes,
-            ComputeShader? classifyShader)
-        {
-            using (PrepareGpuResidentFrameMarker.Auto())
-            {
-                EnsureGpuDecisionPipeline(classifyShader);
-                VegetationGpuDecisionPipeline pipeline = gpuDecisionPipeline!;
-                pipeline.PrepareResidentFrame(cameraWorldPosition, frustumPlanes);
-                indirectRenderer!.BindGpuResidentFrame(
-                    pipeline.ResidentInstanceBuffer,
-                    pipeline.ResidentArgsBuffer,
-                    pipeline.ResidentSlotPackedStartsBuffer);
-                return indirectRenderer.HasUploadedFrame;
-            }
-        }
-
-        private void EnsureGpuDecisionPipeline(ComputeShader? classifyShader)
-        {
-            if (registry == null)
-            {
-                Debug.LogError(
-                    "VegetationRuntimeContainer cannot build the GPU pipeline before runtime registration is available.");
-                throw new InvalidOperationException(
-                    "VegetationRuntimeContainer cannot build the GPU pipeline before runtime registration is available.");
-            }
-
-            if (classifyShader == null)
-            {
-                Debug.LogError(
-                    "VegetationRendererFeature requires VegetationFoliageFeatureSettings.ClassifyShader to be assigned. Legacy per-container compute-shader wiring was removed.");
-
-                throw new InvalidOperationException(
-                    "VegetationRendererFeature requires VegetationFoliageFeatureSettings.ClassifyShader to be assigned. Legacy per-container compute-shader wiring was removed.");
-            }
-
-            int effectiveVisibleInstanceCapacity = Mathf.Max(1, maxVisibleInstanceCapacity);
-            int shaderInstanceId = classifyShader.GetInstanceID();
-            if (gpuDecisionPipeline != null &&
-                shaderInstanceId == gpuPipelineShaderInstanceId &&
-                effectiveVisibleInstanceCapacity == gpuPipelineVisibleInstanceCapacity)
-            {
-                return;
-            }
-
-            ResetGpuDecisionPipeline();
-            gpuDecisionPipeline = new VegetationGpuDecisionPipeline(
-                classifyShader,
-                registry,
-                effectiveVisibleInstanceCapacity);
-            gpuPipelineShaderInstanceId = shaderInstanceId;
-            gpuPipelineVisibleInstanceCapacity = effectiveVisibleInstanceCapacity;
-        }
-
-        private void CollectRegisteredAuthorings(List<VegetationTreeAuthoring> target)
-        {
-            target.Clear();
+            Hash128 containerIdHash = ContainerIdHash;
             for (int i = 0; i < registeredAuthorings.Count; i++)
             {
                 VegetationTreeAuthoring? authoring = registeredAuthorings[i];
@@ -276,22 +87,79 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         $"VegetationRuntimeContainer '{name}' references authoring '{authoring.name}' outside its own hierarchy.");
                 }
 
-                if (!authoring.gameObject.activeInHierarchy)
+                for (int existingIndex = 0; existingIndex < i; existingIndex++)
                 {
-                    continue;
-                }
-
-                for (int existingIndex = 0; existingIndex < target.Count; existingIndex++)
-                {
-                    if (ReferenceEquals(target[existingIndex], authoring))
+                    if (ReferenceEquals(registeredAuthorings[existingIndex], authoring))
                     {
                         throw new InvalidOperationException(
                             $"VegetationRuntimeContainer '{name}' contains duplicate authoring '{authoring.name}' in the serialized list.");
                     }
                 }
 
-                target.Add(authoring);
+                TreeBlueprintSO blueprint = authoring.Blueprint ??
+                                            throw new InvalidOperationException(
+                                                $"{authoring.name} is missing blueprint and cannot enter runtime registration.");
+
+                target.Add(new VegetationTreeAuthoringRuntime(
+                    VegetationRuntimeIdentityUtility.BuildTreeIdHash(containerIdHash, i),
+                    authoring.name,
+                    blueprint,
+                    authoring.transform.localToWorldMatrix,
+                    authoring.gameObject.activeInHierarchy,
+                    authoring));
             }
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Rebuilds the classic-scene runtime owner from the configured serialized authorings list.
+        /// </summary>
+        public void RefreshRuntimeRegistration()
+        {
+            runtimeAuthorings.Clear();
+            BuildRuntimeTreeAuthorings(runtimeAuthorings);
+            ReplaceRuntimeOwner(runtimeAuthorings.ToArray());
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Clears runtime-only registration state and releases the classic-scene runtime owner.
+        /// </summary>
+        public void ResetRuntimeState()
+        {
+            DisposeRuntimeOwner();
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Forwards classic-scene camera preparation to the shared runtime owner.
+        /// </summary>
+        public bool PrepareFrameForCamera(Camera camera, ComputeShader? classifyShader, bool diagnosticsEnabled)
+        {
+            if (camera == null)
+            {
+                throw new ArgumentNullException(nameof(camera));
+            }
+
+            EnsureRuntimeOwner();
+            return runtimeOwner != null && runtimeOwner.PrepareFrameForCamera(camera, classifyShader, diagnosticsEnabled);
+        }
+
+        private void OnEnable()
+        {
+            RefreshRuntimeRegistration();
+        }
+
+        private void OnDisable()
+        {
+            DisposeRuntimeOwner();
+        }
+
+        private void EnsureRuntimeOwner()
+        {
+            if (runtimeOwner != null)
+            {
+                return;
+            }
+
+            RefreshRuntimeRegistration();
         }
 
         private bool IsOwnedByContainer(Transform authoringTransform)
@@ -299,140 +167,28 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             return authoringTransform == transform || authoringTransform.IsChildOf(transform);
         }
 
-        private void ResetGpuDecisionPipeline()
+        private void ReplaceRuntimeOwner(VegetationTreeAuthoringRuntime[] authoringSnapshot)
         {
-            gpuDecisionPipeline?.Dispose();
-            gpuDecisionPipeline = null;
-            gpuPipelineShaderInstanceId = -1;
-            gpuPipelineVisibleInstanceCapacity = -1;
+            DisposeRuntimeOwner();
+            AuthoringContainerRuntime newRuntimeOwner = new AuthoringContainerRuntime(
+                ContainerId,
+                VegetationRuntimeProviderKind.ClassicScene,
+                name,
+                this,
+                RenderLayer,
+                gridOrigin,
+                cellSize,
+                MaxVisibleInstanceCapacity,
+                authoringSnapshot);
+            runtimeOwner = newRuntimeOwner;
+            newRuntimeOwner.Activate();
+            newRuntimeOwner.RefreshRuntimeRegistration();
         }
 
-        private void ResetAuthoringRuntimeIndices()
+        private void DisposeRuntimeOwner()
         {
-            if (registry == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < registry.TreeInstances.Count; i++)
-            {
-                VegetationTreeAuthoring authoring = registry.TreeInstances[i].Authoring;
-                if (authoring != null)
-                {
-                    authoring.ResetRuntimeTreeIndex();
-                }
-            }
-        }
-
-        private void LogRegistrationDiagnostics(IReadOnlyList<VegetationTreeAuthoring> authorings, bool diagnosticsEnabled)
-        {
-            if (!diagnosticsEnabled || registry == null || !registrationDiagnosticsDirty)
-            {
-                return;
-            }
-
-            StringBuilder builder = new StringBuilder(256);
-            builder.Append("VegetationRuntimeContainer registration");
-            builder.Append(" container=").Append(name);
-            builder.Append(" configuredAuthorings=").Append(registeredAuthorings.Count);
-            builder.Append(" activeAuthorings=").Append(authorings.Count);
-            builder.Append(" trees=").Append(registry.TreeInstances.Count);
-            builder.Append(" branches=").Append(registry.SceneBranches.Count);
-            builder.Append(" drawSlots=").Append(registry.DrawSlots.Count);
-            builder.Append(" cells=").Append(registry.SpatialGrid.Cells.Count);
-
-            if (authorings.Count > 0)
-            {
-                builder.Append(" authoringNames=[");
-                int namesToLog = Mathf.Min(authorings.Count, 4);
-                for (int i = 0; i < namesToLog; i++)
-                {
-                    if (i > 0)
-                    {
-                        builder.Append(", ");
-                    }
-
-                    builder.Append(authorings[i] != null ? authorings[i].name : "<null>");
-                }
-
-                if (authorings.Count > namesToLog)
-                {
-                    builder.Append(", ...");
-                }
-
-                builder.Append(']');
-            }
-
-            registrationDiagnosticsDirty = false;
-            UnityEngine.Debug.Log(builder.ToString(), this);
-        }
-
-        private void LogPreparationDiagnostics(Camera camera, bool uploadedFrame, bool diagnosticsEnabled)
-        {
-            if (!diagnosticsEnabled)
-            {
-                return;
-            }
-
-            int cameraInstanceId = camera.GetInstanceID();
-            if (registry == null || indirectRenderer == null)
-            {
-                if (cameraInstanceId != lastPreparationMissingStateCameraInstanceId)
-                {
-                    lastPreparationMissingStateCameraInstanceId = cameraInstanceId;
-                    UnityEngine.Debug.LogWarning(
-                        $"VegetationRuntimeContainer prepare failed container={name} camera={camera.name} reason=missing-runtime-state",
-                        this);
-                }
-
-                return;
-            }
-
-            lastPreparationMissingStateCameraInstanceId = -1;
-            int drawSlotCount = indirectRenderer.ActiveSlotIndices.Count;
-            if (uploadedFrame && drawSlotCount > 0)
-            {
-                if (cameraInstanceId == lastPreparationDiagnosticsCameraInstanceId &&
-                    uploadedFrame == lastPreparationDiagnosticsUploadedFrame &&
-                    drawSlotCount == lastPreparationDiagnosticsDrawSlotCount)
-                {
-                    return;
-                }
-
-                lastPreparationDiagnosticsCameraInstanceId = cameraInstanceId;
-                lastPreparationDiagnosticsUploadedFrame = uploadedFrame;
-                lastPreparationDiagnosticsDrawSlotCount = drawSlotCount;
-                lastPreparationWarningCameraInstanceId = -1;
-                lastPreparationWarningDrawSlotCount = -1;
-                UnityEngine.Debug.Log(
-                    string.Format(
-                        "VegetationRuntimeContainer prepare container={0} camera={1} uploaded={2} source=GpuResident drawSlots={3}",
-                        name,
-                        camera.name,
-                        uploadedFrame,
-                        drawSlotCount),
-                    this);
-                return;
-            }
-
-            if (cameraInstanceId == lastPreparationWarningCameraInstanceId &&
-                uploadedFrame == lastPreparationWarningUploadedFrame &&
-                drawSlotCount == lastPreparationWarningDrawSlotCount)
-            {
-                return;
-            }
-
-            lastPreparationWarningCameraInstanceId = cameraInstanceId;
-            lastPreparationWarningUploadedFrame = uploadedFrame;
-            lastPreparationWarningDrawSlotCount = drawSlotCount;
-            UnityEngine.Debug.LogWarning(
-                string.Format(
-                    "VegetationRuntimeContainer prepare container={0} camera={1} uploaded={2} source=GpuResident drawSlots={3} reason=no-bound-gpu-resident-draw-slots",
-                    name,
-                    camera.name,
-                    uploadedFrame,
-                    drawSlotCount),
-                this);
+            runtimeOwner?.Dispose();
+            runtimeOwner = null;
         }
     }
 }

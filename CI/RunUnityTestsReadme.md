@@ -7,6 +7,7 @@ All tests are in xml file and Unity logs here `./CI/CITestOutput.xml`
 1. Rebuild C# solution and check for compile errors in [CompileErrorsAfterUnityRun.txt](CI/CompileErrorsAfterUnityRun.txt) file (if any):
    - Use "Compile by Rider MSBuild" (see .vscode/tasks.json) for a fast compile check when no new .cs/asmdef files were added. Does not use Unity editor(preferred way).
    - Use "Fully Compile by Unity" when new files/asmdefs were added or before running tests. Requires to close editor and compilation will use new headless Editor process. This takes  1-4 minutes.
+   - "Fully Compile by Unity" will search for `error CS...` lines plus `## Script Compilation Error` blocks with a 50-line capture window of Burst generated error.
 
 Note:
 

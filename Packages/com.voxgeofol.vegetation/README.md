@@ -17,7 +17,7 @@
 1. `VegetationTreeAuthoring -> TreeBlueprintSO -> BranchPlacement[] -> BranchPrototypeSO`
 2. One blueprint can reuse the same branch prototype many times or mix many different prototypes.
 3. Many scene authorings can share one blueprint, and one container can mix many blueprints.
-4. Runtime ownership is explicit and streaming-friendly through `VegetationRuntimeContainer`.
+4. Runtime ownership is explicit and streaming-friendly through `VegetationRuntimeContainer` with one shared `AuthoringContainerRuntime` behind both classic-scene and SubScene flows.
 5. Draw calls scale with active draw slots, not with raw tree count.
 6. Runtime is opaque-only, URP-only, compute-required, and snapshot-based until refresh.
 
@@ -77,8 +77,11 @@ Examples:
 3. Place `VegetationTreeAuthoring` components under the container that should own them.
 4. Assign `VegetationClassify.compute` on the renderer feature.
 5. Use `Fill Registered Authorings` on each container.
-6. Enable the container or enter play mode to build runtime registration and GPU resources.
-7. Call `RefreshRuntimeRegistration()` after transform, hierarchy, blueprint, placement, or generated-mesh changes.
+6. Classic-scene flow:
+   leave `VegetationRuntimeContainer` enabled and it will create its runtime owner on `OnEnable()`.
+7. Closed `SubScene` runtime flow:
+   add `SubSceneAuthoring` on the same GameObject as `VegetationRuntimeContainer` before baking/loading the `SubScene`.
+8. Call `RefreshRuntimeRegistration()` after transform, hierarchy, blueprint, placement, or generated-mesh changes.
 
 ## Key Settings
 
@@ -131,6 +134,7 @@ Examples:
 10. Splitting one large forest across multiple containers can avoid one-container overflow, but it does not create a global coordinator. Memory, buffers, and capacity all scale with the number of visible containers.
 11. The runtime currently clamps overflow instead of reprioritizing cross-container or cross-slot content. There is no global `keep closest L0/L1 first` policy yet.
 12. The active redesign proposal for that limitation lives in [../../DetailedDocs/urgentRedesign.md](../../DetailedDocs/urgentRedesign.md).
+13. Closed `SubScene` runtime loading requires `SubSceneAuthoring` on the same GameObject as `VegetationRuntimeContainer`; the plain container alone is only the classic-scene lifecycle provider.
 
 ## Supported Devices
 

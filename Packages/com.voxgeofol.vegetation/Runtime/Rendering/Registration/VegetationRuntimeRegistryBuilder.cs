@@ -38,27 +38,28 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// <summary>
         /// [INTEGRATION] Builds the runtime registration/flattening snapshot for all active scene vegetation authorings.
         /// </summary>
-        public VegetationRuntimeRegistry Build(IReadOnlyList<VegetationTreeAuthoring> authorings)
+        public VegetationRuntimeRegistry Build(IReadOnlyList<VegetationTreeAuthoringRuntime> authorings)
         {
             if (authorings == null)
             {
                 throw new ArgumentNullException(nameof(authorings));
             }
 
-            List<VegetationTreeAuthoring> orderedAuthorings = new List<VegetationTreeAuthoring>(authorings);
-            orderedAuthorings.Sort(CompareAuthorings);
-
-            for (int authoringIndex = 0; authoringIndex < orderedAuthorings.Count; authoringIndex++)
+            for (int authoringIndex = 0; authoringIndex < authorings.Count; authoringIndex++)
             {
-                VegetationTreeAuthoring authoring = orderedAuthorings[authoringIndex] ??
-                                                    throw new InvalidOperationException($"VegetationTreeAuthoring[{authoringIndex}] is missing.");
+                VegetationTreeAuthoringRuntime authoring = authorings[authoringIndex] ??
+                                                           throw new InvalidOperationException($"VegetationTreeAuthoringRuntime[{authoringIndex}] is missing.");
+                if (!authoring.IsActive)
+                {
+                    continue;
+                }
 
                 TreeBlueprintSO blueprint = authoring.Blueprint ??
-                                            throw new InvalidOperationException($"{authoring.name} is missing blueprint and cannot enter Phase D runtime registration.");
+                                            throw new InvalidOperationException($"{authoring.DebugName} is missing blueprint and cannot enter Phase D runtime registration.");
 
                 int blueprintIndex = RegisterBlueprint(blueprint);
                 VegetationTreeBlueprintRuntime blueprintRuntime = treeBlueprints[blueprintIndex];
-                Matrix4x4 treeMatrix = authoring.transform.localToWorldMatrix;
+                Matrix4x4 treeMatrix = authoring.LocalToWorld;
                 Matrix4x4 treeWorldToObject = treeMatrix.inverse;
                 Bounds treeWorldBounds = VegetationRuntimeMathUtility.TransformBounds(blueprint.TreeBounds, treeMatrix);
                 Vector3 treeSphereCenter = treeWorldBounds.center;
@@ -400,40 +401,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             drawSlots.Add(new VegetationDrawSlot(slotIndex, mesh, material, materialKind, debugLabel));
             drawSlotIndices.Add(key, slotIndex);
             return slotIndex;
-        }
-
-        private static int CompareAuthorings(VegetationTreeAuthoring left, VegetationTreeAuthoring right)
-        {
-            string leftScenePath = left.gameObject.scene.path ?? string.Empty;
-            string rightScenePath = right.gameObject.scene.path ?? string.Empty;
-            int compareScenePath = string.CompareOrdinal(leftScenePath, rightScenePath);
-            if (compareScenePath != 0)
-            {
-                return compareScenePath;
-            }
-
-            string leftHierarchyPath = BuildHierarchyPath(left.transform);
-            string rightHierarchyPath = BuildHierarchyPath(right.transform);
-            int compareHierarchyPath = string.CompareOrdinal(leftHierarchyPath, rightHierarchyPath);
-            if (compareHierarchyPath != 0)
-            {
-                return compareHierarchyPath;
-            }
-
-            return left.GetInstanceID().CompareTo(right.GetInstanceID());
-        }
-
-        private static string BuildHierarchyPath(Transform transform)
-        {
-            Stack<string> pathParts = new Stack<string>();
-            Transform? current = transform;
-            while (current != null)
-            {
-                pathParts.Push($"{current.GetSiblingIndex():D4}:{current.name}");
-                current = current.parent;
-            }
-
-            return string.Join("/", pathParts.ToArray());
         }
 
         private readonly struct DrawSlotKey : IEquatable<DrawSlotKey>

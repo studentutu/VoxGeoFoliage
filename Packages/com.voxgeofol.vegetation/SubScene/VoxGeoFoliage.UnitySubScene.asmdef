@@ -1,0 +1,40 @@
+{
+    "name": "VoxGeoFoliage.UnitySubScene",
+    "rootNamespace": "",
+    "references": [
+        "Vegetation",
+        "Unity.Entities",
+        "Unity.Entities.Hybrid",
+        "Unity.Collections",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "HAS_UNITY_ENTITIES",
+        "HAS_UNITY_ENTITIES",
+        "HAS_UNITY_MATHEMATICS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.entities",
+            "expression": "1.4.0",
+            "define": "HAS_UNITY_ENTITIES"
+        },
+        {
+            "name": "com.unity.collections",
+            "expression": "2.6.0",
+            "define": "HAS_UNITY_COLLECTIONS"
+        },
+        {
+            "name": "com.unity.mathematics",
+            "expression": "1.3.0",
+            "define": "HAS_UNITY_MATHEMATICS"
+        }
+    ],
+    "noEngineReferences": false
+}

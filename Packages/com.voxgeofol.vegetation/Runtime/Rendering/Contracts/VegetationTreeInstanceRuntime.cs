@@ -1,7 +1,6 @@
 #nullable enable
 
 using UnityEngine;
-using VoxGeoFol.Features.Vegetation.Authoring;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
@@ -10,7 +9,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     /// </summary>
     public struct VegetationTreeInstanceRuntime
     {
-        public VegetationTreeAuthoring Authoring;
+        public VegetationTreeAuthoringRuntime Authoring;
         public Matrix4x4 LocalToWorld;
         public Matrix4x4 WorldToObject;
         public Bounds WorldBounds;

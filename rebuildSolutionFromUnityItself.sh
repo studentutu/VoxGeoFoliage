@@ -74,9 +74,11 @@ echo "Waiting log..."
 #   $0 == "##### ExitCode" { printing=1; print; next }  # include the marker line too
 # ' "$UnityLOG_FILE" > "$UnityCOMPILEError_FILE"
 
-# Extract C# compile errors (CRLF-safe).
+# Extract C# compile errors and Unity script compilation error blocks (CRLF-safe).
 awk '
   { sub(/\r$/, "", $0) }
+  script_error_lines_remaining > 0 { print; script_error_lines_remaining--; next }
+  index($0, "## Script Compilation Error") == 1 { print; script_error_lines_remaining=49; next }
   tolower($0) ~ /error cs/ { print }
 ' "$UnityLOG_FILE" > "$UnityCOMPILEError_FILE"
 
