@@ -148,12 +148,14 @@ Scope note:
 | `Tree branch span` | Shipped | `VegetationTreeInstanceRuntime.SceneBranchStartIndex + SceneBranchCount` | One tree points to its contiguous slice inside the flat `SceneBranches[]` array. |
 | `Scene branch record` | Shipped | `VegetationRuntimeRegistry.SceneBranches[]`, branch classify/count/emit | One bounded static registration record for one scene branch placement. It is not a final submission owner. |
 | `Draw slot` | Shipped | `VegetationRuntimeRegistry.DrawSlots`, slot counters, `VegetationIndirectRenderer` | Exact `Mesh + Material + MaterialKind` batch identity. One slot owns one slot index, one indirect-args record, and one potential indirect submission per pass. |
+| `Registered draw slot` | Shipped | `VegetationRuntimeRegistry.DrawSlots`, `VegetationIndirectRenderer.BindGpuResidentFrame()` | One slot that exists in the runtime registry. Current shipped renderer treats every registered slot as active once a frame is bound. |
+| `Non-zero emitted slot` | Shipped telemetry | `_SlotEmittedInstanceCounts`, `AuthoringContainerRuntime preparedFrameTelemetry` | One draw slot whose emitted instance count is greater than zero for the prepared frame. This is the measured submission-worthy subset. |
 | `Visible instance` | Shipped | Packed into `residentInstanceBuffer`; bounded by `VegetationRuntimeContainer.maxVisibleInstanceCapacity` | Final draw-ready instance payload written by the compute path. Many visible instances can map to one draw slot. |
-| `Indirect submission` | Shipped | `VegetationIndirectRenderer.Render()` depth/color calls | One final `DrawMeshInstancedIndirect` call for one active draw slot in one pass. This is downstream from visible-instance acceptance. |
+| `Indirect submission` | Shipped limitation | `VegetationIndirectRenderer.Render()` depth/color calls | One final `DrawMeshInstancedIndirect` call for one active draw slot in one pass. In the current shipped renderer, active slots are all registered slots after bind, not just the non-zero emitted subset. |
 | `Branch-shell BFS metadata` | Shipped limitation | `VegetationBranchShellNodeRuntimeBfs`, `ShellNodesL1/L2/L3`, compute upload | Child-link metadata (`FirstChildIndex + ChildMask`) uploaded for shell nodes. Current shipped shader does not yet use it for real frontier traversal or subtree skip. |
-| `PresenceProxyOnly` | Planned redesign | `DetailedDocs/urgentRedesign.md` Stage `C.5` | Tree is accepted only as one whole-tree proxy for this frame and must skip branch kernels. |
-| `PromotedExpanded` | Planned redesign | `DetailedDocs/urgentRedesign.md` Stages `C.5`, `C.6`, `D` | Tree is accepted for expensive expanded branch work this frame. |
-| `Promoted-tree compaction` | Planned redesign | `DetailedDocs/urgentRedesign.md` Stage `C.5` | Build a dense promoted-tree worklist before branch kernels so non-promoted trees never enter branch traversal. |
+| `Direct tree tier mesh` | Planned redesign | `DetailedDocs/urgentRedesign.md` urgent path task `#1` | One baked whole-tree representation for `L0/L1/L2/L3/Impostor`. One visible tree chooses exactly one accepted tier per frame. |
+| `Accepted tree tier` | Planned redesign | `DetailedDocs/urgentRedesign.md` Stages `B/C/D` | The one final representation chosen for one visible tree in the current frame. |
+| `Active-slot filtering` | Planned redesign | `DetailedDocs/urgentRedesign.md` Stage `E` | Final submission compaction that keeps only non-zero emitted slots after accepted tree representations are emitted. |
 
 ## Current Lifecycle
 
@@ -200,9 +202,9 @@ Camera
 -> VegetationIndirectRenderer.BindGpuResidentFrame()
 -> for each registered draw slot:
    bind shared buffers
-   keep slot active
--> URP Depth Pass: DrawMeshInstancedIndirect per active draw slot
--> URP Color Pass: DrawMeshInstancedIndirect per active draw slot
+   current shipped limitation: keep slot active even when emitted count is zero
+-> URP Depth Pass: DrawMeshInstancedIndirect per registered draw slot after bind
+-> URP Color Pass: DrawMeshInstancedIndirect per registered draw slot after bind
 -> final URP indirect submissions
 ```
 
@@ -227,8 +229,8 @@ Per-frame worklists:
    Frame-local classification outputs derived from the static registry.
 2. `residentInstanceBuffer` and `residentArgsBuffer`
    Frame-local accepted-content outputs used for indirect submission.
-3. planned `PromotedTreeIndices` and `PromotedBranchWorkItems`
-   Future compacted worklists that should replace full-scene branch dispatch for the urgent redesign.
+3. planned `TreeVisibilityRecord[]`, accepted-tree-tier counts, and `ActiveSlotIndices`
+   Future tree-only worklists that should replace branch-level worklists for the urgent redesign.
 
 ### What This Means Operationally
 

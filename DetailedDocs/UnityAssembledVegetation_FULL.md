@@ -57,10 +57,15 @@ Milestone 1 now uses a GPU-resident decode path with one strict default:
 - URP renders the final per-draw-slot instance lists via `RenderMeshIndirect`.
 
 The next architectural steps after MVP are:
-- split expanded-tree work into `PresenceProxyOnly` versus `PromotedExpanded` before branch kernels
-- compact promoted trees before any branch work
-- replace flat shell-tier scans with real hierarchy traversal
-- then move from branch-shell BFS to DFS preorder plus subtree spans for better GPU traversal and culling efficiency
+- accept one guaranteed `TreeL3` whole-tree representation per visible near / mid tree before any branch-expanded work exists
+- make `TreeInstances[]` the authoritative owner of tree-first acceptance, `TreeL3` floor identity, and nearest-first promotion decisions in the runtime path
+- remove legacy branch-level runtime owners from the redesigned urgent path instead of slimming them:
+  - pre-populated `SceneBranches[]`
+  - `ShellNodesL1/L2/L3[]`
+- keep reusable `TreeBlueprints[]`, `BlueprintBranchPlacements[]`, and compact branch prototype tier meshes with separate canopy/wood per level as shared static inputs for promoted trees only
+- promote nearest trees through branch-expanded `L2/L1/L0` tiers first, with `L0` defined as survived original branches
+- compact final submissions down to non-zero emitted slots after accepted content is chosen
+- revisit branch-local hierarchy traversal later only if the no-BFS branch tiers prove insufficient
 
 ## 1.3 Core Rules
 
@@ -85,8 +90,14 @@ The next architectural steps after MVP are:
 - `Draw slot`
   One exact runtime registry identity defined by `Mesh + Material + MaterialKind`. A draw slot owns one slot index, one indirect-args record, one packed-range start in `slotPackedStarts`, and one potential indirect submission in a render pass.
 
+- `Registered draw slot`
+  One slot that exists in `VegetationRuntimeRegistry.DrawSlots`. Current shipped `VegetationIndirectRenderer` binds every registered slot and treats it as active for submission once a frame is bound.
+
+- `Non-zero emitted slot`
+  One slot whose emitted instance count is greater than zero in `_SlotEmittedInstanceCounts` for the prepared frame. This is the measured submission-worthy subset, not the current shipped submission set.
+
 - `Indirect submission`
-  One final `DrawMeshInstancedIndirect` call issued for one draw slot in one pass. It is downstream from accepted visible instances and is not the same as the visible-instance budget.
+  One final `DrawMeshInstancedIndirect` call issued for one active draw slot in one pass. It is downstream from accepted visible instances and is not the same as the visible-instance budget. Current shipped limitation: active slots are all registered slots after bind, not only the non-zero emitted subset.
 
 - `Tree branch span`
   The current runtime tree contract is a flat contiguous branch range through `SceneBranchStartIndex + SceneBranchCount`. It is not a tree-wide octree/BVH/BFS hierarchy.
@@ -161,7 +172,8 @@ Static registry owners:
 - `SpatialGrid`
   Tree-to-cell registration and visible-cell query boundaries only.
 - `TreeInstances[]`
-  Per-tree static scene registration plus the `SceneBranchStartIndex + SceneBranchCount` handle into the flat branch array.
+  Current shipped state: per-tree static scene registration plus the `SceneBranchStartIndex + SceneBranchCount` handle into the flat branch array.
+  Urgent redesign target: authoritative per-tree owner of direct `L0/L1/L2/L3/Impostor` runtime handles, bounds, and slot identity.
 - `SceneBranches[]`
   One bounded static scene-branch registration record per placed branch in the container snapshot. Count grows linearly with active tree authorings and blueprint branch placements during registration rebuild.
 - `BranchPrototypes[] + ShellNodesL1/L2/L3[]`
@@ -175,12 +187,13 @@ Per-frame worklists:
 - branch decisions
 - packed visible instances
 - indirect args
-- future promoted-tree and promoted-branch compact worklists
+- future tree-visibility records, accepted-tree-tier counts, and active-slot compact worklists
 
 Hard rule:
 - static registry owners may grow only during explicit registration rebuild
 - per-frame worklists must stay bounded by the active registry or by explicit runtime budgets
-- `SceneBranches[]` is allowed to remain as a bounded static owner, but it should stop being the permanent full-scene per-frame work surface once promoted-tree compaction lands
+- `SceneBranches[]`, `BranchPrototypes[]`, and `ShellNodesL1/L2/L3[]` are current shipped owners only. The approved urgent redesign removes pre-populated `SceneBranches[]` and shell-node BFS ownership from the new runtime path instead of trying to preserve a slimmer branch-level work surface.
+- `TreeInstances[]` becomes the authoritative urgent-path owner once tree-first `TreeL3` floor acceptance and nearest-first promotion land
 
 ---
 
@@ -276,6 +289,7 @@ Branch reconstruction rules:
 - `BranchPrototypeSO.shellNodesL0` is the canonical ownership and split hierarchy.
 - `shellNodesL1` and `shellNodesL2` are separately persisted compact hierarchies derived from owned `L0` occupancy.
 - Runtime `L1` uses `shellNodesL0`, runtime `L2` uses `shellNodesL1`, and runtime `L3` uses `shellNodesL2`.
+- Compact baked tiers may intentionally collapse to one root node when the compact shell mesh is cheaper than keeping the child frontier. Low node counts in `shellNodesL1` or `shellNodesL2` are therefore not automatically missing bake steps.
 - Branch reconstruction always starts at the hierarchy root and traverses downward.
 - Parent bounds are tested before descendants.
 - If a branch placement enters runtime `L0`, emit the source branch meshes and skip shell frontier emission for that branch in that frame.
@@ -482,14 +496,12 @@ The runtime must not treat "one tree thread does everything" as the final model.
 Required staged work:
 1. GPU-primary tree-level coarse visibility
 2. tree-level mode selection (`Culled`, `Expanded`, `Impostor`)
-3. tree-level work-state split (`PresenceProxyOnly` versus `PromotedExpanded`) after tree prioritization
-4. promoted-tree compaction before branch kernels
-5. branch-level tier selection only for promoted trees
-6. current shipped shell-tier path scans selected branch-tier nodes; true hierarchy traversal is not shipped yet
-7. per-slot instance counting
-8. per-slot packed-start build for the shared visible-instance buffer
-9. direct GPU emission into the bounded shared visible-instance buffer
-10. per-draw-slot indirect submission
+3. tree-level accepted tier selection (`TreeL3/L2/L1/L0` for near and mid trees, `Impostor` for far trees) after tree prioritization
+4. per-slot instance counting
+5. per-slot packed-start build for the shared visible-instance buffer
+6. direct GPU emission into the bounded shared visible-instance buffer
+7. final submission compaction to non-zero emitted slots
+8. per-draw-slot indirect submission
 
 ## 5.2 Exact Runtime Branch and Emission Payloads
 
@@ -565,16 +577,14 @@ Per frame:
 1. GPU updates coarse cell visibility
 2. GPU classifies trees into `Culled`, `Expanded`, or `Impostor`
 3. GPU resolves accepted trees by priority before any slot packing
-4. GPU splits accepted trees into `PresenceProxyOnly` versus `PromotedExpanded`
-5. GPU compacts promoted trees before branch kernels
-6. GPU resets per-slot requested and emitted counters
-7. GPU counts accepted tree-level emissions for trunks and proxies
-8. GPU counts accepted branch-level emissions for promoted trees only; current shipped shell path still scans selected shell-tier nodes linearly
-9. GPU builds `slotPackedStarts` for the bounded shared visible-instance buffer
-10. GPU emits accepted trees into the packed visible-instance buffer
-11. GPU emits accepted branch wood, foliage, and shell leaf instances directly into the packed visible-instance buffer
-12. GPU finalizes indirect args with instance counts clamped to remaining shared capacity
-13. URP renders indirect depth and color passes
+4. GPU chooses exactly one accepted direct tree tier per visible tree
+5. GPU resets per-slot requested and emitted counters
+6. GPU counts accepted tree-level emissions only
+7. GPU builds `slotPackedStarts` for the bounded shared visible-instance buffer
+8. GPU emits accepted tree representations into the packed visible-instance buffer
+9. GPU finalizes indirect args with instance counts clamped to remaining shared capacity
+10. renderer compacts final submissions to non-zero emitted slots
+11. URP renders indirect depth and color passes
 
 ## 6.2 Example Tree Classification Pseudocode
 

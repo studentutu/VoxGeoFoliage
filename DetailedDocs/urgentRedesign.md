@@ -1,67 +1,87 @@
-# Urgent Redesign - Priority-Bucket Runtime Submission
+# Urgent Redesign - Tree-First Prioritization Without BFS
 
 ## Purpose
 
-This document defines the urgent redesign required for runtime vegetation submission under dense-forest budget pressure.
+This document defines the urgent runtime redesign for dense vegetation under one-container budget pressure.
 
 Target failure case:
-- camera stands inside a very dense forest
+- camera stands inside a dense forest
 - one container may own around `6000` tightly packed trees
-- current runtime budget must never cause whole visible trees to disappear just because detailed branch and shell output consumed the packed-instance buffer first
+- near visible trees must not disappear because branch-heavy content or slot order consumed the shared budget first
+
+Urgent priorities:
+- near-camera correctness first
+- runtime memory first
+- stable degradation by quality, never by random disappearance
+- remove branch-shell BFS entirely from the production path
+- remove pre-populated per-scene branch runtime ownership from the default path
 
 Explicit scope:
-- add primitive priority by distance to camera
-- do not add URP-pass occlusion to this urgent redesign
-- do not add HiZ / depth-pyramid occlusion to this urgent redesign
-- guarantee stable rendering under overflow by degrading detail, not by dropping arbitrary trees
+- focus on one active container only
+- leave multi-container clashes as a note, not as urgent implementation scope
+- keep occlusion out of this urgent redesign
+- keep current renderer backend model: GPU classification plus indirect submission
 
 Reason for the scope cut:
-- the current production bug is driven by one shared per-container visible-instance capacity plus slot-order packing
-- URP-pass occlusion does not fix the near-tree overflow bug where shells can survive while trunks and branch wood disappear
-- current-frame or history-based occlusion stays a later optimization only after prioritization and telemetry prove the remaining bottleneck
+- the production bug is not missing occlusion
+- the production bug is wrong acceptance order plus too much static branch-owned runtime memory
+- fixing near-tree survival and deleting branch-BFS runtime ownership must happen before anything else
 
 ---
 
 ## critical flaws
 
-- Current overflow behavior is decided by draw-slot packing order, not by visual importance. `BuildSlotStarts` walks slot indices, then later slots lose capacity first.
-- Every visible branch is classified independently before any budget acceptance. That means detail demand is generated globally, but there is no global accept/reject policy.
-- The runtime has no guaranteed minimum representation per visible tree. A tree can be visible, classified correctly, and still disappear because the shared packed-instance buffer filled with other content first.
-- The current packed-instance budget is a raw instance count only. It does not distinguish mandatory tree-presence cost from optional detail cost.
-- Dense forests are operationally unsafe. A few expensive expanded trees can consume enough instances to starve large parts of the forest.
-- The current code exposes two different limits and the redesign draft blurred them:
-  - `maxVisibleInstanceCapacity` is a per-container packed-instance limit
-  - draw slots are the registry/render-submission surface and are not fixed by changing that packed-instance cap
-- Splitting into multiple containers is only a workaround. It does not fix the underlying overflow policy.
+- Current overflow behavior is decided too late and by the wrong owner. Slot packing still decides survival after branch-heavy work was already generated.
+- Current runtime work explodes one visible tree into branch work before the system decides whether that tree even deserves detail.
+- `SceneBranches[]` is still the wrong static owner for the urgent path. It is bounded, but measured data already proved bounded is still too expensive for dense repeated trees.
+- Branch-shell BFS is the wrong abstraction for the urgent production fix. It adds runtime state, branch decision state, shell-node buffers, and scan work without solving near-camera correctness.
+- The current urgent draft overcommitted to direct whole-tree meshes for every tier. That is too rigid for `L0`.
+- Using `impostorMesh` as the emergency near fallback is wrong. That replaces missing trees with an obviously incorrect near representation.
+- Current docs blurred two different goals:
+  - guarantee one cheap visible representation per tree
+  - provide optional expanded detail for the nearest trees
+- The old budget draft over-reserved by tier. Hard reserves for every detail tier waste headroom and are the opposite of runtime-memory-first design.
+
+---
 
 ## missing pieces
 
-- A guaranteed tree-presence contract under overflow.
-- An explicit emergency fallback allowed inside the normal near-distance bands.
-- Priority buckets that decide acceptance before per-slot packing.
-- A promotion/demotion rule so trees upgrade nearest-first and fall back safely when budgets are exhausted.
-- A clear distinction between:
-  - packed visible-instance pressure
-  - draw-slot submission count
-- Validation rules for dense-forest scenarios. Today there is no testable contract saying what must still render when detail overflows.
-- Telemetry. This is required, but it is a last-priority task after the acceptance logic is correct.
+- A hard invariant for the minimum representation of one visible tree under pressure.
+- A tree-first acceptance stage before any expanded branch work is generated.
+- A no-BFS branch representation contract for `L1/L2/L3`.
+- A precise definition of what `L0` means after BFS removal.
+- A compact runtime ownership model that does not pre-populate `SceneBranches[]` for the whole container.
+- A cost model for promotion that accounts for branch-expanded tiers being more expensive than one-tree proxies.
+- Deterministic nearest-first promotion with stable tie-breaks and hysteresis.
+- Validation for one-container dense-forest guarantees.
+- Telemetry that proves the new path is branch-memory-light and no longer survival-by-slot-order.
+
+---
 
 ## terminology
 
-| Term | Status | Where Used | Purpose |
-| --- | --- | --- | --- |
-| `registeredAuthorings` | Shipped | `VegetationRuntimeContainer.registeredAuthorings` | Explicit container ownership list for live `VegetationTreeAuthoring` inputs. |
-| `VegetationTreeAuthoringRuntime` | Shipped | `VegetationRuntimeContainer.BuildRuntimeTreeAuthorings()` -> `AuthoringContainerRuntime` | Runtime-safe tree snapshot so registration does not depend on live `MonoBehaviour` traversal after the handoff. |
-| `VegetationRuntimeRegistry` | Shipped | Built by `VegetationRuntimeRegistryBuilder`, consumed by `VegetationGpuDecisionPipeline` and `VegetationIndirectRenderer` | Frozen flattened runtime snapshot for one container. |
-| `Visible instance` | Shipped | `residentInstanceBuffer`, bounded by `maxVisibleInstanceCapacity` | One packed runtime instance record that is already draw-ready. |
-| `Draw slot` | Shipped | `VegetationRuntimeRegistry.DrawSlots`, `BuildSlotStarts`, `VegetationIndirectRenderer` | One exact runtime bucket defined by `Mesh + Material + MaterialKind`. One draw slot owns one slot index, one indirect-args record, one packed-range start, and one potential indirect submission per pass. |
-| `Indirect submission` | Shipped | `VegetationIndirectRenderer.Render()` | One final `DrawMeshInstancedIndirect` call for one active draw slot in one pass. This is downstream from visible-instance acceptance. |
-| `Tree branch span` | Shipped | `VegetationTreeInstanceRuntime.SceneBranchStartIndex + SceneBranchCount`, tree/branch kernels | One tree points to its contiguous branch slice inside the flat `SceneBranches[]` array. This is not a full-tree hierarchy. |
-| `Scene branch record` | Shipped | `VegetationRuntimeRegistry.SceneBranches[]`, branch classify/count/emit | One bounded static registration record for one scene branch placement. It is not a final submission owner. |
-| `Branch-shell BFS metadata` | Shipped limitation | `VegetationBranchShellNodeRuntimeBfs`, `ShellNodesL1/L2/L3`, compute upload | `FirstChildIndex + ChildMask` child-link metadata exists per shell tier, but the shipped shader still does not use it for real frontier traversal or subtree skip. This is branch-shell BFS, not tree BFS. |
-| `PresenceProxyOnly` | Planned redesign | This document, Stage `C.5` | Tree is accepted only as one whole-tree proxy for this frame and must skip branch kernels entirely. |
-| `PromotedExpanded` | Planned redesign | This document, Stages `C.5`, `C.6`, `D` | Tree is accepted for expensive branch-level work this frame. |
-| `Promoted-tree compaction` | Planned redesign | This document, Stage `C.5` | Build a dense promoted-tree worklist before branch kernels so non-promoted trees never pay branch traversal cost. |
+| Term | Status | Purpose |
+| --- | --- | --- |
+| `Visible instance` | Shipped | One final draw-ready packed instance emitted into the shared container-scoped visible-instance buffer. |
+| `Draw slot` | Shipped | One exact runtime submission bucket defined by `Mesh + Material + MaterialKind`. |
+| `Indirect submission` | Shipped | One final indirect draw for one active draw slot in one pass. |
+| `TreeVisibilityRecord` | Planned redesign | Per-visible-tree frame record used for tree-first acceptance and promotion before branch expansion. |
+| `TreeL3 floor` | Planned redesign | One whole-tree `L3` mesh used as the mandatory near/mid fallback under pressure. This is not `impostorMesh`. |
+| `Expanded tree tier` | Planned redesign | Tree accepted above the `TreeL3 floor` and expanded into branch placements using one canopy mesh plus one wood mesh per survived branch tier. |
+| `Survived branch` | Planned redesign | One branch placement that survives coarse branch visibility tests for an already accepted expanded tree. No shell-node traversal is involved. |
+| `Branch split tier` | Planned redesign | One baked branch prototype canopy mesh plus one baked branch wood mesh for `L1`, `L2`, or `L3`. No BFS, no shell frontier, no shell-node arrays. |
+| `CompactExpandedBranchWorkItem[]` | Planned redesign | Compact per-frame branch worklist generated only for promoted trees. This replaces `SceneBranches[]` in the urgent path. |
+| `Legacy scene branch owner` | Legacy path | `SceneBranches[]` static registration for every scene branch in the container. This is not allowed in the urgent production path. |
+
+Critical naming rule:
+- `L0` no longer means branch-shell traversal or expanded hierarchy decode
+- `L0` means: survived branch placements rendered with original branch meshes
+- `L1/L2/L3` no longer mean shell hierarchy frontiers
+- `L1/L2/L3` mean: survived branch placements rendered with one baked canopy mesh plus one baked wood mesh for that tier
+- the guaranteed tree floor inside near and mid distance bands is `TreeL3`, a whole-tree mesh
+- `impostorMesh` stays far-only
+
+---
 
 ## current shipped lifecycle
 
@@ -69,212 +89,251 @@ Reason for the scope cut:
 
 ```text
 VegetationRuntimeContainer.registeredAuthorings
-(List<VegetationTreeAuthoring>)
--> BuildRuntimeTreeAuthorings()
 -> VegetationTreeAuthoringRuntime[]
--> AuthoringContainerRuntime.Activate()
--> AuthoringContainerRuntime.RefreshRuntimeRegistration()
--> VegetationRuntimeRegistryBuilder.Build()
 -> VegetationRuntimeRegistry
-   -> DrawSlots[]                 exact mesh + material + material-kind buckets
-   -> TreeInstances[]             one per active tree
-   -> SceneBranches[]             bounded static registration snapshot for all active tree branches in flat branch array
-   -> BranchPrototypes[]          reusable per-prototype decode data
-   -> ShellNodesL1/L2/L3[]        reusable prototype-local branch-shell BFS metadata
-   -> SpatialGrid                 tree-cell ownership for visibility classification
+   -> DrawSlots[]
+   -> TreeInstances[]
+   -> SceneBranches[]
+   -> BranchPrototypes[]
+   -> ShellNodesL1/L2/L3[]
+   -> SpatialGrid
 ```
 
-### per-camera / per-frame submission path
+### per-camera / per-frame path
 
 ```text
 Camera
--> VegetationRendererFeature depth/color pass setup
--> VegetationActiveAuthoringContainerRuntimes.GetActive()
--> AuthoringContainerRuntime.PrepareFrameForCamera()
--> VegetationGpuDecisionPipeline.PrepareResidentFrame()
-   -> ClassifyCells
-   -> ClassifyTrees
-   -> ClassifyBranches      current shipped limitation: full flat SceneBranches[] dispatch
-   -> ResetSlotCounts
-   -> CountTrees
-   -> CountBranches         current shipped limitation: full flat SceneBranches[] dispatch
-   -> BuildSlotStarts
-   -> EmitTrees
-   -> EmitBranches          current shipped limitation: full flat SceneBranches[] dispatch
-   -> FinalizeIndirectArgs
--> residentInstanceBuffer            packed visible instances
--> residentArgsBuffer                indirect args per draw slot
--> slotPackedStartsBuffer            packed range start per draw slot
--> VegetationIndirectRenderer.BindGpuResidentFrame()
--> for each registered draw slot:
-   bind shared buffers
-   keep slot active
--> URP Depth Pass: DrawMeshInstancedIndirect per active draw slot
--> URP Color Pass: DrawMeshInstancedIndirect per active draw slot
--> final URP indirect submissions
+-> ClassifyCells
+-> ClassifyTrees
+-> ClassifyBranches on full SceneBranches[]
+-> CountTrees
+-> CountBranches on full SceneBranches[]
+-> BuildSlotStarts
+-> EmitTrees
+-> EmitBranches on full SceneBranches[]
+-> FinalizeIndirectArgs
+-> submit every registered slot after bind
 ```
 
-### current ownership split
+Why this is broken:
+- tree acceptance is too late
+- branch work is global instead of near-tree-driven
+- BFS metadata exists but does not solve the urgent bug
+- the runtime still allocates and uploads static branch-owned data for the whole container
 
-Static registry owners:
-
-- `SpatialGrid`
-  Owns tree-to-cell registration and visible-cell query bounds only.
-- `TreeInstances[]`
-  Owns per-tree static scene registration and the handle into the flat branch array.
-- `SceneBranches[]`
-  Owns one bounded static scene-branch registration record per placed branch in the container snapshot. It grows linearly during `RefreshRuntimeRegistration()`. It is not a final submission owner.
-- `BranchPrototypes[] + ShellNodesL1/L2/L3[]`
-  Own reusable branch module decode data and reusable branch-shell BFS metadata.
-- `DrawSlots[]`
-  Own final submission identities only.
-
-Per-frame worklists:
-
-- `cellVisibilityBuffer`, `treeModesBuffer`, `branchDecisionBuffer`
-  Current frame classification outputs derived from the static registry.
-- `residentInstanceBuffer`, `residentArgsBuffer`, `slotPackedStartsBuffer`
-  Current frame accepted-content and submission outputs.
-- future `PromotedTreeIndices` and `PromotedBranchWorkItems`
-  Compact worklists that should replace full-scene branch dispatch once tree prioritization lands.
-
-### redesign insertion point
-
-```text
-Current shipped:
-ClassifyTrees
--> ClassifyBranches on the full flat SceneBranches[] array
--> Count/Emit
-
-Required redesign:
-ClassifyTrees
--> TreeVisibilityRecord[] build
--> PresenceProxyOnly acceptance for every visible tree
--> nearest-tree promotion to PromotedExpanded
--> promoted-tree compaction
--> branch classify/count/emit for promoted trees only
--> later targeted branch-shell BFS for promoted shell branches only
--> final count/pack/emit of accepted content
-```
-
-Operational consequence:
-
-- today the runtime can cheaply reject whole trees at the tree sphere stage, but once a tree stays expanded it still pulls branch work from a flat branch span
-- the urgent redesign must intercept between tree classification and branch work
-- targeted branch-shell BFS is only worth adding after that interception exists
-
-## observed dense-forest telemetry review
-
-One current shipped dense-forest sample already proves the next architectural constraint:
-
+Measured proof from the dense repeated-branch sample:
 - `trees=6087`
 - `sceneBranches=316524`
-- `branchPrototypes=1`
-- `shellNodesL1/L2/L3=759/1/1`
-- `drawSlots=768`
-- `branchBufferBytes=130407888`
-- `branchDecisionBufferBytes=5064384`
-- `totalBranchTelemetryBufferBytes=135508856`
-- `visibleInstanceCapacity=262144`, which is `37748736` bytes at the current `144`-byte visible-instance stride
+- about `129.2 MiB` of branch-review buffers before the visible-instance capacity buffer
+- `17` non-zero emitted slots versus `768` registered slots
 
-What this means:
+That is enough evidence. The production issue is not theoretical.
 
-- `SceneBranches[]` is bounded and owned. It is not an exponential frame-growth bug.
-- Bounded is still not cheap enough here. One repeated dense container is already spending about `129.2 MiB` on branch-review buffers before the shared visible-instance capacity buffer.
-- The visible-instance capacity buffer adds about `36.0 MiB` more at the current default, so one dense container is already reserving about `165.2 MiB` before material copies and other renderer state.
-- `drawSlots=768` with one branch prototype and `759` L1 shell nodes means submission pressure is being driven mainly by shell-node slot identity, not by species diversity.
-- `shellNodesL2=1` and `shellNodesL3=1` are suspicious. This looks like an authored or bake-time shell-tier collapse, not a healthy multi-tier hierarchy.
+---
 
-Issues this can cause:
+## redesign target
 
-- high per-container GPU memory reservation even before accepted content is emitted
-- branch classify/count/emit still touches `316524` flat scene-branch records every frame when only a much smaller near subset is visually important
-- high indirect submission pressure because the current renderer keeps registered draw slots active once the frame is bound
-- misleading branch-shell BFS conclusions if the shell tiers are degenerate; the runtime will look flatter and less hierarchical than intended
-- abrupt `L1 -> L2/L3` visual collapse and unstable mid/far canopy quality if the authored shell bake really is `759/1/1`
+### hard scope rules
 
-Design consequence:
+- Urgent implementation scope is one container only.
+- Multi-container near-field conflicts remain a documented limitation for now.
+- Near-camera correctness is solved by tree-first acceptance, not by occlusion.
+- BFS is removed from the production runtime path.
+- Pre-populated `SceneBranches[]` is removed from the production runtime path.
+- Runtime memory wins are more important than preserving the old branch decode structure.
 
-- keep `SceneBranches[]` only as the current bounded registration snapshot for now
-- do not treat it as the permanent dense-forest static owner
-- after prioritization lands, either replace it with a lighter `SceneBranchRef[]` or derive `PromotedBranchWorkItems` directly from `TreeInstances[] + TreeBlueprints[] + BranchPrototypes[]`
-- current runtime-review telemetry behind `EnableDiagnostics` must expose `blueprints`, `nonZeroEmittedSlots`, `emittedVisibleInstances`, `emittedVisibleInstanceBytes`, and `visibleInstanceCapacityBytes` so later redesign decisions are based on measured pressure instead of guesswork
+### non-negotiable runtime invariants
 
-## best alternatives
+- Every visible near or mid tree must render at least one `TreeL3` representation every frame.
+- `impostorMesh` is not the emergency near fallback. `TreeL3` is.
+- Overflow must degrade quality, not erase arbitrary trees.
+- Nearer visible trees must promote before farther visible trees.
+- Survival must be decided before expanded branch work is generated.
+- Slot order must never decide survival.
+- `L0` means survived branches rendered with original meshes. No BFS. No shell hierarchy. No frontier traversal.
+- `L1/L2/L3` expanded branch tiers mean survived branches rendered with one baked canopy mesh plus one baked wood mesh per branch prototype tier. No BFS. No shell hierarchy. No frontier traversal.
+- Final submission compaction is downstream from acceptance. It removes empty submissions; it does not decide survival.
 
-- Tree-presence proxy first, then nearest-tree promotion.
-  Strong baseline. This is the urgent fix because it directly addresses the current failure mode.
+---
 
-- Branch priority rings inside promoted trees.
-  Good second stage. Exact sort is unnecessary; distance rings are enough for stable near-first behavior.
+## representation contract
 
-- Active-slot filtering.
-  Useful only if telemetry later proves draw submission count is still a real bottleneck after prioritization. It is separate from the visible-instance overflow bug.
+### 1. Far-only representation
 
-- Container splitting only.
-  Operational workaround only. It reduces one-container pressure but does not define correct overflow behavior.
+- `Impostor`
+  - one baked whole-tree far mesh
+  - used only in the far band
+  - not used as the emergency near fallback
 
-- Current-frame occlusion / HiZ.
-  Deferred. It may reduce wasted work later, but it does not fix the current near-tree capacity bug and adds new failure modes too early.
+### 2. Mandatory near / mid floor
 
-## recommended combined design
+- `TreeL3`
+  - one baked whole-tree `L3` mesh
+  - used as the guaranteed representation for any visible tree inside the expanded bands when budgets are tight
+  - chosen specifically because runtime memory comes first and one tree must always collapse to one cheap accepted instance
 
-### 1. Non-negotiable runtime invariants
+### 3. Expanded tree tiers
 
-- Every visible tree must emit at least one whole-tree representation every frame.
-- Overflow must never be resolved by draw-slot order.
-- Nearest trees must be promoted before farther trees.
-- Branch detail inside promoted trees must also be admitted nearest-first.
-- Overflow must degrade representation quality, not erase arbitrary visible vegetation.
-- Urgent redesign success is defined by accepted-content correctness first. Occlusion and submission-count optimization are explicitly deferred.
+- `L2`
+  - tree expands into survived branch placements
+  - each survived branch uses the branch prototype's baked `L2` canopy mesh plus baked `L2` wood mesh
+  - no shell-node arrays
+  - no BFS
 
-### 2. Representation ladder
+- `L1`
+  - tree expands into survived branch placements
+  - each survived branch uses the branch prototype's baked `L1` canopy mesh plus baked `L1` wood mesh
+  - no shell-node arrays
+  - no BFS
 
-- `PresenceProxy`
-  One whole-tree instance using `impostorMesh`. This is allowed for any visible tree under budget pressure, even if the tree is inside the normal `Expanded` distance band.
+- `L0`
+  - tree expands into survived branch placements
+  - each survived branch uses the original source branch mesh pair
+  - this is the highest detail urgent tier
+  - no shell-node arrays
+  - no BFS
 
-- `PromotedExpanded`
-  Tree is upgraded from `PresenceProxy` to expanded runtime submission. Proxy is suppressed for that tree once promotion succeeds.
+Hard rule:
+- one visible tree chooses exactly one accepted tree tier for the frame:
+  - `Impostor`
+  - `TreeL3`
+  - `L2`
+  - `L1`
+  - `L0`
+- mixed branch tiers inside one tree are out of scope for the urgent path
 
-- `PromotedExpanded + BranchDetail`
-  Promoted tree receives branch detail buckets in priority order.
+### 4. Branch authoring simplification
 
-Critical rule:
-- tree presence is mandatory
-- expanded detail is optional
+Branch authoring after the redesign must stop persisting branch-shell hierarchies for runtime use.
 
-### 3. New budget model
+Required branch runtime bake outputs:
+- original `woodMesh` / `foliageMesh` for `L0`
+- one baked branch `L1` canopy mesh
+- one baked branch `L1` wood mesh
+- one baked branch `L2` canopy mesh
+- one baked branch `L2` wood mesh
+- one baked branch `L3` canopy mesh
+- one baked branch `L3` wood mesh
 
-Replace the current single undifferentiated cap with an explicit budget profile.
+Hard rule:
+- no `shellNodesL0`
+- no `shellNodesL1`
+- no `shellNodesL2`
+- no runtime BFS metadata
+- no per-tier shell frontier decode
 
-Recommended profile:
+Important note:
+- branch `L3` still exists as an authored simplification product
+- urgent runtime floor is still `TreeL3`, not branch-expanded `L3`, because branch-expanded fallback cannot guarantee one visible tree = one cheap accepted instance
+
+---
+
+## ownership model
+
+### static runtime owners after redesign
+
+- `SpatialGrid`
+  - tree-to-cell visibility ownership only
+
+- `TreeInstances[]`
+  - authoritative urgent-path runtime owner
+  - owns tree transforms, bounds, blueprint handle, tree `L3` slot identity, impostor slot identity, and accepted tier state
+
+- `TreeBlueprints[]`
+  - owns tree-level meshes and per-tree static LOD cost data
+  - must include:
+    - `treeL3Mesh`
+    - `impostorMesh`
+    - branch placement span / count
+    - static tier costs for `L2`, `L1`, and `L0`
+
+- `BlueprintBranchPlacements[]`
+  - reusable branch placement data per blueprint
+  - not duplicated per scene tree
+
+- compact branch prototype tier table
+  - reusable branch prototype mesh/material handles for:
+    - `L0 original`
+    - `L1 canopy mesh`
+    - `L1 wood mesh`
+    - `L2 canopy mesh`
+    - `L2 wood mesh`
+    - `L3 canopy mesh`
+    - `L3 wood mesh`
+
+- `DrawSlots[]`
+  - final submission identities only
+
+### legacy runtime owners removed from urgent path
+
+- `SceneBranches[]`
+- `ShellNodesL1/L2/L3[]`
+- branch-shell BFS metadata
+- full-container branch decision buffers
+- full-container branch classify / count / emit stages
+
+### hard rule on `SceneBranches[]`
+
+- production urgent path must not pre-populate `SceneBranches[]`
+- if branch-expanded work exists, it must be generated only for trees already accepted above `TreeL3`
+- scene-wide static branch ownership is banned in the urgent path
+
+This is the runtime-memory-first requirement. Minimizing `SceneBranches[]` is weaker than removing it from the default path.
+
+---
+
+## budget model
+
+The old draft used too many hard caps. That is unnecessary complexity.
+Urgent path keeps one hard runtime budget only:
 
 ```text
-VegetationRuntimeBudgetProfile
-- int totalVisibleInstanceCapacity
-- int reservedTreePresenceCapacity
-- int reservedTrunkCapacity
-- int reservedL0Capacity
-- int reservedL1Capacity
-- int reservedL2Capacity
-- int reservedL3Capacity
-- int safetyMargin
+availableVisibleInstanceCapacity
+= VegetationRuntimeContainer.maxVisibleInstanceCapacity - safetyMargin
 ```
 
-Minimum hard rule:
-- `reservedTreePresenceCapacity` must be large enough for the worst-case number of visible trees for the container chunk
+Hard rules:
+- do not add a separate complex `VegetationRuntimeBudgetProfile`
+- keep one visible-instance budget per container
+- every visible non-far tree is guaranteed to render
+- if optional detail consumed too much capacity, demote farther accepted content first
+- farther trees fall back before nearer trees
+- `impostorMesh` is already the far fallback
+- `TreeL3` is the mandatory non-far fallback
+- if even the mandatory baseline cannot fit after all optional detail is removed, the container configuration is invalid and validation must fail explicitly
 
-For the urgent dense-forest target:
-- if one container may need to show `6000` tightly packed trees, that container must reserve at least `6000` tree-presence instances
+### promotion model
 
-If a container configuration cannot satisfy its own guaranteed tree-presence reserve:
-- validation must fail explicitly
+Promotion depends on two things only:
+- distance to camera
+- static cost of the target LOD tier
 
-### 4. New runtime records
+That cost must be precomputed and conservative.
 
-Add explicit per-frame acceptance records before per-slot packing.
+Required static cost model:
+- `Impostor cost = 1`
+- `TreeL3 cost = 1`
+- `L2 cost = static blueprint cost`
+- `L1 cost = static blueprint cost`
+- `L0 cost = static blueprint cost`
 
-Recommended records:
+Hard rule:
+- no per-camera dynamic promotion cost estimation
+- no branch-survival-dependent promotion budgeting
+- nearest-first ordering comes only from distance to camera
+- cost check comes only from static tier cost
+
+Acceptance order:
+1. far trees are assigned `Impostor`
+2. every visible non-far tree is assigned `TreeL3`
+3. nearest trees are promoted to `L2`, then `L1`, then `L0` while capacity remains
+4. if capacity is exceeded, remove farther optional promotions first
+5. if capacity is still exceeded, push farther trees down to their farther valid tier
+6. a visible non-far tree may never disappear; the system must keep at least `TreeL3`
+
+---
+
+## new runtime records
 
 ```text
 TreeVisibilityRecord
@@ -282,256 +341,305 @@ TreeVisibilityRecord
 - float treeDistance
 - int priorityRing
 - bool visible
-- bool wantsExpanded
-- bool acceptedProxy
-- bool acceptedExpanded
-- int desiredExpandedInstanceCost
-- int acceptedDetailInstanceCost
-
-BranchPriorityRecord
-- int treeIndex
-- int branchIndex
-- float branchDistance
-- int priorityRing
 - int desiredTier
 - int acceptedTier
-- int estimatedInstanceCost
-- float coverageWeight
+- int acceptedTierCost
+- bool acceptedTreeL3
+- bool acceptedExpanded
 ```
 
-These records exist to preserve priority information until after budget acceptance. The current slot-first counters destroy that information too early.
+```text
+ExpandedTreeRecord
+- int treeIndex
+- int acceptedTier          // L2, L1, or L0 only
+- int blueprintIndex
+- int branchPlacementStart
+- int branchPlacementCount
+```
 
-### 5. New frame pipeline
+```text
+ExpandedBranchWorkItem
+- int treeIndex
+- int branchPlacementIndex
+- int acceptedTier          // tree-wide accepted tier
+```
 
-#### Stage A: visibility and desired LOD
+Hard rule:
+- `ExpandedBranchWorkItem` is generated only from `ExpandedTreeRecord`
+- there is no static `SceneBranches[]` array for the whole container
+
+---
+
+## new frame pipeline
+
+### Stage A - classify visible trees
 
 - classify visible cells
 - classify visible trees
-- classify desired branch tiers exactly as today
+- reject by absolute cull distance
+- classify far trees directly to `Impostor`
+- classify near / mid trees into desired tree tier candidates
 
-#### Stage B: mandatory tree-presence acceptance
+At this stage there is still no branch-expanded work.
 
-- build one `TreeVisibilityRecord` for every visible tree
-- accept one `PresenceProxy` for every visible tree first
-- this stage consumes only the tree-presence reserve
+### Stage B - accept mandatory `TreeL3` floor
+
+- build `TreeVisibilityRecord` for every visible near / mid tree
+- accept one `TreeL3` representation for every visible near / mid tree first
+- remove farther optional promotions first if they block the guarantee
+- if the baseline still cannot fit, the container is invalid
 
 Result:
-- every visible tree is guaranteed to render
+- every visible non-far tree is guaranteed to render
 
-#### Stage C: nearest-tree promotion
+### Stage C - nearest-first promotion
 
-- compute exact or tightly bounded expanded cost per visible tree
-- walk tree priority rings nearest to farthest
-- promote trees from `PresenceProxy` to `PromotedExpanded` while promotion budget remains
-- promotion cost is `expandedCost - 1`, because the tree already owns one proxy instance
+- sort or bucket visible trees nearest-first
+- promote trees from `TreeL3` upward through:
+  - `TreeL3 -> L2 -> L1 -> L0`
+- use remaining capacity under the one shared visible-instance budget
+- use distance order only plus static tier cost
+- stop promoting when the next promotion would break the guarantee
 
-If promotion cannot fit:
-- tree stays `PresenceProxy`
+Operational rule:
+- promotion replaces the previously accepted representation
+- if a tree cannot afford the next tier, it stays at the last accepted lower tier
 
-This is the first urgent implementation milestone. It alone prevents the catastrophic failure mode where many visible trees disappear.
+### Stage D - generate expanded branch work only for promoted trees
 
-#### Stage C.5: tree work states and promoted-tree compaction
+- build `ExpandedTreeRecord` only for trees accepted at `L2/L1/L0`
+- generate `CompactExpandedBranchWorkItem[]` only from those promoted trees
+- iterate branch placements from blueprint-owned data
+- derive world-space branch transforms and bounds on demand from:
+  - tree transform
+  - blueprint placement
+  - branch prototype local bounds
 
-After the first tree-level prioritization pass, stop treating every `Expanded` tree as branch work immediately.
+Critical consequence:
+- no prebuilt `SceneBranches[]`
+- no branch buffer for the whole container
+- no branch decision work for trees that never left `TreeL3`
 
-Required target states:
+### Stage E - survive branches without BFS
 
-- `PresenceProxyOnly`
-  Tree is accepted only as a proxy for this frame. It must not enter branch kernels.
+For each `ExpandedBranchWorkItem`:
+- run coarse branch visibility against the camera
+- if the branch survives, emit separate canopy and wood content from the tree's accepted tier:
+  - `L2` -> branch prototype `L2` canopy mesh + `L2` wood mesh
+  - `L1` -> branch prototype `L1` canopy mesh + `L1` wood mesh
+  - `L0` -> original foliage mesh + original wood mesh
 
-- `PromotedExpanded`
-  Tree is accepted for full branch-level work this frame.
+No BFS rules:
+- no shell-node arrays
+- no hierarchy child links
+- no subtree traversal
+- no frontier decode
 
-Required compaction:
+### Stage F - count, pack, and emit accepted content
 
-- build a compact promoted-tree list after nearest-tree promotion
-- build promoted-branch work only from that compact tree list
-- branch classify/count/emit must stop dispatching against the full scene branch array once this redesign lands
+- count:
+  - accepted far impostors
+  - accepted `TreeL3`
+  - survived branches from accepted expanded trees
+- build packed slot starts only after acceptance is final
+- emit only accepted content into the shared visible-instance buffer
 
-This is the simple pre-pass needed to trim decisions as much as possible:
-- far or budget-constrained trees stay `PresenceProxyOnly`
-- only promoted near trees pay per-branch cost
-- shell traversal is skipped entirely for non-promoted trees
+Slot packing is now a late packing detail, not a survival policy.
 
-#### Stage C.6: targeted branch-shell BFS for promoted shell branches only
+### Stage G - compact final submissions
 
-After promoted-tree compaction is in place, finally use the existing branch-shell BFS metadata in a targeted way.
-
-Scope:
-
-- apply only to `PromotedExpanded` trees
-- apply only to shell tiers `L1/L2/L3`
-- do not run this for `PresenceProxyOnly` trees
-- do not run this for `L0` branches, because `L0` already emits source branch meshes directly
-
-Required behavior:
-
-- build promoted-branch work only from the compact promoted-tree list
-- for each promoted shell branch, start from the root node of the selected shell tier
-- use `FirstChildIndex + ChildMask` to visit only the reachable frontier instead of linearly scanning the whole selected shell tier
-- if a node is outside the frustum, reject the whole subtree
-- if a node is visible and still has children, expand children
-- if a node is visible and is a leaf, emit that node
-
-Why this stage is worth adding:
-
-- current shipped branch-shell BFS data is just uploaded metadata; it is not paying for itself yet
-- after tree-level prioritization, the remaining branch set is small enough that targeted hierarchy traversal becomes worth the implementation cost
-- this reduces shell-node work for promoted trees without pretending it solves the bigger flat-tree branch-span problem
-
-Non-goals:
-
-- this is not a full-tree hierarchy
-- this does not replace tree-level prioritization
-- this does not replace branch compaction
-- this does not add occlusion
+- build compact active-slot indices from non-zero emitted slots only
+- submit only those active slots in depth and color passes
 
 Hard rule:
+- this stage removes empty submission waste only
+- it does not influence acceptance or overflow survival
 
-- tree-level prioritization and promoted-tree compaction must land before targeted branch-shell BFS work starts
-- otherwise the runtime will still waste work touching too many expanded trees and the branch-shell BFS stage will be solving the wrong problem
+---
 
-#### Stage D: branch detail buckets inside promoted trees
+## why this solves the urgent production bug
 
-- only promoted trees can request branch detail
-- build branch records for promoted trees only
-- accept branches by priority buckets and distance rings, nearest first
+Current runtime fails because:
+- it creates branch work for too much content
+- it stores too much static branch-owned state
+- it lets slot packing decide what survives
 
-Recommended bucket order:
+The redesigned path fixes that because:
+- every visible near / mid tree gets `TreeL3` first
+- only the nearest trees spend promotion budget
+- only promoted trees generate compact branch-expanded work
+- branch-expanded tiers use separate canopy and wood meshes per survived branch, not BFS
+- `SceneBranches[]` is removed from the default urgent path
+- shell-node runtime memory disappears from the production path
 
-```text
-1. mandatory promoted-tree trunk
-2. L0 branches
-3. L1 branches
-4. L2 branches
-5. L3 branches
-```
+Worst case:
+- all visible near / mid trees still render as `TreeL3`
 
-Within each bucket:
-- process nearest branch rings first
-- stop when that bucket budget is exhausted
+Better case:
+- nearest trees promote to `L2`, then `L1`, then `L0`
 
-#### Stage E: promotion safety check
+This is the correct trade:
+- stable presence first
+- optional detail second
+- no branch hierarchy state unless the tree already earned it
 
-If a promoted tree cannot reach minimum stable completeness:
-- demote it back to `PresenceProxy`
+---
 
-The minimum stable completeness for the first production-safe version should be conservative:
-- full trunk
-- enough branch coverage to avoid an obviously broken near-tree silhouette
+## required contract changes
 
-Do not allow half-upgraded trees with missing trunk or broken canopy coverage to replace the proxy.
+### authoring / bake
 
-#### Stage F: count, pack, emit only accepted content
+- add `treeL3Mesh` as a required tree-level runtime floor mesh
+- keep `impostorMesh` as far-only
+- remove runtime dependence on `shellNodesL0/L1/L2`
+- bake one branch canopy mesh and one branch wood mesh per prototype for `L1/L2/L3`
+- keep original branch meshes for `L0`
+- validate monotonic detail reduction and bounds for:
+  - `treeL3Mesh`
+  - branch `L1` canopy + wood
+  - branch `L2` canopy + wood
+  - branch `L3` canopy + wood
+  - `impostorMesh`
 
-- accepted trees and accepted branches contribute to per-slot counters
-- only after acceptance do we build per-slot starts
-- only accepted content is emitted into the packed visible-instance buffer
+### runtime registry
 
-This is the key redesign point:
-- slot packing becomes a late packing detail
-- it is no longer the mechanism that decides what survives
-- promoted-tree compaction must happen before branch kernels so the runtime stops touching every branch of every expanded tree
+- move urgent-path ownership to tree-first records
+- remove pre-populated `SceneBranches[]`
+- remove shell-node and BFS registry surfaces
+- keep only reusable per-blueprint branch placements, compact branch prototype tier handles, and generated `CompactExpandedBranchWorkItem[]`
 
-### 6. Why this solves the 6000-tree dense-forest case
+### runtime compute / emission
 
-Current runtime cannot guarantee this case because every detailed branch competes in one monolithic pool.
+- remove full-container branch classify / count / emit stages
+- add tree-first acceptance and promotion stages
+- add promoted-tree-only branch work generation
+- add active-slot compaction
 
-The redesigned runtime can guarantee it because:
+### validation
 
-- the first reserved budget is tree presence, not branch detail
-- `6000` visible trees cost `6000` proxy instances, which is trivial compared with detail-scale capacities
-- nearest trees are promoted only after presence is already guaranteed
-- worst case under extreme pressure:
-  all visible trees still render as whole-tree proxies
-- best case under available detail budget:
-  nearest trees are promoted to expanded detail first
+- explicit failure if `treeL3Mesh` is missing
+- explicit failure if one container cannot satisfy its guaranteed `TreeL3` floor count
+- explicit failure if branch tier meshes required by the urgent path are missing
 
-This is the only sane guarantee that can be made without mixing in more systems before the acceptance path is correct.
+---
 
-### 7. Required contract changes
+## dense-forest validation
 
-- `impostorMesh` must be allowed as an emergency runtime fallback even inside the nominal expanded distance bands
-- runtime budget must stop being treated as one undifferentiated packed-instance cap
-- container validation must know the target guaranteed visible-tree count for that chunk
-- debug and profiling output must report accepted versus dropped content by bucket
-- urgent redesign work must not be blocked on occlusion work
-- docs and code comments must use the same hard terminology for `visible instance`, `draw slot`, and final `indirect submission`
+Required scenario:
+- one container
+- `6000`-`12000` tightly packed trees
+- camera inside the forest
 
-### 8. Telemetry and validation
+Must prove:
+- every visible near / mid tree renders at least `TreeL3`
+- nearer trees promote before farther trees
+- `L0` renders survived original branches only
+- `L1/L2/L3` use separate canopy and wood meshes per branch tier
+- no shell-node buffers are allocated
+- no pre-populated `SceneBranches[]` buffer is allocated
+- final submissions track non-zero emitted slots only
 
-Required diagnostics:
-
+Required telemetry:
 - visible tree count
-- accepted proxy tree count
-- promoted tree count
-- demoted tree count
-- requested expanded-tree promotions
+- accepted `TreeL3` count
+- promoted tree counts for `L2/L1/L0`
 - rejected promotions
-- requested versus accepted branch counts for `L0/L1/L2/L3`
-- total requested instances
-- total accepted instances
-- non-zero accepted slot count
-- promoted tree count
-- promoted branch count
-- total scene branch count versus promoted branch count
-- bucket usage and headroom
+- accepted tier-cost usage and remaining headroom
+- generated expanded-tree count
+- generated compact expanded-branch work-item count
+- registered draw slots
+- non-zero emitted slots
+- final submitted slots
+- exact branch-owned runtime bytes
 
-Required validation scenario:
+Success condition for branch-owned runtime bytes:
+- no scene-wide branch-owned static buffer should remain in the urgent path
 
-- one container with `6000`-`12000` tightly packed trees
-- camera placed inside the forest
-- runtime proves:
-  - every visible tree renders at least one representation
-  - nearest trees receive expanded detail first
-  - overflow never drops arbitrary trees due to slot order
+---
 
-Telemetry priority:
-- keep current shipped runtime-review telemetry behind `EnableDiagnostics` for architecture review
-- add later acceptance-model telemetry only after the acceptance logic above is implemented and stable
+## migration plan
 
-### 9. Migration plan
+### Phase 1 - delete BFS from the urgent path
 
-#### Phase 1 - urgent safety fix
+- stop planning branch-shell BFS as the urgent solution
+- remove `shellNodesL1/L2/L3[]` from the urgent runtime path
+- freeze `L0` as survived original branches
+- freeze `L1/L2/L3` branch tiers as separate baked canopy and wood meshes per branch prototype
+- require tree `L3` mesh as the guaranteed floor
 
-- add `PresenceProxy` acceptance for every visible tree
-- add nearest-tree promotion with explicit budgets
-- add `PresenceProxyOnly` / `PromotedExpanded` tree work states
-- compact promoted trees before branch kernels
-- remove slot-order-based survival as the de facto overflow policy
+### Phase 2 - tree-first acceptance
 
-#### Phase 2 - fuller detail quality
+- add `TreeVisibilityRecord`
+- accept `TreeL3` for every visible near / mid tree first
+- add nearest-first promotion through `L2 -> L1 -> L0`
+- use one shared visible-instance budget only
 
-- replace shell-tier flat scans with targeted branch-shell BFS frontier traversal for promoted shell branches only
-- add branch priority rings for promoted trees
-- add demotion logic when promoted-tree completeness is unstable
+### Phase 3 - remove static scene branch ownership
 
-#### Phase 3 - last-priority observability
+- delete pre-populated `SceneBranches[]` from the urgent path
+- generate expanded branch work only for promoted trees
+- derive branch world data from tree transform plus blueprint placement on demand
 
-- add overflow telemetry
-- add non-zero-slot telemetry so we can distinguish instance pressure from draw-slot submission pressure
+### Phase 4 - slot compaction
 
-#### Phase 4 - later follow-up
+- compact active slots to non-zero emitted slots
+- stop submitting all registered slots after bind
 
-- optional active-slot filtering if submission count is still too high
-- optional current-frame occlusion / HiZ after prioritization is verified
-- optional cross-container/global coordinator
-- optional DFS hierarchy migration and more accurate subtree cost estimation
+### Phase 5 - last-priority telemetry
 
-### 10. Done criteria
+- add acceptance telemetry
+- add branch-memory telemetry proving the old scene-branch path is gone
 
-- a visible tree never disappears solely because other slots consumed the packed-instance buffer first
-- a `6000`-tree dense-forest container can still render every visible tree at least as `PresenceProxy`
-- nearest visible trees are promoted before farther visible trees
-- branch detail inside promoted trees follows priority buckets instead of slot order
-- overflow diagnostics are explicit and testable once telemetry lands
+---
+
+## done criteria
+
+- one visible near / mid tree never disappears solely because another tree consumed the budget first
+- one visible near / mid tree always has at least `TreeL3`
+- `impostorMesh` stays far-only
+- `L0` means survived original branch meshes only
+- `L1/L2/L3` no longer depend on BFS or shell-node traversal
+- branch authoring keeps separate canopy and wood runtime tiers plus original source meshes
+- urgent runtime path no longer pre-populates `SceneBranches[]`
+- urgent runtime path no longer allocates shell-node buffers
+- nearest trees promote first inside one container
+- final submissions follow non-zero emitted slots only
+- multi-container prioritization is documented as unresolved follow-up, not silently implied as solved
+
+---
+
+## resolved decisions
+
+1. `L1/L2/L3` branch tiers use separate canopy and wood meshes per level. They must stay separate because materials and submission paths are separate.
+2. Urgent implementation scope is one container only. Multi-container clashes stay as a later note.
+3. `SceneBranches[]` is removed from the urgent path and replaced by `CompactExpandedBranchWorkItem[]` generated only for promoted trees.
+4. Budgeting stays simple: one shared visible-instance budget per container, no complex profile with many hard caps.
+5. Promotion order depends on distance to camera only. Cost checks depend on static LOD tier cost only.
+6. Every visible non-far tree is guaranteed to render. If capacity is tight, farther optional detail is removed first and farther trees are pushed to their farther valid tier before a visible non-far tree loses `TreeL3`.
 
 ## open questions
 
-1. Should emergency `PresenceProxy` always reuse `impostorMesh`, or do we need a dedicated near-safe whole-tree proxy mesh to avoid quality collapse in the closest few meters?
-2. Should the dense-forest guarantee be configured as `maxGuaranteedVisibleTrees` per container, or should it default to `registry.TreeInstances.Count` when the user explicitly marks a container as a dense chunk?
-3. Should branch-level promotion use exact measured cost per tree every frame, or a cheaper estimated cost with corrective demotion when the measured accepted content falls short?
-4. Should active-slot filtering become part of this redesign only if telemetry later proves the submission count is still too high after prioritization?
+1. Do we want explicit hysteresis bands per tree tier to prevent `TreeL3 <-> L2` popping once the urgent refactor is working?
+Answer: no.
+2. When multi-container prioritization becomes urgent later, do we want one camera-local arbiter as the first follow-up?
+Answer: skip for now. Ask again when full urgent redesign landed and verified.
+
+## Repo notes (clean after big feature/design is done)
+- Project-local custom vegetation materials are not first-class yet because runtime rendering still resolves final materials through `VegetationIndirectMaterialFactory` rather than an explicit compatible-material contract.
+- `TreeInstances[]` is now the approved redesign target for urgent-path acceptance ownership. It should own tree-first visibility, `TreeL3` floor identity, and nearest-first promotion decisions, while branch-expanded work is generated only for promoted trees from reusable blueprint placements, compact branch prototype tier meshes with separate canopy/wood per level, and a compact per-frame promoted-tree branch worklist instead of `SceneBranches[]`.
+- The current redesign authority no longer treats branch-shell BFS as the next urgent step. Urgent task `#1` is  tree-first acceptance with guaranteed `TreeL3` floor plus nearest-first promotion into branch-expanded `L2/L1/L0`, with `L0` defined as survived original branches and BFS removed from the production path.
+- `VegetationRendererFeature`  owns the shared `VegetationClassify.compute` asset reference through `VegetationFoliageFeatureSettings.ClassifyShader`, feature-scoped runtime diagnostics through `VegetationFoliageFeatureSettings.EnableDiagnostics`, and consumes active `AuthoringContainerRuntime` instances from the shared runtime-owner registry instead of discovering `VegetationRuntimeContainer` directly.
+- Current shipped runtime-review telemetry is behind `VegetationFoliageFeatureSettings.EnableDiagnostics` and now logs per-container registration counts, `TreeBlueprints[]`, exact allocated GPU bytes for `branchBuffer`, `branchDecisionBuffer`, prototype buffer, shell-node buffers, `visibleInstanceCapacityBytes`, and one-shot prepared-frame readback totals for `nonZeroEmittedSlots`, `emittedVisibleInstances`, and `emittedVisibleInstanceBytes`.
+- `DetailedDocs/urgentRedesign.md` now sequences the urgent path explicitly: near-tree prioritization decides one accepted tree tier per visible tree first (`TreeL3`, `L2`, `L1`, or `L0`), branch-expanded work is generated only for promoted trees through a compact per-frame worklist, and active-slot filtering compacts final submissions down to the non-zero emitted slot set. Submission compaction must not be allowed to influence survival decisions.
+- The current shell bake path can intentionally collapse compact `L1/L2` tiers to a single root node when the compact mesh is cheaper than keeping the child frontier. The observed `759/1/1` shell-tier shape is therefore an intended bake outcome for that prototype, not a runtime registration bug.
+- Runtime container debug exposure is batch-level only in production flow; exact CPU-side visible-instance mirrors are not available.
+- Current shipped overflow behavior is still structurally weak: branch and shell detail are classified independently, accepted implicitly by slot-order packing, and then clamped by packed-buffer capacity. `DetailedDocs/urgentRedesign.md` is the current redesign authority for replacing slot-order overflow with guaranteed tree presence plus nearest-first promotion buckets. Occlusion is explicitly deferred from that urgent path.
+- Large forests can be split across multiple `VegetationRuntimeContainer` roots to avoid one-container overflow, but this is chunking, not a global coordinator. Total scene memory and visible capacity are the sum of all visible containers, and there is still no cross-container near-detail prioritization.
+Urgent path keeps one hard runtime budget only:
+- Runtime has two separate limits that must not be conflated: `VegetationRuntimeContainer.maxVisibleInstanceCapacity` is the per-container packed visible-instance cap, while `registry.DrawSlots.Count` is the draw-slot submission surface produced by unique mesh/material/material-kind combinations.
+- Current shipped hierarchy state is weaker than the old docs implied: tree runtime data is still a flat branch span (`SceneBranchStartIndex + SceneBranchCount`), and branch-shell BFS metadata is uploaded prototype-local but not traversed through child links in the shader yet.
+- `registry.SceneBranches[]` is currently a bounded static registration snapshot, not an exponential or unowned frame-growth structure. It grows linearly with active tree authorings and blueprint branch placements during registration rebuild, then stays fixed until the next `RefreshRuntimeRegistration()`.
+- That is no longer enough to justify keeping `registry.SceneBranches[]`. The approved urgent redesign removes pre-populated `SceneBranches[]` and runtime shell-node ownership from the default path instead of preserving a slimmer scene-branch surface.
 
 ---
 
