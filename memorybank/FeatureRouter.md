@@ -29,6 +29,7 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - shader compatibility
 - Read:
   - [UnityAssembledVegetation_FULL](../DetailedDocs/UnityAssembledVegetation_FULL.md) - architecture authority
+  - [urgentRedesign](../DetailedDocs/urgentRedesign.md) - urgent runtime prioritization and dense-forest overflow redesign authority
   - [Milestone2](../DetailedDocs/Milestone2.md) - current milestone authority for hierarchical wind, custom-material compatibility, and production improvements
   - [Milestone1](../DetailedDocs/Milestone1.md) - finished MVP baseline and completion record
 

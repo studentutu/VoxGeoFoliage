@@ -108,7 +108,7 @@ Examples:
 8. If one container overflows its own budget, the runtime clamps emissions inside that container. Raising the budget helps only that container.
 9. Current default `maxVisibleInstanceCapacity` is `262144`. Shared packed instance payload is approximately `144 bytes` per visible instance, so larger values increase GPU memory quickly.
 10. If near `L0/L1` detail disappears, first check whether one container owns too much visible content for its own budget before assuming the whole scene budget is too small. 
-- "Visible packed instances = final draw-ready per-slot instances after tree/branch classification and shell-leaf survival"
+11. Visible packed instances are final draw-ready per-slot instances after tree/branch classification and shell-leaf survival.
 
 ## Runtime Pipeline
 
@@ -130,6 +130,7 @@ Examples:
 9. `maxVisibleInstanceCapacity` is per-container, not global. Multiple containers do not share one packed visible-instance buffer.
 10. Splitting one large forest across multiple containers can avoid one-container overflow, but it does not create a global coordinator. Memory, buffers, and capacity all scale with the number of visible containers.
 11. The runtime currently clamps overflow instead of reprioritizing cross-container or cross-slot content. There is no global `keep closest L0/L1 first` policy yet.
+12. The active redesign proposal for that limitation lives in [../../DetailedDocs/urgentRedesign.md](../../DetailedDocs/urgentRedesign.md).
 
 ## Supported Devices
 
@@ -146,6 +147,7 @@ Examples:
 - sample high poly single Fern leaf, see [fern_foliage_dense](Samples~/VegetationDemo/Raw/fern_foliage_dense_fullgeo.obj)
 - sample branch for standard tree, see [branch_leaves](Samples~/VegetationDemo/Raw/branch_leaves_fullgeo.obj)
 3. Architecture authority: [UnityAssembledVegetation_FULL.md](https://github.com/studentutu/VoxGeoFoliage/blob/master/DetailedDocs/UnityAssembledVegetation_FULL.md)
+4. Urgent runtime scaling redesign: [../../DetailedDocs/urgentRedesign.md](../../DetailedDocs/urgentRedesign.md)
 
 ## License
 

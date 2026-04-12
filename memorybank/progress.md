@@ -15,12 +15,20 @@ Purpose: track the active milestone, the current blockers, and the next concrete
 - `2026-04-12`: Runtime scaling hardening landed. Shell-node runtime caches stay prototype-local, branch and shell-node bounds are generated on GPU per frame from transforms, and `VegetationRuntimeContainer.maxVisibleInstanceCapacity` now hard-bounds the shared visible-instance buffer instead of reserving scene-scale per-slot/node memory.
 - `2026-04-12`: `VegetationRuntimeContainer.maxVisibleInstanceCapacity` default was raised to `262144`, and changing that serialized value now forces the GPU pipeline to rebuild so higher per-container budgets actually apply without a full registration rebuild.
 - `2026-04-12`: Documentation was corrected to state the real runtime scope: `maxVisibleInstanceCapacity` is per container, not a global scene budget. Large forests may be split across multiple containers to avoid one-container overflow, but total scene memory and visible capacity then scale with the number of visible containers because there is still no global coordinator.
+- `2026-04-12`: Urgent dense-forest redesign was documented in `DetailedDocs/urgentRedesign.md`. Current shipped overflow policy is still slot-order-based; the approved direction is guaranteed tree presence first, then nearest-tree and nearest-branch promotion buckets.
 - Current production gap 1: hierarchical wind is still not implemented.
 - Current production gap 2: runtime material ownership is still hard-coded through `VegetationIndirectMaterialFactory`, which rebuilds runtime materials from package shader names and copies only a narrow property subset.
 - Current production gap 3: canopy-shell generation still does not support the intended `GPUVoxelizer` path from quad and alpha-masked branch inputs.
 - Current package-consumer risk: project-local custom materials and masked-quad foliage inputs are not first-class yet because runtime rendering and bake tooling still expose a narrow source contract.
 
 ## Immediate Tasks
+
+### Urgent runtime redesign
+
+- Replace slot-order overflow with the `urgentRedesign.md` pipeline: guaranteed tree presence proxy first, then nearest-tree promotion.
+- Add explicit per-frame tree acceptance records before per-slot packing.
+- Add dense-forest validation for one container with around `6000` tightly packed trees and camera inside the forest.
+- Add overflow telemetry: visible trees, proxy trees, promoted trees, rejected promotions, requested detail, accepted detail, and per-bucket usage.
 
 ### Milestone 2 Breakdown
 
