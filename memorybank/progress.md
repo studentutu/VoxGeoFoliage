@@ -11,19 +11,18 @@ Purpose: track the active milestone, the current blockers, and the next concrete
 
 ## Immediate Tasks
 
-### Urgent runtime redesign
+### Completed
 
-- Replace slot-order overflow with the `urgentRedesign.md` pipeline: guaranteed `TreeL3` floor first, then nearest-tree promotion into branch-expanded `L2/L1/L0`.
-- Move urgent-path acceptance ownership to `TreeInstances[]` and remove pre-populated `SceneBranches[]` plus runtime shell-node ownership from the runtime path.
-- Add the required tree-level `TreeL3` mesh contract and bake output for the guaranteed floor.
-- Freeze `L0` as survived original branches and freeze branch `L1/L2/L3` as separate canopy and wood runtime tiers with no BFS.
-- Add explicit per-frame tree acceptance records before per-slot packing.
-- Remove pre-populated `SceneBranches[]` and `ShellNodesL1/L2/L3[]` from the runtime path instead of slimming them; keep only reusable blueprint placements, compact branch prototype tier meshes, and a compact promoted-tree branch worklist.
-- Replace the urgent frame path with tree-first acceptance plus promoted-tree-only branch count/pack/emit so one visible tree chooses one accepted representation per frame before any expanded branch work exists.
-- Add active-slot filtering / non-zero-slot compaction after accepted-content emission so final submissions track the non-zero emitted slot set instead of every registered slot after bind.
-- Add dense-forest validation for one container with around `6000` tightly packed trees and camera inside the forest.
-- Replace branch-shell BFS bake outputs with no-BFS branch split canopy/wood tiers and update validation around `TreeL3`, branch `L1/L2/L3`, and far impostor ownership.
-- Add overflow telemetry last: visible trees, accepted `TreeL3`, promoted trees, rejected promotions, compact expanded-branch work-item count, non-zero accepted slots, and shared-budget usage.
+- Landed the urgent tree-first runtime redesign from `urgentRedesign.md`.
+- Added the required `treeL3Mesh` authoring/runtime contract and branch split canopy/wood tiers for `L1/L2/L3`.
+- Removed urgent-path runtime ownership of `SceneBranches[]` and prototype shell-node buffers from registration, GPU classification, and submission.
+- Replaced the frame path with tree-first acceptance, nearest-first promotion into branch-expanded `L2/L1/L0`, promoted-tree-only compact branch work generation, and non-zero-slot submission compaction.
+- Added urgent-path telemetry for visible trees, accepted `TreeL3`, promoted trees, rejected promotions, expanded branch work-item count, accepted tier-cost usage, and non-zero emitted slots.
+- Recompiled through both `Compile by Rider MSBuild` and `Fully Compile by Unity` with no compile errors.
+
+### Next Validation
+
+- Run the dense-forest one-container scene and confirm the telemetry/visual behavior against `DetailedDocs/urgentRedesign.md`: every visible non-far tree holds at least `TreeL3`, promotions happen nearest-first, and final submissions track only non-zero emitted slots.
 
 ### Milestone 2 Breakdown
 

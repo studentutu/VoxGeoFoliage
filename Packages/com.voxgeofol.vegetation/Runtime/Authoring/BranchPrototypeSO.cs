@@ -22,6 +22,10 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         [SerializeField] private BranchShellNode[] shellNodesL0 = Array.Empty<BranchShellNode>();
         [SerializeField] private BranchShellNode[] shellNodesL1 = Array.Empty<BranchShellNode>();
         [SerializeField] private BranchShellNode[] shellNodesL2 = Array.Empty<BranchShellNode>();
+        [SerializeField] private Mesh? branchL1CanopyMesh;
+        [SerializeField] private Mesh? branchL2CanopyMesh;
+        [SerializeField] private Mesh? branchL3CanopyMesh;
+        [SerializeField] private Mesh? branchL1WoodMesh;
         [SerializeField] private Mesh? shellL1WoodMesh;
         [SerializeField] private Mesh? shellL2WoodMesh;
         [SerializeField] private Material? shellMaterial;
@@ -51,6 +55,18 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         public BranchShellNode[] ShellNodesL1 => shellNodesL1;
 
         public BranchShellNode[] ShellNodesL2 => shellNodesL2;
+
+        public Mesh? BranchL1CanopyMesh => branchL1CanopyMesh;
+
+        public Mesh? BranchL2CanopyMesh => branchL2CanopyMesh;
+
+        public Mesh? BranchL3CanopyMesh => branchL3CanopyMesh;
+
+        public Mesh? BranchL1WoodMesh => branchL1WoodMesh;
+
+        public Mesh? BranchL2WoodMesh => shellL1WoodMesh;
+
+        public Mesh? BranchL3WoodMesh => shellL2WoodMesh;
 
         public Mesh? ShellL1WoodMesh => shellL1WoodMesh;
 

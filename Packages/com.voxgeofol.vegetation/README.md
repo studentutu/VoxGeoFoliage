@@ -10,7 +10,7 @@
 
 ## Summary
 
-`com.voxgeofol.vegetation` is a Unity 6 URP package for opaque-only, branch-assembled vegetation with a GPU-resident runtime path. Authorings are frozen into a container-owned runtime registry, visible content is classified and emitted on GPU, and URP submits vegetation through indirect depth and color passes.
+`com.voxgeofol.vegetation` is a Unity 6 URP package for opaque-only, branch-assembled vegetation with a GPU-resident tree-first runtime path. Authorings are frozen into a container-owned runtime registry, every visible non-far tree is accepted to at least `TreeL3` before optional branch expansion, and URP submits the compact accepted-content set through indirect depth and color passes.
 
 ## Highlights
 
@@ -110,18 +110,18 @@ Examples:
 
 Current shipped diagnostics include:
 
-1. Registration counts for `trees`, `TreeBlueprints[]`, `SceneBranches[]`, `BranchPrototypes[]`, `ShellNodesL1/L2/L3[]`, `drawSlots`, and `cells`.
-2. Exact allocated GPU bytes for branch-review buffers:
-   `branchBufferBytes`, `branchDecisionBufferBytes`, `prototypeBufferBytes`, `shellNodesL1BufferBytes`, `shellNodesL2BufferBytes`, `shellNodesL3BufferBytes`, `totalBranchTelemetryBufferBytes`, `visibleInstanceStrideBytes`, and `visibleInstanceCapacityBytes`.
-3. One-shot prepared-frame readback totals:
-   `nonZeroEmittedSlots`, `emittedVisibleInstances`, and `emittedVisibleInstanceBytes`.
-4. Allocated element counts beside the raw byte totals so zero-count buffers are still interpreted correctly when the runtime allocates `Mathf.Max(1, count)` elements.
+1. Registration counts for `trees`, `TreeBlueprints[]`, `BlueprintBranchPlacements[]`, `BranchPrototypes[]`, `drawSlots`, and `cells`.
+2. Exact allocated GPU bytes for urgent-path branch-owned buffers:
+   `blueprintPlacementBufferBytes`, `prototypeBufferBytes`, `treeVisibilityBufferBytes`, `expandedBranchWorkItemBufferBytes`, `totalBranchTelemetryBufferBytes`, `visibleInstanceStrideBytes`, and `visibleInstanceCapacityBytes`.
+3. One-shot prepared-frame acceptance telemetry:
+   `visibleTrees`, `acceptedTreeL3`, `promotedL2`, `promotedL1`, `promotedL0`, `rejectedPromotions`, `expandedTrees`, `expandedBranchWorkItems`, `acceptedTierCostUsage`, `nonZeroEmittedSlots`, `emittedVisibleInstances`, and `emittedVisibleInstanceBytes`.
+4. Final render-prep diagnostics use the compact non-zero slot set from `VegetationIndirectRenderer`, so uploaded/submitted slot counts now match the emitted slot surface instead of every registered draw slot.
 
 Scope note:
 
 1. This is current runtime-review telemetry only.
 2. `nonZeroEmittedSlots` and emitted visible-instance totals come from one synchronous CPU readback of `_SlotEmittedInstanceCounts`, so leave diagnostics off outside review.
-3. It does not implement the later acceptance-model telemetry from `DetailedDocs/urgentRedesign.md` such as promoted-tree counts or per-bucket acceptance.
+3. Dense-forest validation still needs scene-level visual review; the runtime logs the counts, but it does not replace inspecting the one-container forest scenario from `DetailedDocs/urgentRedesign.md`.
 
 ## Capacity And Containers
 
@@ -133,10 +133,10 @@ Scope note:
 6. Splitting is not free:
    each container adds its own runtime registry, GPU pipeline state, indirect args, and packed instance buffer memory.
 7. There is currently no global cross-container budget coordinator and no global near-detail prioritization. If the camera sees many heavy containers at once, total memory and total visible-instance capacity are the sum of all container budgets.
-8. If one container overflows its own budget, the runtime clamps emissions inside that container. Raising the budget helps only that container.
+8. If one container runs out of its own budget, the urgent runtime degrades detail inside that container by falling back to `TreeL3` and then dropping farther optional content; raising the budget helps only that container.
 9. Current default `maxVisibleInstanceCapacity` is `262144`. Shared packed instance payload is approximately `144 bytes` per visible instance, so larger values increase GPU memory quickly.
-10. If near `L0/L1` detail disappears, first check whether one container owns too much visible content for its own budget before assuming the whole scene budget is too small. 
-11. Visible packed instances are final draw-ready per-slot instances after tree/branch classification and shell-leaf survival.
+10. If near `L0/L1` detail disappears, first check whether one container owns too much visible content for its own budget before assuming the whole scene budget is too small.
+11. Visible packed instances are final draw-ready per-slot instances after tree-first acceptance and promoted-tree-only branch survival.
 
 ## Runtime Terminology
 
@@ -145,17 +145,17 @@ Scope note:
 | `registeredAuthorings` | Shipped | `VegetationRuntimeContainer.registeredAuthorings` | Explicit container ownership boundary for `VegetationTreeAuthoring` inputs. |
 | `VegetationTreeAuthoringRuntime` | Shipped | `VegetationRuntimeContainer.BuildRuntimeTreeAuthorings()` -> `AuthoringContainerRuntime` | Runtime-safe tree snapshot used so registration does not depend on live `MonoBehaviour` traversal. |
 | `VegetationRuntimeRegistry` | Shipped | Built by `VegetationRuntimeRegistryBuilder`, then consumed by GPU pipeline and indirect renderer | Frozen flattened runtime snapshot for one container. |
-| `Tree branch span` | Shipped | `VegetationTreeInstanceRuntime.SceneBranchStartIndex + SceneBranchCount` | One tree points to its contiguous slice inside the flat `SceneBranches[]` array. |
-| `Scene branch record` | Shipped | `VegetationRuntimeRegistry.SceneBranches[]`, branch classify/count/emit | One bounded static registration record for one scene branch placement. It is not a final submission owner. |
+| `TreeL3 floor` | Shipped urgent path | `TreeBlueprintSO.treeL3Mesh`, `VegetationGpuDecisionPipeline.AcceptTreeTiers` | Mandatory whole-tree non-far fallback accepted before any expanded branch work exists. |
+| `Blueprint branch placement` | Shipped urgent path | `VegetationRuntimeRegistry.BlueprintBranchPlacements[]` | Reusable branch placement data stored once per blueprint and expanded on demand only for promoted trees. |
 | `Draw slot` | Shipped | `VegetationRuntimeRegistry.DrawSlots`, slot counters, `VegetationIndirectRenderer` | Exact `Mesh + Material + MaterialKind` batch identity. One slot owns one slot index, one indirect-args record, and one potential indirect submission per pass. |
-| `Registered draw slot` | Shipped | `VegetationRuntimeRegistry.DrawSlots`, `VegetationIndirectRenderer.BindGpuResidentFrame()` | One slot that exists in the runtime registry. Current shipped renderer treats every registered slot as active once a frame is bound. |
+| `Registered draw slot` | Shipped | `VegetationRuntimeRegistry.DrawSlots` | One slot that exists in the runtime registry, whether or not the current frame emitted any instances into it. |
 | `Non-zero emitted slot` | Shipped telemetry | `_SlotEmittedInstanceCounts`, `AuthoringContainerRuntime preparedFrameTelemetry` | One draw slot whose emitted instance count is greater than zero for the prepared frame. This is the measured submission-worthy subset. |
 | `Visible instance` | Shipped | Packed into `residentInstanceBuffer`; bounded by `VegetationRuntimeContainer.maxVisibleInstanceCapacity` | Final draw-ready instance payload written by the compute path. Many visible instances can map to one draw slot. |
-| `Indirect submission` | Shipped limitation | `VegetationIndirectRenderer.Render()` depth/color calls | One final `DrawMeshInstancedIndirect` call for one active draw slot in one pass. In the current shipped renderer, active slots are all registered slots after bind, not just the non-zero emitted subset. |
-| `Branch-shell BFS metadata` | Shipped limitation | `VegetationBranchShellNodeRuntimeBfs`, `ShellNodesL1/L2/L3`, compute upload | Child-link metadata (`FirstChildIndex + ChildMask`) uploaded for shell nodes. Current shipped shader does not yet use it for real frontier traversal or subtree skip. |
-| `Direct tree tier mesh` | Planned redesign | `DetailedDocs/urgentRedesign.md` urgent path task `#1` | One baked whole-tree representation for `L0/L1/L2/L3/Impostor`. One visible tree chooses exactly one accepted tier per frame. |
-| `Accepted tree tier` | Planned redesign | `DetailedDocs/urgentRedesign.md` Stages `B/C/D` | The one final representation chosen for one visible tree in the current frame. |
-| `Active-slot filtering` | Planned redesign | `DetailedDocs/urgentRedesign.md` Stage `E` | Final submission compaction that keeps only non-zero emitted slots after accepted tree representations are emitted. |
+| `Indirect submission` | Shipped urgent path | `VegetationIndirectRenderer.Render()` depth/color calls | One final `DrawMeshInstancedIndirect` call for one non-zero active draw slot in one pass. |
+| `Branch split tier` | Shipped urgent path | `BranchPrototypeSO.branchL1/2/3CanopyMesh`, `BranchPrototypeSO.branchL1WoodMesh`, `shellL1WoodMesh`, `shellL2WoodMesh` | Separate baked canopy and wood meshes used for promoted branch-expanded `L1/L2/L3`; no BFS traversal is involved. |
+| `Accepted tree tier` | Shipped urgent path | `VegetationGpuDecisionPipeline`, `TreeVisibilityGpu.acceptedTier` | The one final representation chosen for one visible tree in the current frame: `Impostor`, `TreeL3`, `L2`, `L1`, or `L0`. |
+| `Compact expanded branch work item` | Shipped urgent path | `_ExpandedBranchWorkItems`, promoted-tree branch count/emit kernels | Per-frame branch placement work generated only for trees already promoted above `TreeL3`. |
+| `Active-slot filtering` | Shipped urgent path | `VegetationIndirectRenderer.BindGpuResidentFrame()` | Final submission compaction that keeps only non-zero emitted slots after accepted tree and branch content are emitted. |
 
 ## Current Lifecycle
 
@@ -171,10 +171,10 @@ VegetationRuntimeContainer.registeredAuthorings
 -> VegetationRuntimeRegistryBuilder.Build()
 -> VegetationRuntimeRegistry
    -> DrawSlots[]                 exact mesh + material + material-kind buckets
-   -> TreeInstances[]             one per active tree
-   -> SceneBranches[]             bounded static registration snapshot for all active tree branches in flat branch array
-   -> BranchPrototypes[]          reusable per-prototype decode data
-   -> ShellNodesL1/L2/L3[]        reusable prototype-local branch-shell BFS metadata
+   -> TreeInstances[]             one per active tree and the urgent-path acceptance owner
+   -> TreeBlueprints[]            reusable tree-level slots, LOD profile links, and static promotion costs
+   -> BlueprintBranchPlacements[] reusable blueprint-local branch placements stored once per blueprint
+   -> BranchPrototypes[]          reusable branch split-tier meshes and packed leaf tint
    -> SpatialGrid                 tree-cell ownership for visibility classification
 ```
 
@@ -188,23 +188,24 @@ Camera
 -> VegetationGpuDecisionPipeline.PrepareResidentFrame()
    -> ClassifyCells
    -> ClassifyTrees
-   -> ClassifyBranches      current shipped limitation: full flat SceneBranches[] dispatch
+   -> AcceptTreeTiers       mandatory TreeL3 floor first, then nearest-first promotion
+   -> GenerateExpandedBranchWorkItems
    -> ResetSlotCounts
    -> CountTrees
-   -> CountBranches         current shipped limitation: full flat SceneBranches[] dispatch
+   -> CountExpandedBranches promoted-tree-only branch work
    -> BuildSlotStarts
    -> EmitTrees
-   -> EmitBranches          current shipped limitation: full flat SceneBranches[] dispatch
+   -> EmitExpandedBranches  promoted-tree-only branch work
    -> FinalizeIndirectArgs
 -> residentInstanceBuffer            packed visible instances
 -> residentArgsBuffer                indirect args per draw slot
 -> slotPackedStartsBuffer            packed range start per draw slot
+-> slotEmittedInstanceCountsBuffer   non-zero active-slot source
 -> VegetationIndirectRenderer.BindGpuResidentFrame()
--> for each registered draw slot:
+-> for each non-zero emitted draw slot:
    bind shared buffers
-   current shipped limitation: keep slot active even when emitted count is zero
--> URP Depth Pass: DrawMeshInstancedIndirect per registered draw slot after bind
--> URP Color Pass: DrawMeshInstancedIndirect per registered draw slot after bind
+-> URP Depth Pass: DrawMeshInstancedIndirect per active draw slot after bind
+-> URP Color Pass: DrawMeshInstancedIndirect per active draw slot after bind
 -> final URP indirect submissions
 ```
 
@@ -215,29 +216,29 @@ Static registry owners:
 1. `SpatialGrid`
    Owns tree-to-cell registration and visible-cell query boundaries. It does not own branch decode or final submissions.
 2. `TreeInstances[]`
-   Owns per-tree static scene registration plus the `SceneBranchStartIndex + SceneBranchCount` handle into the flat branch array.
-3. `SceneBranches[]`
-   Owns one bounded static scene-branch registration record per placed branch in the container snapshot. It grows linearly with active tree authorings and blueprint branch placements during `RefreshRuntimeRegistration()`. It is not a final draw owner.
-4. `BranchPrototypes[] + ShellNodesL1/L2/L3[]`
-   Own reusable branch module decode data plus reusable branch-shell BFS metadata.
+   Owns per-tree static scene registration, tree bounds, blueprint handles, and the urgent-path acceptance identity.
+3. `TreeBlueprints[] + BlueprintBranchPlacements[]`
+   Own reusable tree-level slots, promotion costs, and blueprint-local branch placement data without duplicating branches per scene tree.
+4. `BranchPrototypes[]`
+   Own reusable branch module draw-slot handles for `L0` source meshes plus split canopy/wood tiers for `L1/L2/L3`.
 5. `DrawSlots[]`
    Own final submission identities only: exact `Mesh + Material + MaterialKind` buckets and per-slot indirect-args layout.
 
 Per-frame worklists:
 
-1. `cellVisibilityBuffer`, `treeModesBuffer`, and `branchDecisionBuffer`
-   Frame-local classification outputs derived from the static registry.
+1. `cellVisibilityBuffer`, `treeVisibilityBuffer`, and `_ExpandedBranchWorkItems`
+   Frame-local urgent-path acceptance and promoted-tree branch work derived from the static registry.
 2. `residentInstanceBuffer` and `residentArgsBuffer`
    Frame-local accepted-content outputs used for indirect submission.
-3. planned `TreeVisibilityRecord[]`, accepted-tree-tier counts, and `ActiveSlotIndices`
-   Future tree-only worklists that should replace branch-level worklists for the urgent redesign.
+3. `slotEmittedInstanceCountsBuffer` and `ActiveSlotIndices`
+   Final submission compaction state that filters the renderer down to the non-zero emitted slot set.
 
 ### What This Means Operationally
 
 1. `VegetationRuntimeContainer.maxVisibleInstanceCapacity` limits packed visible instances, not draw slots.
-2. `DrawSlots.Count` controls how many potential indirect submissions exist for a container, but the current shipped renderer still keeps every registered slot active once the frame is bound.
-3. `SceneBranches[]` is a bounded registration snapshot, not an exponential frame-growth structure. Its real problem today is that branch kernels still use the full array as the work surface every frame.
-4. Tree selection and branch selection currently happen before any urgent prioritization logic, so dense-forest overflow is still structurally driven by slot-order packing.
+2. `DrawSlots.Count` controls how many potential indirect submissions exist for a container, but only the non-zero emitted subset is submitted in the current urgent path.
+3. Runtime memory no longer scales with pre-populated scene-wide branch ownership. Branch work exists only for trees that already promoted above `TreeL3`.
+4. Dense-forest survival is decided before slot packing: every visible non-far tree is accepted to at least `TreeL3`, and only then can nearer trees spend budget on branch-expanded detail.
 
 ## Runtime Pipeline
 
@@ -258,8 +259,8 @@ Per-frame worklists:
 8. Runtime diagnostics are renderer-wide through `VegetationFoliageFeatureSettings.EnableDiagnostics`.
 9. `maxVisibleInstanceCapacity` is per-container, not global. Multiple containers do not share one packed visible-instance buffer.
 10. Splitting one large forest across multiple containers can avoid one-container overflow, but it does not create a global coordinator. Memory, buffers, and capacity all scale with the number of visible containers.
-11. The runtime currently clamps overflow instead of reprioritizing cross-container or cross-slot content. There is no global `keep closest L0/L1 first` policy yet.
-12. The active redesign proposal for that limitation lives in [../../DetailedDocs/urgentRedesign.md](../../DetailedDocs/urgentRedesign.md).
+11. The urgent runtime now reprioritizes inside one container with `TreeL3` floor plus nearest-first promotion, but there is still no global cross-container arbiter.
+12. Multi-container prioritization stays unresolved follow-up work; the dense-forest one-container design authority remains [../../DetailedDocs/urgentRedesign.md](../../DetailedDocs/urgentRedesign.md).
 13. Closed `SubScene` runtime loading requires `SubSceneAuthoring` on the same GameObject as `VegetationRuntimeContainer`; the plain container alone is only the classic-scene lifecycle provider.
 
 ## Supported Devices

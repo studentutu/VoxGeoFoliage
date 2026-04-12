@@ -148,6 +148,19 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     l2Selection.Meshes,
                     2,
                     $"{prototype.name}_ShellNodeL2");
+                Mesh branchL1CanopyMesh = CreateMergedLeafFrontierMesh(
+                    hierarchyL0,
+                    l0Selection.Meshes,
+                    $"{prototype.name}_BranchL1Canopy");
+                Mesh branchL2CanopyMesh = CreateMergedLeafFrontierMesh(
+                    hierarchyL1,
+                    l1Selection.Meshes,
+                    $"{prototype.name}_BranchL2Canopy");
+                Mesh branchL3CanopyMesh = CreateMergedLeafFrontierMesh(
+                    hierarchyL2,
+                    l2Selection.Meshes,
+                    $"{prototype.name}_BranchL3Canopy");
+                temporaryFallbackLevels.Add(new[] { branchL1CanopyMesh, branchL2CanopyMesh, branchL3CanopyMesh });
 
                 SetPrivateField(
                     prototype,
@@ -165,6 +178,31 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                         $"{prototype.name}_ShellL2Wood",
                         shellL2WoodCandidate.Mesh,
                         prototype.GeneratedCanopyShellsRelativeFolder));
+                SetPrivateField(
+                    prototype,
+                    "branchL1CanopyMesh",
+                    GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                        prototype,
+                        $"{prototype.name}_BranchL1Canopy",
+                        branchL1CanopyMesh,
+                        prototype.GeneratedCanopyShellsRelativeFolder));
+                SetPrivateField(
+                    prototype,
+                    "branchL2CanopyMesh",
+                    GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                        prototype,
+                        $"{prototype.name}_BranchL2Canopy",
+                        branchL2CanopyMesh,
+                        prototype.GeneratedCanopyShellsRelativeFolder));
+                SetPrivateField(
+                    prototype,
+                    "branchL3CanopyMesh",
+                    GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                        prototype,
+                        $"{prototype.name}_BranchL3Canopy",
+                        branchL3CanopyMesh,
+                        prototype.GeneratedCanopyShellsRelativeFolder));
+                SetPrivateField(prototype, "branchL1WoodMesh", prototype.WoodMesh);
                 SetPrivateField(prototype, "shellNodesL0", persistedL0);
                 SetPrivateField(prototype, "shellNodesL1", persistedL1);
                 SetPrivateField(prototype, "shellNodesL2", persistedL2);
@@ -329,6 +367,35 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             return levelMeshes;
         }
 
+        private static Mesh CreateMergedLeafFrontierMesh(
+            MeshVoxelizerHierarchyNode[] hierarchyNodes,
+            Mesh[] levelMeshes,
+            string meshName)
+        {
+            int[] leafIndices = CollectLeafIndices(hierarchyNodes);
+            CombineInstance[] combineInstances = new CombineInstance[leafIndices.Length];
+            for (int i = 0; i < leafIndices.Length; i++)
+            {
+                combineInstances[i] = new CombineInstance
+                {
+                    mesh = levelMeshes[leafIndices[i]],
+                    transform = Matrix4x4.identity
+                };
+            }
+
+            Mesh combinedMesh = new Mesh
+            {
+                name = meshName,
+                indexFormat = ShouldUseUInt32(levelMeshes, leafIndices)
+                    ? UnityEngine.Rendering.IndexFormat.UInt32
+                    : UnityEngine.Rendering.IndexFormat.UInt16
+            };
+            combinedMesh.CombineMeshes(combineInstances, true, true, false);
+            combinedMesh.RecalculateBounds();
+            combinedMesh.RecalculateNormals();
+            return combinedMesh;
+        }
+
         private static int[] CollectLeafIndices(MeshVoxelizerHierarchyNode[] hierarchyNodes)
         {
             List<int> leafIndices = new List<int>();
@@ -352,6 +419,21 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             return triangleCount;
+        }
+
+        private static bool ShouldUseUInt32(Mesh[] meshes, int[] meshIndices)
+        {
+            int vertexCount = 0;
+            for (int i = 0; i < meshIndices.Length; i++)
+            {
+                vertexCount += meshes[meshIndices[i]].vertexCount;
+                if (vertexCount > ushort.MaxValue)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static BranchShellNode[] PersistShellNodes(

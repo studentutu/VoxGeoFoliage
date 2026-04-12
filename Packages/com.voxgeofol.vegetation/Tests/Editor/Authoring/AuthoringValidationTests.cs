@@ -189,6 +189,17 @@ public sealed class AuthoringValidationTests
     }
 
     [Test]
+    public void TreeBlueprint_NullTreeL3_FailsValidation()
+    {
+        TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
+        SetPrivateField(blueprint, "treeL3Mesh", null);
+
+        VegetationValidationResult result = blueprint.Validate();
+
+        AssertHasError(result, "treeL3Mesh is required.");
+    }
+
+    [Test]
     public void TreeBlueprint_EmptyBranches_FailsValidation()
     {
         TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
@@ -271,13 +282,27 @@ public sealed class AuthoringValidationTests
         BranchPrototypeSO prototype = CreateScriptableObject<BranchPrototypeSO>();
         Mesh woodMesh = CreateMesh("WoodMesh", 4, new Bounds(new Vector3(-0.5f, 0f, 0f), new Vector3(1f, 2f, 1f)));
         Mesh foliageMesh = CreateMesh("FoliageMesh", 6, new Bounds(new Vector3(1f, 0f, 0f), new Vector3(2f, 2f, 2f)));
+        Mesh branchL1CanopyMesh = CreateMesh("BranchL1Canopy", 5, new Bounds(new Vector3(1f, 0f, 0f), new Vector3(1.8f, 1.8f, 1.8f)));
+        Mesh branchL2CanopyMesh = CreateMesh("BranchL2Canopy", 4, new Bounds(new Vector3(1f, 0f, 0f), new Vector3(1.5f, 1.5f, 1.5f)));
+        Mesh branchL3CanopyMesh = CreateMesh("BranchL3Canopy", 3, new Bounds(new Vector3(1f, 0f, 0f), new Vector3(1.2f, 1.2f, 1.2f)));
+        Mesh branchL1WoodMesh = CreateMesh("BranchL1Wood", 3, new Bounds(new Vector3(-0.5f, 0f, 0f), new Vector3(0.75f, 1.5f, 0.75f)));
+        Mesh shellL1WoodMesh = CreateMesh("ShellL1Wood", 2, new Bounds(new Vector3(-0.5f, 0f, 0f), new Vector3(0.5f, 1f, 0.5f)));
+        Mesh shellL2WoodMesh = CreateMesh("ShellL2Wood", 1, new Bounds(new Vector3(-0.5f, 0f, 0f), new Vector3(0.25f, 0.5f, 0.25f)));
         Material woodMaterial = CreateOpaqueMaterial("WoodMaterial");
         Material foliageMaterial = CreateOpaqueMaterial("FoliageMaterial");
+        Material shellMaterial = CreateOpaqueMaterial("ShellMaterial");
 
         SetPrivateField(prototype, "woodMesh", woodMesh);
         SetPrivateField(prototype, "woodMaterial", woodMaterial);
         SetPrivateField(prototype, "foliageMesh", foliageMesh);
         SetPrivateField(prototype, "foliageMaterial", foliageMaterial);
+        SetPrivateField(prototype, "branchL1CanopyMesh", branchL1CanopyMesh);
+        SetPrivateField(prototype, "branchL2CanopyMesh", branchL2CanopyMesh);
+        SetPrivateField(prototype, "branchL3CanopyMesh", branchL3CanopyMesh);
+        SetPrivateField(prototype, "branchL1WoodMesh", branchL1WoodMesh);
+        SetPrivateField(prototype, "shellL1WoodMesh", shellL1WoodMesh);
+        SetPrivateField(prototype, "shellL2WoodMesh", shellL2WoodMesh);
+        SetPrivateField(prototype, "shellMaterial", shellMaterial);
         SetPrivateField(prototype, "leafColorTint", Color.green);
         SetPrivateField(prototype, "localBounds", new Bounds(new Vector3(0.5f, 0f, 0f), new Vector3(6f, 4f, 4f)));
         SetPrivateField(prototype, "triangleBudgetWood", 8);
@@ -293,9 +318,6 @@ public sealed class AuthoringValidationTests
                 new[] { CreateShellNodeForLevel(0, -1, 0, 7, new Bounds(Vector3.zero, Vector3.one), 0) },
                 new[] { CreateShellNodeForLevel(0, -1, 0, 5, new Bounds(Vector3.zero, Vector3.one), 1) },
                 new[] { CreateShellNodeForLevel(0, -1, 0, 3, new Bounds(Vector3.zero, Vector3.one), 2) });
-            SetPrivateField(prototype, "shellL1WoodMesh", CreateMesh("ShellL1Wood", 2, new Bounds(new Vector3(-0.5f, 0f, 0f), new Vector3(0.5f, 1f, 0.5f))));
-            SetPrivateField(prototype, "shellL2WoodMesh", CreateMesh("ShellL2Wood", 1, new Bounds(new Vector3(-0.5f, 0f, 0f), new Vector3(0.25f, 0.5f, 0.25f))));
-            SetPrivateField(prototype, "shellMaterial", CreateOpaqueMaterial("ShellMaterial"));
         }
 
         return prototype;
@@ -309,6 +331,7 @@ public sealed class AuthoringValidationTests
         LODProfileSO lodProfile = CreateValidLodProfile();
         Mesh trunkMesh = CreateMesh("TrunkMesh", 8, new Bounds(Vector3.zero, new Vector3(2f, 6f, 2f)));
         Mesh trunkL3Mesh = CreateMesh("TrunkL3Mesh", 4, new Bounds(Vector3.zero, new Vector3(1.25f, 5f, 1.25f)));
+        Mesh treeL3Mesh = CreateMesh("TreeL3Mesh", 6, new Bounds(new Vector3(1f, 1f, 0f), new Vector3(6f, 6f, 6f)));
         Material trunkMaterial = CreateOpaqueMaterial("TrunkMaterial");
 
         SetPrivateField(placement, "prototype", prototype);
@@ -318,6 +341,7 @@ public sealed class AuthoringValidationTests
 
         SetPrivateField(blueprint, "trunkMesh", trunkMesh);
         SetPrivateField(blueprint, "trunkL3Mesh", trunkL3Mesh);
+        SetPrivateField(blueprint, "treeL3Mesh", treeL3Mesh);
         SetPrivateField(blueprint, "trunkMaterial", trunkMaterial);
         SetPrivateField(blueprint, "branches", new[] { placement });
         SetPrivateField(blueprint, "lodProfile", lodProfile);

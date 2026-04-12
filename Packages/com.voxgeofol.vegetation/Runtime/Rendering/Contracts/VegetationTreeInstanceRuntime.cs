@@ -6,8 +6,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
     /// Runtime-side flattened scene tree instance payload.
-    /// Current shipped limitation: the tree points to one contiguous branch span via SceneBranchStartIndex + SceneBranchCount,
-    /// not to a full-tree hierarchy.
+    /// The urgent path keeps tree-first ownership here and derives promoted branch work from reusable blueprint placements on demand.
     /// </summary>
     public struct VegetationTreeInstanceRuntime
     {
@@ -17,12 +16,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public Bounds WorldBounds;
         public Bounds TrunkFullWorldBounds;
         public Bounds TrunkL3WorldBounds;
+        public Bounds TreeL3WorldBounds;
         public Bounds ImpostorWorldBounds;
         public Vector3 SphereCenterWorld;
         public float BoundingSphereRadius;
         public int BlueprintIndex;
-        public int SceneBranchStartIndex;
-        public int SceneBranchCount;
         public int CellIndex;
         internal VegetationIndirectInstanceData UploadInstanceData;
     }

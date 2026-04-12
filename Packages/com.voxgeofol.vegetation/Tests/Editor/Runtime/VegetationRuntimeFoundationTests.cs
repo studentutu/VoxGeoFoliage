@@ -38,7 +38,7 @@ public sealed class VegetationRuntimeFoundationTests
     }
 
     [Test]
-    public void RuntimeRegistryBuilder_AssignsCellsAndKeepsPrototypeShellDataShared()
+    public void RuntimeRegistryBuilder_AssignsCellsAndKeepsBlueprintPlacementsShared()
     {
         VegetationTreeAuthoring firstAuthoring = CreateAuthoring("Tree_A", new Vector3(0f, 0f, 10f));
         VegetationTreeAuthoring secondAuthoring = CreateAuthoring("Tree_B", new Vector3(120f, 0f, 10f));
@@ -54,11 +54,13 @@ public sealed class VegetationRuntimeFoundationTests
         Assert.AreEqual("Tree_B", registry.TreeInstances[1].Authoring.DebugName);
         Assert.AreEqual(2, registry.SpatialGrid.Cells.Count);
         Assert.AreNotEqual(registry.TreeInstances[0].CellIndex, registry.TreeInstances[1].CellIndex);
-        Assert.AreEqual(2, registry.SceneBranches.Count);
-        Assert.AreEqual(2, registry.ShellNodesL1.Count);
-        Assert.AreEqual(2, registry.ShellNodesL2.Count);
-        Assert.AreEqual(2, registry.ShellNodesL3.Count);
-        Assert.AreEqual(registry.SceneBranches[0].PrototypeIndex, registry.SceneBranches[1].PrototypeIndex);
+        Assert.AreEqual(1, registry.TreeBlueprints.Count);
+        Assert.AreEqual(1, registry.BlueprintBranchPlacements.Count);
+        Assert.AreEqual(1, registry.BranchPrototypes.Count);
+        Assert.AreEqual(0, registry.BlueprintBranchPlacements[0].PrototypeIndex);
+        Matrix4x4 expectedLocalToTree = Matrix4x4.TRS(Vector3.zero + new Vector3(0f, 1f, 0f), Quaternion.identity, Vector3.one);
+        AssertMatrixApproximatelyEqual(expectedLocalToTree, registry.BlueprintBranchPlacements[0].LocalToTree);
+        AssertMatrixApproximatelyEqual(expectedLocalToTree.inverse, registry.BlueprintBranchPlacements[0].TreeToLocal);
     }
 
     [Test]
@@ -85,19 +87,37 @@ public sealed class VegetationRuntimeFoundationTests
                    Mathf.Max(1, registry.DrawSlots.Count),
                    sizeof(uint)))
         {
-            indirectRenderer.BindGpuResidentFrame(instanceBuffer, argsBuffer, slotPackedStartsBuffer);
-
-            List<VegetationIndirectDrawBatchSnapshot> snapshots = new List<VegetationIndirectDrawBatchSnapshot>();
-            indirectRenderer.GetDebugSnapshots(snapshots);
-
-            Assert.AreEqual(registry.DrawSlots.Count, snapshots.Count);
-            for (int i = 0; i < snapshots.Count; i++)
+            uint[] emittedCounts = new uint[Mathf.Max(1, registry.DrawSlots.Count)];
+            emittedCounts[0] = 3u;
+            if (registry.DrawSlots.Count > 1)
             {
-                VegetationIndirectDrawBatchSnapshot snapshot = snapshots[i];
-                Assert.IsFalse(snapshot.HasExactInstanceCount);
-                Assert.AreEqual(0, snapshot.InstanceCount);
-                Bounds expectedBounds = registry.DrawSlotConservativeWorldBounds[snapshot.SlotIndex];
-                AssertBoundsEqual(snapshot.WorldBounds, expectedBounds);
+                emittedCounts[registry.DrawSlots.Count - 1] = 2u;
+            }
+
+            using (ComputeBuffer slotEmittedInstanceCountsBuffer = new ComputeBuffer(
+                       Mathf.Max(1, registry.DrawSlots.Count),
+                       sizeof(uint)))
+            {
+                slotEmittedInstanceCountsBuffer.SetData(emittedCounts);
+                indirectRenderer.BindGpuResidentFrame(
+                    instanceBuffer,
+                    argsBuffer,
+                    slotPackedStartsBuffer,
+                    slotEmittedInstanceCountsBuffer);
+
+                List<VegetationIndirectDrawBatchSnapshot> snapshots = new List<VegetationIndirectDrawBatchSnapshot>();
+                indirectRenderer.GetDebugSnapshots(snapshots);
+
+                int expectedActiveSlotCount = registry.DrawSlots.Count > 1 ? 2 : 1;
+                Assert.AreEqual(expectedActiveSlotCount, snapshots.Count);
+                for (int i = 0; i < snapshots.Count; i++)
+                {
+                    VegetationIndirectDrawBatchSnapshot snapshot = snapshots[i];
+                    Assert.IsTrue(snapshot.HasExactInstanceCount);
+                    Assert.AreEqual((int)emittedCounts[snapshot.SlotIndex], snapshot.InstanceCount);
+                    Bounds expectedBounds = registry.DrawSlotConservativeWorldBounds[snapshot.SlotIndex];
+                    AssertBoundsEqual(snapshot.WorldBounds, expectedBounds);
+                }
             }
         }
     }
@@ -159,6 +179,10 @@ public sealed class VegetationRuntimeFoundationTests
         Mesh shellL1Leaf = CreateCubeMesh($"{name}_ShellL1Leaf", new Vector3(0.45f, 0.45f, 0.45f));
         Mesh shellL2Root = CreateCubeMesh($"{name}_ShellL2Root", new Vector3(0.7f, 0.6f, 0.7f));
         Mesh shellL2Leaf = CreateCubeMesh($"{name}_ShellL2Leaf", new Vector3(0.35f, 0.35f, 0.35f));
+        Mesh branchL1CanopyMesh = CreateCubeMesh($"{name}_CanopyL1", new Vector3(1.4f, 1.1f, 1.4f));
+        Mesh branchL2CanopyMesh = CreateCubeMesh($"{name}_CanopyL2", new Vector3(1.0f, 0.8f, 1.0f));
+        Mesh branchL3CanopyMesh = CreateCubeMesh($"{name}_CanopyL3", new Vector3(0.75f, 0.6f, 0.75f));
+        Mesh branchL1WoodMesh = CreateCubeMesh($"{name}_WoodL1", new Vector3(0.28f, 0.65f, 0.28f));
         Mesh shellL1WoodMesh = CreateCubeMesh($"{name}_WoodL2", new Vector3(0.25f, 0.5f, 0.25f));
         Mesh shellL2WoodMesh = CreateCubeMesh($"{name}_WoodL3", new Vector3(0.2f, 0.4f, 0.2f));
         Material woodMaterial = CreateOpaqueMaterial($"{name}_WoodMat");
@@ -170,6 +194,10 @@ public sealed class VegetationRuntimeFoundationTests
         SetPrivateField(prototype, "foliageMesh", foliageMesh);
         SetPrivateField(prototype, "foliageMaterial", foliageMaterial);
         SetPrivateField(prototype, "shellMaterial", shellMaterial);
+        SetPrivateField(prototype, "branchL1CanopyMesh", branchL1CanopyMesh);
+        SetPrivateField(prototype, "branchL2CanopyMesh", branchL2CanopyMesh);
+        SetPrivateField(prototype, "branchL3CanopyMesh", branchL3CanopyMesh);
+        SetPrivateField(prototype, "branchL1WoodMesh", branchL1WoodMesh);
         SetPrivateField(prototype, "shellL1WoodMesh", shellL1WoodMesh);
         SetPrivateField(prototype, "shellL2WoodMesh", shellL2WoodMesh);
         SetPrivateField(prototype, "leafColorTint", Color.green);
@@ -182,6 +210,7 @@ public sealed class VegetationRuntimeFoundationTests
         blueprint.name = $"{name}_Blueprint";
         Mesh trunkMesh = CreateCubeMesh($"{name}_Trunk", new Vector3(0.5f, 2.2f, 0.5f));
         Mesh trunkL3Mesh = CreateCubeMesh($"{name}_TrunkL3", new Vector3(0.3f, 1.8f, 0.3f));
+        Mesh treeL3Mesh = CreateCubeMesh($"{name}_TreeL3", new Vector3(2.0f, 2.5f, 2.0f));
         Mesh impostorMesh = CreateCubeMesh($"{name}_Impostor", new Vector3(2.4f, 2.8f, 2.4f));
         Material trunkMaterial = CreateOpaqueMaterial($"{name}_TrunkMat");
         Material impostorMaterial = CreateOpaqueMaterial($"{name}_ImpostorMat");
@@ -201,6 +230,7 @@ public sealed class VegetationRuntimeFoundationTests
 
         SetPrivateField(blueprint, "trunkMesh", trunkMesh);
         SetPrivateField(blueprint, "trunkL3Mesh", trunkL3Mesh);
+        SetPrivateField(blueprint, "treeL3Mesh", treeL3Mesh);
         SetPrivateField(blueprint, "trunkMaterial", trunkMaterial);
         SetPrivateField(blueprint, "impostorMesh", impostorMesh);
         SetPrivateField(blueprint, "impostorMaterial", impostorMaterial);
@@ -384,6 +414,17 @@ public sealed class VegetationRuntimeFoundationTests
         Assert.That(actualBounds.size.x, Is.EqualTo(expectedBounds.size.x).Within(0.0001f));
         Assert.That(actualBounds.size.y, Is.EqualTo(expectedBounds.size.y).Within(0.0001f));
         Assert.That(actualBounds.size.z, Is.EqualTo(expectedBounds.size.z).Within(0.0001f));
+    }
+
+    private static void AssertMatrixApproximatelyEqual(Matrix4x4 expected, Matrix4x4 actual)
+    {
+        for (int row = 0; row < 4; row++)
+        {
+            for (int column = 0; column < 4; column++)
+            {
+                Assert.That(actual[row, column], Is.EqualTo(expected[row, column]).Within(0.0001f));
+            }
+        }
     }
 
     private static void SetPrivateField(object target, string fieldName, object? value)

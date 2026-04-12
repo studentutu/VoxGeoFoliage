@@ -13,6 +13,7 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
     {
         [SerializeField] private Mesh? trunkMesh;
         [SerializeField] private Mesh? trunkL3Mesh;
+        [SerializeField] private Mesh? treeL3Mesh;
         [SerializeField] private Material? trunkMaterial;
         [SerializeField] private BranchPlacement[] branches = Array.Empty<BranchPlacement>();
         [SerializeField] private string generatedImpostorMeshesRelativeFolder = string.Empty;
@@ -25,6 +26,8 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         public Mesh? TrunkMesh => trunkMesh;
 
         public Mesh? TrunkL3Mesh => trunkL3Mesh;
+
+        public Mesh? TreeL3Mesh => treeL3Mesh;
 
         public Material? TrunkMaterial => trunkMaterial;
 

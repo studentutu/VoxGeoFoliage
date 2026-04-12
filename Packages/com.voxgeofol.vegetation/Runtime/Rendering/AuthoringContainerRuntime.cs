@@ -270,7 +270,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 indirectRenderer!.BindGpuResidentFrame(
                     pipeline.ResidentInstanceBuffer,
                     pipeline.ResidentArgsBuffer,
-                    pipeline.ResidentSlotPackedStartsBuffer);
+                    pipeline.ResidentSlotPackedStartsBuffer,
+                    pipeline.ResidentSlotEmittedInstanceCountsBuffer);
                 LogPreparedFrameTelemetry(diagnosticsEnabled, pipeline);
                 return indirectRenderer.HasUploadedFrame;
             }
@@ -351,11 +352,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             builder.Append(" activeAuthorings=").Append(activeAuthorings);
             builder.Append(" trees=").Append(registry.TreeInstances.Count);
             builder.Append(" blueprints=").Append(registry.TreeBlueprints.Count);
-            builder.Append(" branches=").Append(registry.SceneBranches.Count);
+            builder.Append(" blueprintPlacements=").Append(registry.BlueprintBranchPlacements.Count);
             builder.Append(" branchPrototypes=").Append(registry.BranchPrototypes.Count);
-            builder.Append(" shellNodesL1=").Append(registry.ShellNodesL1.Count);
-            builder.Append(" shellNodesL2=").Append(registry.ShellNodesL2.Count);
-            builder.Append(" shellNodesL3=").Append(registry.ShellNodesL3.Count);
             builder.Append(" drawSlots=").Append(registry.DrawSlots.Count);
             builder.Append(" cells=").Append(registry.SpatialGrid.Cells.Count);
 
@@ -382,23 +380,16 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             builder.Append(" container=").Append(debugName);
             builder.Append(" provider=").Append(providerKind);
             builder.Append(" blueprints=").Append(pipeline.BlueprintCount);
-            builder.Append(" sceneBranches=").Append(pipeline.SceneBranchRecordCount);
-            builder.Append(" branchBufferElements=").Append(pipeline.AllocatedBranchBufferElementCount);
-            builder.Append(" branchBufferBytes=").Append(pipeline.BranchBufferBytes);
-            builder.Append(" branchDecisionBufferElements=").Append(pipeline.AllocatedBranchDecisionBufferElementCount);
-            builder.Append(" branchDecisionBufferBytes=").Append(pipeline.BranchDecisionBufferBytes);
+            builder.Append(" blueprintPlacements=").Append(pipeline.BlueprintPlacementCount);
+            builder.Append(" blueprintPlacementBufferElements=").Append(pipeline.AllocatedBlueprintPlacementBufferElementCount);
+            builder.Append(" blueprintPlacementBufferBytes=").Append(pipeline.BlueprintPlacementBufferBytes);
             builder.Append(" branchPrototypes=").Append(pipeline.BranchPrototypeCount);
             builder.Append(" prototypeBufferElements=").Append(pipeline.AllocatedPrototypeBufferElementCount);
             builder.Append(" prototypeBufferBytes=").Append(pipeline.PrototypeBufferBytes);
-            builder.Append(" shellNodesL1=").Append(pipeline.ShellNodeCountL1);
-            builder.Append(" shellNodesL1BufferElements=").Append(pipeline.AllocatedShellNodeBufferElementCountL1);
-            builder.Append(" shellNodesL1BufferBytes=").Append(pipeline.ShellNodesL1BufferBytes);
-            builder.Append(" shellNodesL2=").Append(pipeline.ShellNodeCountL2);
-            builder.Append(" shellNodesL2BufferElements=").Append(pipeline.AllocatedShellNodeBufferElementCountL2);
-            builder.Append(" shellNodesL2BufferBytes=").Append(pipeline.ShellNodesL2BufferBytes);
-            builder.Append(" shellNodesL3=").Append(pipeline.ShellNodeCountL3);
-            builder.Append(" shellNodesL3BufferElements=").Append(pipeline.AllocatedShellNodeBufferElementCountL3);
-            builder.Append(" shellNodesL3BufferBytes=").Append(pipeline.ShellNodesL3BufferBytes);
+            builder.Append(" treeVisibilityBufferElements=").Append(pipeline.AllocatedTreeVisibilityBufferElementCount);
+            builder.Append(" treeVisibilityBufferBytes=").Append(pipeline.TreeVisibilityBufferBytes);
+            builder.Append(" expandedBranchWorkItemCapacity=").Append(pipeline.ExpandedBranchWorkItemCapacity);
+            builder.Append(" expandedBranchWorkItemBufferBytes=").Append(pipeline.ExpandedBranchWorkItemBufferBytes);
             builder.Append(" totalBranchTelemetryBufferBytes=").Append(pipeline.TotalBranchTelemetryBufferBytes);
             builder.Append(" visibleInstanceCapacity=").Append(maxVisibleInstanceCapacity);
             builder.Append(" visibleInstanceStrideBytes=").Append(pipeline.VisibleInstanceStrideBytes);
@@ -414,17 +405,26 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 return;
             }
 
-            pipeline.ReadbackPreparedFrameTelemetry(out int nonZeroEmittedSlotCount, out long emittedVisibleInstanceCount);
-            long emittedVisibleInstanceBytes = checked(emittedVisibleInstanceCount * pipeline.VisibleInstanceStrideBytes);
+            VegetationGpuDecisionPipeline.PreparedFrameTelemetry telemetry = pipeline.ReadbackPreparedFrameTelemetry();
+            long emittedVisibleInstanceBytes = checked(telemetry.EmittedVisibleInstanceCount * pipeline.VisibleInstanceStrideBytes);
 
-            StringBuilder builder = new StringBuilder(256);
+            StringBuilder builder = new StringBuilder(384);
             builder.Append("AuthoringContainerRuntime preparedFrameTelemetry");
             builder.Append(" container=").Append(debugName);
             builder.Append(" provider=").Append(providerKind);
             builder.Append(" blueprints=").Append(pipeline.BlueprintCount);
             builder.Append(" registeredDrawSlots=").Append(registry.DrawSlots.Count);
-            builder.Append(" nonZeroEmittedSlots=").Append(nonZeroEmittedSlotCount);
-            builder.Append(" emittedVisibleInstances=").Append(emittedVisibleInstanceCount);
+            builder.Append(" visibleTrees=").Append(telemetry.VisibleTrees);
+            builder.Append(" acceptedTreeL3=").Append(telemetry.AcceptedTreeL3);
+            builder.Append(" promotedL2=").Append(telemetry.PromotedL2);
+            builder.Append(" promotedL1=").Append(telemetry.PromotedL1);
+            builder.Append(" promotedL0=").Append(telemetry.PromotedL0);
+            builder.Append(" rejectedPromotions=").Append(telemetry.RejectedPromotions);
+            builder.Append(" expandedTrees=").Append(telemetry.ExpandedTrees);
+            builder.Append(" expandedBranchWorkItems=").Append(telemetry.ExpandedBranchWorkItems);
+            builder.Append(" acceptedTierCostUsage=").Append(telemetry.AcceptedTierCostUsage);
+            builder.Append(" nonZeroEmittedSlots=").Append(telemetry.NonZeroEmittedSlots);
+            builder.Append(" emittedVisibleInstances=").Append(telemetry.EmittedVisibleInstanceCount);
             builder.Append(" emittedVisibleInstanceBytes=").Append(emittedVisibleInstanceBytes);
             builder.Append(" visibleInstanceCapacity=").Append(maxVisibleInstanceCapacity);
             builder.Append(" visibleInstanceCapacityBytes=").Append(pipeline.VisibleInstanceCapacityBytes);

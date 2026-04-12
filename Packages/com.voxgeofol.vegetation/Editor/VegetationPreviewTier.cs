@@ -11,9 +11,10 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         L1 = 1,
         L2 = 2,
         L3 = 3,
-        Impostor = 4,
-        ShellL1Only = 5,
-        ShellL2Only = 6,
-        ShellL3Only = 7
+        TreeL3 = 4,
+        Impostor = 5,
+        ShellL1Only = 6,
+        ShellL2Only = 7,
+        ShellL3Only = 8
     }
 }

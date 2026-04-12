@@ -50,27 +50,30 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     break;
                 case VegetationPreviewTier.L1:
                     CreateTrunkPreview(previewRoot.transform, blueprint);
-                    CreateShellBranchPreview(previewRoot.transform, placements, 0, includeWood: true);
+                    CreateSplitBranchPreview(previewRoot.transform, placements, VegetationPreviewTier.L1);
                     break;
                 case VegetationPreviewTier.L2:
                     CreateTrunkL3Preview(previewRoot.transform, blueprint);
-                    CreateShellBranchPreview(previewRoot.transform, placements, 1, includeWood: true);
+                    CreateSplitBranchPreview(previewRoot.transform, placements, VegetationPreviewTier.L2);
                     break;
                 case VegetationPreviewTier.L3:
                     CreateTrunkL3Preview(previewRoot.transform, blueprint);
-                    CreateShellBranchPreview(previewRoot.transform, placements, 2, includeWood: true);
+                    CreateSplitBranchPreview(previewRoot.transform, placements, VegetationPreviewTier.L3);
+                    break;
+                case VegetationPreviewTier.TreeL3:
+                    CreateTreeL3Preview(previewRoot.transform, blueprint);
                     break;
                 case VegetationPreviewTier.Impostor:
                     CreateImpostorPreview(previewRoot.transform, blueprint);
                     break;
                 case VegetationPreviewTier.ShellL1Only:
-                    CreateShellBranchPreview(previewRoot.transform, placements, 0, includeWood: false);
+                    CreateShellOnlyPreview(previewRoot.transform, placements, 0);
                     break;
                 case VegetationPreviewTier.ShellL2Only:
-                    CreateShellBranchPreview(previewRoot.transform, placements, 1, includeWood: false);
+                    CreateShellOnlyPreview(previewRoot.transform, placements, 1);
                     break;
                 case VegetationPreviewTier.ShellL3Only:
-                    CreateShellBranchPreview(previewRoot.transform, placements, 2, includeWood: false);
+                    CreateShellOnlyPreview(previewRoot.transform, placements, 2);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(previewTier), previewTier, "Unsupported vegetation preview tier.");
@@ -176,11 +179,32 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
         }
 
-        private static void CreateShellBranchPreview(
+        private static void CreateSplitBranchPreview(
             Transform parent,
             BranchPlacement[] placements,
-            int shellLevel,
-            bool includeWood)
+            VegetationPreviewTier previewTier)
+        {
+            for (int i = 0; i < placements.Length; i++)
+            {
+                BranchPlacement placement = placements[i] ?? throw new InvalidOperationException($"branches[{i}] is missing.");
+                BranchPrototypeSO prototype = placement.Prototype ??
+                                              throw new InvalidOperationException($"branches[{i}] is missing prototype.");
+                Material woodMaterial = prototype.WoodMaterial ??
+                                        throw new InvalidOperationException($"{prototype.name} is missing woodMaterial.");
+                Material shellMaterial = prototype.ShellMaterial ??
+                                         throw new InvalidOperationException($"{prototype.name} is missing shellMaterial.");
+
+                GameObject branchObject = CreatePreviewGameObject($"{prototype.name}_{previewTier}_{i:D2}", parent);
+                ApplyPlacement(branchObject.transform, placement);
+                CreateMeshChild(branchObject.transform, "Wood", GetRequiredSplitWoodMesh(prototype, previewTier), woodMaterial);
+                CreateMeshChild(branchObject.transform, "Canopy", GetRequiredSplitCanopyMesh(prototype, previewTier), shellMaterial);
+            }
+        }
+
+        private static void CreateShellOnlyPreview(
+            Transform parent,
+            BranchPlacement[] placements,
+            int shellLevel)
         {
             for (int i = 0; i < placements.Length; i++)
             {
@@ -192,16 +216,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
 
                 GameObject branchObject = CreatePreviewGameObject($"{prototype.name}_ShellL{shellLevel}_{i:D2}", parent);
                 ApplyPlacement(branchObject.transform, placement);
-                if (includeWood)
-                {
-                    Material woodMaterial = prototype.WoodMaterial ??
-                                            throw new InvalidOperationException($"{prototype.name} is missing woodMaterial.");
-                    CreateMeshChild(
-                        branchObject.transform,
-                        $"WoodL{shellLevel}",
-                        GetRequiredWoodMesh(prototype, shellLevel),
-                        woodMaterial);
-                }
 
                 List<BranchShellNode> leafNodes = GetRequiredLeafNodes(prototype, shellLevel);
                 for (int leafIndex = 0; leafIndex < leafNodes.Count; leafIndex++)
@@ -241,6 +255,14 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             CreateMeshChild(parent, "Impostor", impostorMesh, impostorMaterial);
         }
 
+        private static void CreateTreeL3Preview(Transform parent, TreeBlueprintSO blueprint)
+        {
+            Mesh treeL3Mesh = blueprint.TreeL3Mesh ?? throw new InvalidOperationException($"{blueprint.name} is missing treeL3Mesh.");
+            Material treeL3Material = blueprint.ImpostorMaterial ??
+                                      throw new InvalidOperationException($"{blueprint.name} is missing impostorMaterial.");
+            CreateMeshChild(parent, "TreeL3", treeL3Mesh, treeL3Material);
+        }
+
         private static List<BranchShellNode> GetRequiredLeafNodes(BranchPrototypeSO prototype, int shellLevel)
         {
             List<BranchShellNode> leafNodes = BranchShellNodeUtility.CollectLeafNodes(
@@ -253,14 +275,25 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             return leafNodes;
         }
 
-        private static Mesh GetRequiredWoodMesh(BranchPrototypeSO prototype, int shellLevel)
+        private static Mesh GetRequiredSplitCanopyMesh(BranchPrototypeSO prototype, VegetationPreviewTier previewTier)
         {
-            return shellLevel switch
+            return previewTier switch
             {
-                0 => prototype.WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing woodMesh."),
-                1 => prototype.ShellL1WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing shellL1WoodMesh."),
-                2 => prototype.ShellL2WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing shellL2WoodMesh."),
-                _ => throw new ArgumentOutOfRangeException(nameof(shellLevel), shellLevel, "Shell level must be 0, 1, or 2.")
+                VegetationPreviewTier.L1 => prototype.BranchL1CanopyMesh ?? throw new InvalidOperationException($"{prototype.name} is missing branchL1CanopyMesh."),
+                VegetationPreviewTier.L2 => prototype.BranchL2CanopyMesh ?? throw new InvalidOperationException($"{prototype.name} is missing branchL2CanopyMesh."),
+                VegetationPreviewTier.L3 => prototype.BranchL3CanopyMesh ?? throw new InvalidOperationException($"{prototype.name} is missing branchL3CanopyMesh."),
+                _ => throw new ArgumentOutOfRangeException(nameof(previewTier), previewTier, "Preview tier must be an expanded branch split tier.")
+            };
+        }
+
+        private static Mesh GetRequiredSplitWoodMesh(BranchPrototypeSO prototype, VegetationPreviewTier previewTier)
+        {
+            return previewTier switch
+            {
+                VegetationPreviewTier.L1 => prototype.BranchL1WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing branchL1WoodMesh."),
+                VegetationPreviewTier.L2 => prototype.BranchL2WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing branchL2WoodMesh."),
+                VegetationPreviewTier.L3 => prototype.BranchL3WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing branchL3WoodMesh."),
+                _ => throw new ArgumentOutOfRangeException(nameof(previewTier), previewTier, "Preview tier must be an expanded branch split tier.")
             };
         }
 

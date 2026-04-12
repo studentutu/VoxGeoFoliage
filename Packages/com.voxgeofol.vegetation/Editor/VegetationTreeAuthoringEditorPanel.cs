@@ -100,6 +100,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     DrawTriangleLabel("L1", summary.L1Triangles);
                     DrawTriangleLabel("L2", summary.L2Triangles);
                     DrawTriangleLabel("L3", summary.L3Triangles);
+                    DrawTriangleLabel("TreeL3", summary.TreeL3Triangles);
                     DrawTriangleLabel("Impostor", summary.ImpostorTriangles);
                     DrawTriangleLabel("ShellL1 Only", summary.ShellL1OnlyTriangles);
                     DrawTriangleLabel("ShellL2 Only", summary.ShellL2OnlyTriangles);
@@ -140,6 +141,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             EditorGUILayout.LabelField("Trunk L3 Mesh", authoring.Blueprint.TrunkL3Mesh == null ? "Missing" : "Assigned");
+            EditorGUILayout.LabelField("Tree L3 Mesh", authoring.Blueprint.TreeL3Mesh == null ? "Missing" : "Assigned");
             EditorGUILayout.LabelField("Manual Rebake", "Required on package sample and repo-local mirror assets");
 
             if (!string.IsNullOrEmpty(validationExceptionMessage))
@@ -268,6 +270,11 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                         TryRun("Regenerate Trunk L3", () => VegetationTreeAuthoringEditorUtility.BakeTrunkL3(authoring));
                     }
 
+                    if (GUILayout.Button("Regenerate Tree L3"))
+                    {
+                        TryRun("Regenerate Tree L3", () => VegetationTreeAuthoringEditorUtility.BakeTreeL3(authoring));
+                    }
+
                     if (GUILayout.Button("Regenerate Impostor"))
                     {
                         TryRun("Regenerate Impostor", () => VegetationTreeAuthoringEditorUtility.BakeImpostor(authoring));
@@ -339,8 +346,10 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             AddMatchingIssues(blockers, validationResult, "trunkL3Mesh");
-            AddMatchingIssues(blockers, validationResult, "octant-bit order");
-            AddMatchingIssues(blockers, validationResult, "octant for BFS validation");
+            AddMatchingIssues(blockers, validationResult, "treeL3Mesh");
+            AddMatchingIssues(blockers, validationResult, "branchL1CanopyMesh");
+            AddMatchingIssues(blockers, validationResult, "branchL2CanopyMesh");
+            AddMatchingIssues(blockers, validationResult, "branchL3CanopyMesh");
             return blockers;
         }
 

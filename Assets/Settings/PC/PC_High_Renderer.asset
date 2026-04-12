@@ -1,47 +1,5 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!114 &-3751262535411419207
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6b3d386ba5cd94485973aee1479b272e, type: 3}
-  m_Name: FullscreenMask
-  m_EditorClassIdentifier: 
-  m_Active: 0
-  settings:
-    passTag: FullscreenMask
-    Event: 450
-    filterSettings:
-      RenderQueueType: 0
-      LayerMask:
-        serializedVersion: 2
-        m_Bits: 1536
-      PassNames: []
-    overrideMaterial: {fileID: 2100000, guid: 725a070d0d3a84543b62d9387002f061, type: 2}
-    overrideMaterialPassIndex: 0
-    overrideShader: {fileID: 0}
-    overrideShaderPassIndex: 0
-    overrideMode: 1
-    overrideDepthState: 0
-    depthCompareFunction: 4
-    enableWrite: 1
-    stencilSettings:
-      overrideStencilState: 1
-      stencilReference: 2
-      stencilCompareFunction: 8
-      passOperation: 2
-      failOperation: 0
-      zFailOperation: 0
-    cameraSettings:
-      overrideCamera: 0
-      restoreCamera: 1
-      offset: {x: 0, y: 0, z: 0, w: 0}
-      cameraFieldOfView: 60
 --- !u!114 &-1725154509255725689
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -59,7 +17,7 @@ MonoBehaviour:
     DepthPassEvent: 250
     ColorPassEvent: 300
     RenderGameCameras: 1
-    RenderSceneViewCameras: 1
+    RenderSceneViewCameras: 0
     EnableDiagnostics: 0
     ClassifyShader: {fileID: 7200000, guid: 32ba8aa36e08ac740b444e38723d3153, type: 3}
 --- !u!114 &11400000
@@ -89,9 +47,8 @@ MonoBehaviour:
   m_RendererFeatures:
   - {fileID: 7833122117494664109}
   - {fileID: 3573653513797426673}
-  - {fileID: -3751262535411419207}
   - {fileID: -1725154509255725689}
-  m_RendererFeatureMap: ad6b866f10d7b46cf1dd38d0ef2a9831b937925d99d6f0cb872d26351d050fe8
+  m_RendererFeatureMap: ad6b866f10d7b46cf1dd38d0ef2a9831872d26351d050fe8
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 11400000, guid: 60e1133243b97e347b653163a8c01b64, type: 2}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}

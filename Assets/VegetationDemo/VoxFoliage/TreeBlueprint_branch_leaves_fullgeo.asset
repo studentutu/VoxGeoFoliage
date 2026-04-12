@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Vegetation::VoxGeoFol.Features.Vegetation.Authoring.TreeBlueprintSO
   trunkMesh: {fileID: -2432090755550338912, guid: def0f6c754abc974786d4b5963fbacdc, type: 3}
   trunkL3Mesh: {fileID: 4300000, guid: f84cd49b1f99a65478ec66fc71ec281c, type: 2}
+  treeL3Mesh: {fileID: 4300000, guid: 573c4620eadf20e43bc27e08ac23a293, type: 2}
   trunkMaterial: {fileID: 2100000, guid: 72a7df46ac0cce54a91695e1898ab6bb, type: 2}
   branches:
   - prototype: {fileID: 11400000, guid: a36e7a0131fe24144b1e8d32e4a1f219, type: 2}
@@ -224,7 +225,7 @@ MonoBehaviour:
     localPosition: {x: 0.086, y: -0.05000011, z: 3.1220007}
     localRotation: {x: -0.2481608, y: 0.44452524, z: 0.6540133, w: 0.5595356}
     scale: 0.5
-  generatedImpostorMeshesRelativeFolder: Tree/VoxFoliage/GeneratedMeshes
+  generatedImpostorMeshesRelativeFolder: VegetationDemo/VoxFoliage/GeneratedMeshes
   impostorMesh: {fileID: 4300000, guid: c2cc52941ec3715449e0390b43d6abf4, type: 2}
   impostorMaterial: {fileID: 2100000, guid: 13afca846240643419bc7f56951c14ca, type: 2}
   lodProfile: {fileID: 11400000, guid: 4107cf5d573903340aab43e949eebccd, type: 2}

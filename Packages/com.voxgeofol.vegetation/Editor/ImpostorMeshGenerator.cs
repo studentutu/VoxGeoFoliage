@@ -15,6 +15,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
     public static class ImpostorMeshGenerator
     {
         private const int ImpostorTriangleBudget = 200;
+        private const int MinimumTreeL3TriangleBudget = 512;
         private const int ImpostorResolutionFallbackStep = 2;
 
         /// <summary>
@@ -67,6 +68,64 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             EditorUtility.SetDirty(blueprint);
 
             GeneratedMeshSimplificationUtility.DestroyTemporaryMesh(impostorCandidate.Mesh);
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Called from editor tooling to populate the mandatory whole-tree TreeL3 floor mesh on one tree blueprint.
+        /// </summary>
+        public static void BakeTreeL3Mesh(TreeBlueprintSO blueprint, ImpostorBakeSettings? settings = null)
+        {
+            // Range: requires a readable trunk mesh plus readable source branch meshes on every placed branch prototype. Condition: merged source geometry stays in tree local space and simplifies to a floor mesh materially heavier than the far impostor while remaining below the source tree cost. Output: treeL3Mesh is assigned on the blueprint asset.
+            if (blueprint == null)
+            {
+                throw new ArgumentNullException(nameof(blueprint));
+            }
+
+            Mesh combinedTreeMesh = CreateCombinedTreeSpaceMesh(blueprint);
+            ImpostorBakeSettings activeSettings = settings ?? blueprint.ImposterSettings;
+            int sourceTriangleCount = GeneratedMeshSimplificationUtility.GetTriangleCount(combinedTreeMesh);
+            int treeL3TriangleBudget = Mathf.Min(
+                Mathf.Max(ImpostorTriangleBudget + 1, Mathf.Max(MinimumTreeL3TriangleBudget, sourceTriangleCount / 6)),
+                Mathf.Max(1, sourceTriangleCount - 1));
+
+            GeneratedMeshSimplificationUtility.GeneratedMeshCandidate treeL3Candidate =
+                GeneratedMeshSimplificationUtility.SelectBestVoxelMeshCandidate(
+                    combinedTreeMesh,
+                    Mathf.Max(2, activeSettings.VoxelResolution),
+                    2,
+                    ImpostorResolutionFallbackStep,
+                    treeL3TriangleBudget,
+                    activeSettings.SkipReduction,
+                    activeSettings.SkipSimplifyFallback,
+                    $"{blueprint.name}_TreeL3Surface",
+                    blueprint.TreeBounds);
+            if (treeL3Candidate.Mesh.triangles.Length == 0)
+            {
+                GeneratedMeshSimplificationUtility.DestroyTemporaryMesh(treeL3Candidate.Mesh);
+                UnityEngine.Object.DestroyImmediate(combinedTreeMesh);
+                throw new InvalidOperationException($"{blueprint.name} did not produce a valid treeL3 surface mesh.");
+            }
+
+            if (treeL3Candidate.TriangleCount >= sourceTriangleCount)
+            {
+                string fallbackState = activeSettings.SkipSimplifyFallback ? "skipped" : "exhausted";
+                Debug.LogError(
+                    $"{blueprint.name} treeL3Mesh triangle count {treeL3Candidate.TriangleCount} must stay below source tree triangle count {sourceTriangleCount}. Final source: {treeL3Candidate.SourceDescription}. Simplify fallback {fallbackState}.");
+            }
+
+            UnityEngine.Object.DestroyImmediate(combinedTreeMesh);
+
+            SerializedObject serializedBlueprint = new SerializedObject(blueprint);
+            serializedBlueprint.FindProperty("treeL3Mesh").objectReferenceValue =
+                GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                    blueprint,
+                    $"{blueprint.name}_TreeL3",
+                    treeL3Candidate.Mesh,
+                    blueprint.GeneratedImpostorMeshesRelativeFolder);
+            serializedBlueprint.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(blueprint);
+
+            GeneratedMeshSimplificationUtility.DestroyTemporaryMesh(treeL3Candidate.Mesh);
         }
 
         private static Mesh CreateCombinedTreeSpaceMesh(TreeBlueprintSO blueprint)

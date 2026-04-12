@@ -1,15 +1,15 @@
+#pragma kernel ResetFrameState
 #pragma kernel ClassifyCells
 #pragma kernel ClassifyTrees
-#pragma kernel ClassifyBranches
+#pragma kernel AcceptTreeTiers
+#pragma kernel GenerateExpandedBranchWorkItems
 #pragma kernel ResetSlotCounts
 #pragma kernel CountTrees
-#pragma kernel CountBranches
+#pragma kernel CountExpandedBranches
 #pragma kernel BuildSlotStarts
 #pragma kernel EmitTrees
-#pragma kernel EmitBranches
+#pragma kernel EmitExpandedBranches
 #pragma kernel FinalizeIndirectArgs
-
-#include "UnityCG.cginc"
 
 struct BoundsGpu
 {
@@ -46,69 +46,67 @@ struct LodProfileGpu
     float absoluteCullDistance;
 };
 
+struct BlueprintGpu
+{
+    int lodProfileIndex;
+    int branchPlacementStartIndex;
+    int branchPlacementCount;
+    int trunkFullDrawSlot;
+    int trunkL3DrawSlot;
+    int treeL3DrawSlot;
+    int impostorDrawSlot;
+    int expandedTierCostL2;
+    int expandedTierCostL1;
+    int expandedTierCostL0;
+};
+
+struct PlacementGpu
+{
+    float4x4 localToTree;
+    float4x4 treeToLocal;
+    int prototypeIndex;
+    float3 localBoundsCenter;
+    float boundingSphereRadius;
+    float3 localBoundsExtents;
+    float padding0;
+};
+
+struct PrototypeGpu
+{
+    int woodDrawSlotL0;
+    int foliageDrawSlotL0;
+    int woodDrawSlotL1;
+    int canopyDrawSlotL1;
+    int woodDrawSlotL2;
+    int canopyDrawSlotL2;
+    int woodDrawSlotL3;
+    int canopyDrawSlotL3;
+    uint packedLeafTint;
+    float3 localBoundsCenter;
+    float3 localBoundsExtents;
+    float padding0;
+};
+
 struct TreeGpu
 {
     float3 sphereCenterWorld;
     float boundingSphereRadius;
     int cellIndex;
-    int lodProfileIndex;
-    int sceneBranchStartIndex;
-    int sceneBranchCount;
+    int blueprintIndex;
     BoundsGpu worldBounds;
-    BoundsGpu trunkFullWorldBounds;
-    BoundsGpu trunkL3WorldBounds;
-    BoundsGpu impostorWorldBounds;
-    int trunkFullDrawSlot;
-    int trunkL3DrawSlot;
-    int impostorDrawSlot;
-    int padding0;
     VegetationInstanceData uploadInstanceData;
 };
 
-struct BranchGpu
+struct TreeVisibilityGpu
 {
-    int treeIndex;
-    int branchPlacementIndex;
-    int prototypeIndex;
-    int woodDrawSlotL0;
-    float3 sphereCenterWorld;
-    float boundingSphereRadius;
-    float4x4 localToWorld;
-    int woodDrawSlotL1;
-    int woodDrawSlotL2;
-    int woodDrawSlotL3;
-    int foliageDrawSlotL0;
-    int padding0;
-    int padding1;
-    int padding2;
-    VegetationInstanceData woodUploadInstanceData;
-    VegetationInstanceData foliageUploadInstanceData;
-};
-
-struct PrototypeGpu
-{
-    int shellNodeStartIndexL1;
-    int shellNodeCountL1;
-    int shellNodeStartIndexL2;
-    int shellNodeCountL2;
-    int shellNodeStartIndexL3;
-    int shellNodeCountL3;
-    float3 localBoundsCenter;
-    float padding0;
-    float3 localBoundsExtents;
-    float padding1;
-};
-
-struct ShellNodeGpu
-{
-    float3 localCenter;
-    float padding0;
-    float3 localExtents;
-    int firstChildIndex;
-    uint childMask;
-    int shellDrawSlot;
-    int padding1;
-    int padding2;
+    float treeDistance;
+    int priorityRing;
+    int desiredTier;
+    int acceptedTier;
+    int acceptedTierCost;
+    uint visible;
+    uint padding0;
+    uint padding1;
 };
 
 struct BranchDecisionGpu
@@ -129,17 +127,17 @@ struct SlotGpu
 
 StructuredBuffer<CellGpu> _Cells;
 StructuredBuffer<LodProfileGpu> _LodProfiles;
-StructuredBuffer<TreeGpu> _Trees;
-StructuredBuffer<BranchGpu> _Branches;
+StructuredBuffer<BlueprintGpu> _Blueprints;
+StructuredBuffer<PlacementGpu> _Placements;
 StructuredBuffer<PrototypeGpu> _Prototypes;
-StructuredBuffer<ShellNodeGpu> _ShellNodesL1;
-StructuredBuffer<ShellNodeGpu> _ShellNodesL2;
-StructuredBuffer<ShellNodeGpu> _ShellNodesL3;
+StructuredBuffer<TreeGpu> _Trees;
 StructuredBuffer<SlotGpu> _Slots;
 
 RWStructuredBuffer<uint> _CellVisibility;
-RWStructuredBuffer<int> _TreeModes;
-RWStructuredBuffer<BranchDecisionGpu> _BranchDecisions;
+RWStructuredBuffer<TreeVisibilityGpu> _TreeVisibility;
+RWStructuredBuffer<BranchDecisionGpu> _ExpandedBranchWorkItems;
+RWStructuredBuffer<uint> _ExpandedBranchWorkItemCount;
+RWStructuredBuffer<uint> _FrameStats;
 RWStructuredBuffer<uint> _SlotRequestedInstanceCounts;
 RWStructuredBuffer<uint> _SlotEmittedInstanceCounts;
 RWStructuredBuffer<uint> _SlotPackedStarts;
@@ -150,18 +148,29 @@ float4 _CameraWorldPosition;
 float4 _FrustumPlanes[6];
 int _CellCount;
 int _TreeCount;
-int _BranchCount;
+int _PlacementCount;
 int _DrawSlotCount;
 int _VisibleInstanceCapacity;
+int _ExpandedBranchWorkItemCapacity;
 
-static const int TreeModeCulled = 0;
-static const int TreeModeExpanded = 1;
-static const int TreeModeImpostor = 2;
-static const int BranchTierInactive = -1;
-static const int BranchTierL0 = 0;
-static const int BranchTierL1 = 1;
-static const int BranchTierL2 = 2;
-static const int BranchTierL3 = 3;
+static const int FrameStatVisibleTrees = 0;
+static const int FrameStatAcceptedTreeL3 = 1;
+static const int FrameStatPromotedL2 = 2;
+static const int FrameStatPromotedL1 = 3;
+static const int FrameStatPromotedL0 = 4;
+static const int FrameStatRejectedPromotions = 5;
+static const int FrameStatExpandedTrees = 6;
+static const int FrameStatExpandedBranchWorkItems = 7;
+static const int FrameStatAcceptedTierCostUsage = 8;
+
+static const int TierCulled = -1;
+static const int TierL0 = 0;
+static const int TierL1 = 1;
+static const int TierL2 = 2;
+static const int TierTreeL3 = 3;
+static const int TierImpostor = 4;
+
+static const float DistanceTieEpsilon = 0.0001f;
 
 bool TestFrustumAabb(float3 center, float3 extents)
 {
@@ -194,7 +203,6 @@ float ComputeSphereSurfaceDistance(float3 centerWorld, float radiusWorld)
 void ComputeWorldBounds(float4x4 localToWorld, float3 localCenter, float3 localExtents, out float3 worldCenter, out float3 worldExtents)
 {
     worldCenter = mul(localToWorld, float4(localCenter, 1.0f)).xyz;
-
     float3 worldAxisX = mul(localToWorld, float4(localExtents.x, 0.0f, 0.0f, 0.0f)).xyz;
     float3 worldAxisY = mul(localToWorld, float4(0.0f, localExtents.y, 0.0f, 0.0f)).xyz;
     float3 worldAxisZ = mul(localToWorld, float4(0.0f, 0.0f, localExtents.z, 0.0f)).xyz;
@@ -206,82 +214,101 @@ uint GetIndirectArgsByteOffset(uint slotIndex)
     return slotIndex * 20u;
 }
 
-int ResolveWoodDrawSlot(BranchGpu branch, int runtimeTier)
+int ResolveExpandedWoodDrawSlot(PrototypeGpu prototype, int acceptedTier)
 {
-    if (runtimeTier == BranchTierL0)
+    if (acceptedTier == TierL0)
     {
-        return branch.woodDrawSlotL0;
+        return prototype.woodDrawSlotL0;
     }
 
-    if (runtimeTier == BranchTierL1)
+    if (acceptedTier == TierL1)
     {
-        return branch.woodDrawSlotL1;
+        return prototype.woodDrawSlotL1;
     }
 
-    if (runtimeTier == BranchTierL2)
+    if (acceptedTier == TierL2)
     {
-        return branch.woodDrawSlotL2;
+        return prototype.woodDrawSlotL2;
     }
 
-    return branch.woodDrawSlotL3;
+    return prototype.woodDrawSlotL3;
 }
 
-int ResolveShellNodeStart(PrototypeGpu prototype, int runtimeTier)
+int ResolveExpandedCanopyDrawSlot(PrototypeGpu prototype, int acceptedTier)
 {
-    if (runtimeTier == BranchTierL1)
+    if (acceptedTier == TierL0)
     {
-        return prototype.shellNodeStartIndexL1;
+        return prototype.foliageDrawSlotL0;
     }
 
-    if (runtimeTier == BranchTierL2)
+    if (acceptedTier == TierL1)
     {
-        return prototype.shellNodeStartIndexL2;
+        return prototype.canopyDrawSlotL1;
     }
 
-    return prototype.shellNodeStartIndexL3;
+    if (acceptedTier == TierL2)
+    {
+        return prototype.canopyDrawSlotL2;
+    }
+
+    return prototype.canopyDrawSlotL3;
 }
 
-int ResolveShellNodeCount(PrototypeGpu prototype, int runtimeTier)
+int ResolveAcceptedTreeDrawSlot(BlueprintGpu blueprint, int acceptedTier)
 {
-    if (runtimeTier == BranchTierL1)
+    if (acceptedTier == TierImpostor)
     {
-        return prototype.shellNodeCountL1;
+        return blueprint.impostorDrawSlot;
     }
 
-    if (runtimeTier == BranchTierL2)
+    if (acceptedTier == TierTreeL3)
     {
-        return prototype.shellNodeCountL2;
+        return blueprint.treeL3DrawSlot;
     }
 
-    return prototype.shellNodeCountL3;
+    if (acceptedTier == TierL2)
+    {
+        return blueprint.trunkL3DrawSlot;
+    }
+
+    return blueprint.trunkFullDrawSlot;
 }
 
-ShellNodeGpu GetShellNodeForTier(int runtimeTier, int shellNodeIndex)
+int ResolveAcceptedTierCost(BlueprintGpu blueprint, int acceptedTier)
 {
-    if (runtimeTier == BranchTierL1)
+    if (acceptedTier == TierL0)
     {
-        return _ShellNodesL1[shellNodeIndex];
+        return blueprint.expandedTierCostL0;
     }
 
-    if (runtimeTier == BranchTierL2)
+    if (acceptedTier == TierL1)
     {
-        return _ShellNodesL2[shellNodeIndex];
+        return blueprint.expandedTierCostL1;
     }
 
-    return _ShellNodesL3[shellNodeIndex];
+    if (acceptedTier == TierL2)
+    {
+        return blueprint.expandedTierCostL2;
+    }
+
+    if (acceptedTier == TierTreeL3 || acceptedTier == TierImpostor)
+    {
+        return 1;
+    }
+
+    return 0;
 }
 
-bool IsVisibleLeafNode(ShellNodeGpu node, float4x4 localToWorld)
+VegetationInstanceData CreateInstanceData(float4x4 objectToWorld, float4x4 worldToObject, uint packedLeafTint)
 {
-    if (node.childMask != 0u && node.firstChildIndex >= 0)
-    {
-        return false;
-    }
-
-    float3 worldCenter;
-    float3 worldExtents;
-    ComputeWorldBounds(localToWorld, node.localCenter, node.localExtents, worldCenter, worldExtents);
-    return TestFrustumAabb(worldCenter, worldExtents);
+    VegetationInstanceData instanceData;
+    instanceData.objectToWorld = objectToWorld;
+    instanceData.worldToObject = worldToObject;
+    instanceData.packedLeafTint = packedLeafTint;
+    instanceData.padding0 = 0u;
+    instanceData.padding1 = 0u;
+    instanceData.padding2 = 0u;
+    return instanceData;
 }
 
 void CountInstance(uint slotIndex)
@@ -303,69 +330,87 @@ void EmitInstance(uint slotIndex, VegetationInstanceData instanceData)
     _VisibleInstances[packedIndex] = instanceData;
 }
 
-void CountBranchInstances(BranchGpu branch, BranchDecisionGpu branchDecision)
+bool IsOrderedAfter(float distanceValue, int treeIndex, float previousDistance, int previousTreeIndex)
 {
-    PrototypeGpu prototype = _Prototypes[branch.prototypeIndex];
-    float3 branchWorldCenter;
-    float3 branchWorldExtents;
-    ComputeWorldBounds(branch.localToWorld, prototype.localBoundsCenter, prototype.localBoundsExtents, branchWorldCenter, branchWorldExtents);
-    if (!TestFrustumAabb(branchWorldCenter, branchWorldExtents))
+    if (distanceValue > previousDistance + DistanceTieEpsilon)
     {
-        return;
+        return true;
     }
 
-    if (branchDecision.runtimeTier == BranchTierL0)
-    {
-        CountInstance((uint)branch.woodDrawSlotL0);
-        CountInstance((uint)branch.foliageDrawSlotL0);
-        return;
-    }
-
-    CountInstance((uint)ResolveWoodDrawSlot(branch, branchDecision.runtimeTier));
-
-    int shellNodeStart = ResolveShellNodeStart(prototype, branchDecision.runtimeTier);
-    int shellNodeCount = ResolveShellNodeCount(prototype, branchDecision.runtimeTier);
-    // Current shipped limitation: this scans the whole selected shell tier and ignores child-link traversal.
-    for (int localNodeIndex = 0; localNodeIndex < shellNodeCount; localNodeIndex++)
-    {
-        ShellNodeGpu node = GetShellNodeForTier(branchDecision.runtimeTier, shellNodeStart + localNodeIndex);
-        if (IsVisibleLeafNode(node, branch.localToWorld))
-        {
-            CountInstance((uint)node.shellDrawSlot);
-        }
-    }
+    return abs(distanceValue - previousDistance) <= DistanceTieEpsilon && treeIndex > previousTreeIndex;
 }
 
-void EmitBranchInstances(BranchGpu branch, BranchDecisionGpu branchDecision)
+int FindNextPromotionCandidate(int currentTier, int targetTier, float previousDistance, int previousTreeIndex)
 {
-    PrototypeGpu prototype = _Prototypes[branch.prototypeIndex];
-    float3 branchWorldCenter;
-    float3 branchWorldExtents;
-    ComputeWorldBounds(branch.localToWorld, prototype.localBoundsCenter, prototype.localBoundsExtents, branchWorldCenter, branchWorldExtents);
-    if (!TestFrustumAabb(branchWorldCenter, branchWorldExtents))
-    {
-        return;
-    }
+    int bestTreeIndex = -1;
+    float bestDistance = 0.0f;
 
-    if (branchDecision.runtimeTier == BranchTierL0)
+    for (int treeIndex = 0; treeIndex < _TreeCount; treeIndex++)
     {
-        EmitInstance((uint)branch.woodDrawSlotL0, branch.woodUploadInstanceData);
-        EmitInstance((uint)branch.foliageDrawSlotL0, branch.foliageUploadInstanceData);
-        return;
-    }
-
-    EmitInstance((uint)ResolveWoodDrawSlot(branch, branchDecision.runtimeTier), branch.woodUploadInstanceData);
-
-    int shellNodeStart = ResolveShellNodeStart(prototype, branchDecision.runtimeTier);
-    int shellNodeCount = ResolveShellNodeCount(prototype, branchDecision.runtimeTier);
-    // Current shipped limitation: this scans the whole selected shell tier and ignores child-link traversal.
-    for (int localNodeIndex = 0; localNodeIndex < shellNodeCount; localNodeIndex++)
-    {
-        ShellNodeGpu node = GetShellNodeForTier(branchDecision.runtimeTier, shellNodeStart + localNodeIndex);
-        if (IsVisibleLeafNode(node, branch.localToWorld))
+        TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
+        if (visibility.visible == 0u || visibility.acceptedTier != currentTier || visibility.desiredTier > targetTier)
         {
-            EmitInstance((uint)node.shellDrawSlot, branch.foliageUploadInstanceData);
+            continue;
         }
+
+        if (!IsOrderedAfter(visibility.treeDistance, treeIndex, previousDistance, previousTreeIndex))
+        {
+            continue;
+        }
+
+        if (bestTreeIndex < 0 ||
+            visibility.treeDistance < bestDistance - DistanceTieEpsilon ||
+            (abs(visibility.treeDistance - bestDistance) <= DistanceTieEpsilon && treeIndex < bestTreeIndex))
+        {
+            bestTreeIndex = treeIndex;
+            bestDistance = visibility.treeDistance;
+        }
+    }
+
+    return bestTreeIndex;
+}
+
+int FindNextFarCandidate(float previousDistance, int previousTreeIndex)
+{
+    int bestTreeIndex = -1;
+    float bestDistance = 0.0f;
+
+    for (int treeIndex = 0; treeIndex < _TreeCount; treeIndex++)
+    {
+        TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
+        if (visibility.visible == 0u || visibility.desiredTier != TierImpostor || visibility.acceptedTier != TierCulled)
+        {
+            continue;
+        }
+
+        if (!IsOrderedAfter(visibility.treeDistance, treeIndex, previousDistance, previousTreeIndex))
+        {
+            continue;
+        }
+
+        if (bestTreeIndex < 0 ||
+            visibility.treeDistance < bestDistance - DistanceTieEpsilon ||
+            (abs(visibility.treeDistance - bestDistance) <= DistanceTieEpsilon && treeIndex < bestTreeIndex))
+        {
+            bestTreeIndex = treeIndex;
+            bestDistance = visibility.treeDistance;
+        }
+    }
+
+    return bestTreeIndex;
+}
+
+[numthreads(64, 1, 1)]
+void ResetFrameState(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    if (dispatchThreadId.x == 0u)
+    {
+        _ExpandedBranchWorkItemCount[0] = 0u;
+    }
+
+    if (dispatchThreadId.x < 9u)
+    {
+        _FrameStats[dispatchThreadId.x] = 0u;
     }
 }
 
@@ -392,57 +437,279 @@ void ClassifyTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     TreeGpu tree = _Trees[treeIndex];
-    int treeMode = TreeModeCulled;
-    if (tree.cellIndex >= 0 && _CellVisibility[tree.cellIndex] != 0u)
+    BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
+    LodProfileGpu lodProfile = _LodProfiles[blueprint.lodProfileIndex];
+
+    TreeVisibilityGpu visibility;
+    visibility.treeDistance = 0.0f;
+    visibility.priorityRing = 0;
+    visibility.desiredTier = TierCulled;
+    visibility.acceptedTier = TierCulled;
+    visibility.acceptedTierCost = 0;
+    visibility.visible = 0u;
+    visibility.padding0 = 0u;
+    visibility.padding1 = 0u;
+
+    if (tree.cellIndex < 0 || _CellVisibility[tree.cellIndex] == 0u || !TestFrustumBounds(tree.worldBounds))
     {
-        LodProfileGpu lodProfile = _LodProfiles[tree.lodProfileIndex];
-        float treeDistance = ComputeSphereSurfaceDistance(tree.sphereCenterWorld, tree.boundingSphereRadius);
-        if (treeDistance < lodProfile.absoluteCullDistance)
-        {
-            treeMode = treeDistance >= lodProfile.impostorDistance ? TreeModeImpostor : TreeModeExpanded;
-        }
+        _TreeVisibility[treeIndex] = visibility;
+        return;
     }
 
-    _TreeModes[treeIndex] = treeMode;
+    float treeDistance = ComputeSphereSurfaceDistance(tree.sphereCenterWorld, tree.boundingSphereRadius);
+    if (treeDistance >= lodProfile.absoluteCullDistance)
+    {
+        _TreeVisibility[treeIndex] = visibility;
+        return;
+    }
+
+    visibility.treeDistance = treeDistance;
+    visibility.priorityRing = (int)floor(max(treeDistance, 0.0f) * 4.0f);
+    visibility.visible = 1u;
+    visibility.desiredTier =
+        treeDistance < lodProfile.l0Distance ? TierL0 :
+        treeDistance < lodProfile.l1Distance ? TierL1 :
+        treeDistance < lodProfile.l2Distance ? TierL2 :
+        treeDistance < lodProfile.impostorDistance ? TierTreeL3 :
+        TierImpostor;
+
+    _TreeVisibility[treeIndex] = visibility;
+}
+
+void ApplyPromotionStage(int currentTier, int targetTier, inout uint acceptedCostUsage, inout uint currentTierCount, inout uint targetTierCount, inout uint rejectedPromotions)
+{
+    float previousDistance = -1.0f;
+    int previousTreeIndex = -1;
+
+    while (true)
+    {
+        int candidateTreeIndex = FindNextPromotionCandidate(currentTier, targetTier, previousDistance, previousTreeIndex);
+        if (candidateTreeIndex < 0)
+        {
+            return;
+        }
+
+        TreeGpu tree = _Trees[candidateTreeIndex];
+        BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
+        TreeVisibilityGpu visibility = _TreeVisibility[candidateTreeIndex];
+        uint nextTierCost = (uint)ResolveAcceptedTierCost(blueprint, targetTier);
+        uint currentCost = (uint)max(0, visibility.acceptedTierCost);
+        uint additionalCost = nextTierCost > currentCost ? nextTierCost - currentCost : 0u;
+
+        if (acceptedCostUsage + additionalCost <= (uint)_VisibleInstanceCapacity)
+        {
+            acceptedCostUsage += additionalCost;
+            visibility.acceptedTier = targetTier;
+            visibility.acceptedTierCost = (int)nextTierCost;
+            _TreeVisibility[candidateTreeIndex] = visibility;
+            if (currentTierCount > 0u)
+            {
+                currentTierCount--;
+            }
+
+            targetTierCount++;
+        }
+        else
+        {
+            rejectedPromotions++;
+        }
+
+        previousDistance = visibility.treeDistance;
+        previousTreeIndex = candidateTreeIndex;
+    }
+}
+
+void AcceptFarImpostors(inout uint acceptedCostUsage, inout uint rejectedPromotions)
+{
+    float previousDistance = -1.0f;
+    int previousTreeIndex = -1;
+
+    while (true)
+    {
+        int candidateTreeIndex = FindNextFarCandidate(previousDistance, previousTreeIndex);
+        if (candidateTreeIndex < 0)
+        {
+            return;
+        }
+
+        TreeVisibilityGpu visibility = _TreeVisibility[candidateTreeIndex];
+        if (acceptedCostUsage + 1u <= (uint)_VisibleInstanceCapacity)
+        {
+            acceptedCostUsage += 1u;
+            visibility.acceptedTier = TierImpostor;
+            visibility.acceptedTierCost = 1;
+            _TreeVisibility[candidateTreeIndex] = visibility;
+        }
+        else
+        {
+            rejectedPromotions++;
+        }
+
+        previousDistance = visibility.treeDistance;
+        previousTreeIndex = candidateTreeIndex;
+    }
+}
+
+[numthreads(1, 1, 1)]
+void AcceptTreeTiers(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    if (dispatchThreadId.x != 0u)
+    {
+        return;
+    }
+
+    uint visibleTrees = 0u;
+    uint acceptedTreeL3 = 0u;
+    uint promotedL2 = 0u;
+    uint promotedL1 = 0u;
+    uint promotedL0 = 0u;
+    uint rejectedPromotions = 0u;
+    uint acceptedCostUsage = 0u;
+
+    for (int treeIndex = 0; treeIndex < _TreeCount; treeIndex++)
+    {
+        TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
+        if (visibility.visible == 0u)
+        {
+            visibility.acceptedTier = TierCulled;
+            visibility.acceptedTierCost = 0;
+            _TreeVisibility[treeIndex] = visibility;
+            continue;
+        }
+
+        visibleTrees++;
+        visibility.acceptedTier = TierCulled;
+        visibility.acceptedTierCost = 0;
+
+        if (visibility.desiredTier != TierImpostor)
+        {
+            if (acceptedCostUsage + 1u <= (uint)_VisibleInstanceCapacity)
+            {
+                acceptedCostUsage += 1u;
+                visibility.acceptedTier = TierTreeL3;
+                visibility.acceptedTierCost = 1;
+                acceptedTreeL3++;
+            }
+            else
+            {
+                rejectedPromotions++;
+            }
+        }
+
+        _TreeVisibility[treeIndex] = visibility;
+    }
+
+    ApplyPromotionStage(TierTreeL3, TierL2, acceptedCostUsage, acceptedTreeL3, promotedL2, rejectedPromotions);
+    ApplyPromotionStage(TierL2, TierL1, acceptedCostUsage, promotedL2, promotedL1, rejectedPromotions);
+    ApplyPromotionStage(TierL1, TierL0, acceptedCostUsage, promotedL1, promotedL0, rejectedPromotions);
+    AcceptFarImpostors(acceptedCostUsage, rejectedPromotions);
+
+    _FrameStats[FrameStatVisibleTrees] = visibleTrees;
+    _FrameStats[FrameStatAcceptedTreeL3] = acceptedTreeL3;
+    _FrameStats[FrameStatPromotedL2] = promotedL2;
+    _FrameStats[FrameStatPromotedL1] = promotedL1;
+    _FrameStats[FrameStatPromotedL0] = promotedL0;
+    _FrameStats[FrameStatRejectedPromotions] = rejectedPromotions;
+    _FrameStats[FrameStatAcceptedTierCostUsage] = acceptedCostUsage;
 }
 
 [numthreads(64, 1, 1)]
-void ClassifyBranches(uint3 dispatchThreadId : SV_DispatchThreadID)
+void GenerateExpandedBranchWorkItems(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    uint branchInstanceIndex = dispatchThreadId.x;
-    if (branchInstanceIndex >= (uint)_BranchCount)
+    uint treeIndex = dispatchThreadId.x;
+    if (treeIndex >= (uint)_TreeCount)
     {
         return;
     }
 
-    BranchGpu branch = _Branches[branchInstanceIndex];
-    TreeGpu tree = _Trees[branch.treeIndex];
-    int treeMode = _TreeModes[branch.treeIndex];
-
-    BranchDecisionGpu branchDecision;
-    branchDecision.treeIndex = branch.treeIndex;
-    branchDecision.branchInstanceIndex = branchInstanceIndex;
-    branchDecision.branchPlacementIndex = branch.branchPlacementIndex;
-    branchDecision.runtimeTier = BranchTierInactive;
-
-    if (treeMode != TreeModeExpanded)
+    TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
+    if (visibility.visible == 0u || visibility.acceptedTier < TierL0 || visibility.acceptedTier > TierL2)
     {
-        _BranchDecisions[branchInstanceIndex] = branchDecision;
         return;
     }
 
-    // Current shipped limitation: expanded trees still classify branches from the full flat scene branch array.
-    LodProfileGpu lodProfile = _LodProfiles[tree.lodProfileIndex];
-    float branchDistance = ComputeSphereSurfaceDistance(branch.sphereCenterWorld, branch.boundingSphereRadius);
-    branchDecision.runtimeTier = branchDistance < lodProfile.l0Distance
-        ? BranchTierL0
-        : branchDistance < lodProfile.l1Distance
-            ? BranchTierL1
-            : branchDistance < lodProfile.l2Distance
-                ? BranchTierL2
-                : BranchTierL3;
+    TreeGpu tree = _Trees[treeIndex];
+    BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
+    uint ignored;
+    InterlockedAdd(_FrameStats[FrameStatExpandedTrees], 1u, ignored);
 
-    _BranchDecisions[branchInstanceIndex] = branchDecision;
+    for (int branchOffset = 0; branchOffset < blueprint.branchPlacementCount; branchOffset++)
+    {
+        uint workItemIndex;
+        InterlockedAdd(_ExpandedBranchWorkItemCount[0], 1u, workItemIndex);
+        if (workItemIndex >= (uint)_ExpandedBranchWorkItemCapacity)
+        {
+            continue;
+        }
+
+        BranchDecisionGpu workItem;
+        workItem.treeIndex = (int)treeIndex;
+        workItem.branchInstanceIndex = (int)workItemIndex;
+        workItem.branchPlacementIndex = blueprint.branchPlacementStartIndex + branchOffset;
+        workItem.runtimeTier = visibility.acceptedTier;
+        _ExpandedBranchWorkItems[workItemIndex] = workItem;
+        InterlockedAdd(_FrameStats[FrameStatExpandedBranchWorkItems], 1u, ignored);
+    }
+}
+
+uint GetExpandedBranchWorkItemCount()
+{
+    return min(_ExpandedBranchWorkItemCount[0], (uint)_ExpandedBranchWorkItemCapacity);
+}
+
+void CountExpandedBranch(uint workItemIndex)
+{
+    if (workItemIndex >= GetExpandedBranchWorkItemCount())
+    {
+        return;
+    }
+
+    BranchDecisionGpu workItem = _ExpandedBranchWorkItems[workItemIndex];
+    TreeGpu tree = _Trees[workItem.treeIndex];
+    PlacementGpu placement = _Placements[workItem.branchPlacementIndex];
+    PrototypeGpu prototype = _Prototypes[placement.prototypeIndex];
+    float4x4 branchObjectToWorld = mul(tree.uploadInstanceData.objectToWorld, placement.localToTree);
+
+    float3 branchWorldCenter;
+    float3 branchWorldExtents;
+    ComputeWorldBounds(branchObjectToWorld, placement.localBoundsCenter, placement.localBoundsExtents, branchWorldCenter, branchWorldExtents);
+    if (!TestFrustumAabb(branchWorldCenter, branchWorldExtents))
+    {
+        return;
+    }
+
+    CountInstance((uint)ResolveExpandedWoodDrawSlot(prototype, workItem.runtimeTier));
+    CountInstance((uint)ResolveExpandedCanopyDrawSlot(prototype, workItem.runtimeTier));
+}
+
+void EmitExpandedBranch(uint workItemIndex)
+{
+    if (workItemIndex >= GetExpandedBranchWorkItemCount())
+    {
+        return;
+    }
+
+    BranchDecisionGpu workItem = _ExpandedBranchWorkItems[workItemIndex];
+    TreeGpu tree = _Trees[workItem.treeIndex];
+    PlacementGpu placement = _Placements[workItem.branchPlacementIndex];
+    PrototypeGpu prototype = _Prototypes[placement.prototypeIndex];
+    float4x4 branchObjectToWorld = mul(tree.uploadInstanceData.objectToWorld, placement.localToTree);
+    float4x4 branchWorldToObject = mul(placement.treeToLocal, tree.uploadInstanceData.worldToObject);
+
+    float3 branchWorldCenter;
+    float3 branchWorldExtents;
+    ComputeWorldBounds(branchObjectToWorld, placement.localBoundsCenter, placement.localBoundsExtents, branchWorldCenter, branchWorldExtents);
+    if (!TestFrustumAabb(branchWorldCenter, branchWorldExtents))
+    {
+        return;
+    }
+
+    EmitInstance(
+        (uint)ResolveExpandedWoodDrawSlot(prototype, workItem.runtimeTier),
+        CreateInstanceData(branchObjectToWorld, branchWorldToObject, 0u));
+    EmitInstance(
+        (uint)ResolveExpandedCanopyDrawSlot(prototype, workItem.runtimeTier),
+        CreateInstanceData(branchObjectToWorld, branchWorldToObject, prototype.packedLeafTint));
 }
 
 [numthreads(64, 1, 1)]
@@ -468,49 +735,21 @@ void CountTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
+    TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
+    if (visibility.acceptedTier == TierCulled)
+    {
+        return;
+    }
+
     TreeGpu tree = _Trees[treeIndex];
-    int treeMode = _TreeModes[treeIndex];
-    if (treeMode == TreeModeCulled || !TestFrustumBounds(tree.worldBounds))
-    {
-        return;
-    }
-
-    if (treeMode == TreeModeImpostor)
-    {
-        CountInstance((uint)tree.impostorDrawSlot);
-        return;
-    }
-
-    bool useFullTrunk = false;
-    for (int branchOffset = 0; branchOffset < tree.sceneBranchCount; branchOffset++)
-    {
-        BranchDecisionGpu branchDecision = _BranchDecisions[tree.sceneBranchStartIndex + branchOffset];
-        if (branchDecision.runtimeTier == BranchTierL0 || branchDecision.runtimeTier == BranchTierL1)
-        {
-            useFullTrunk = true;
-            break;
-        }
-    }
-
-    CountInstance(useFullTrunk ? (uint)tree.trunkFullDrawSlot : (uint)tree.trunkL3DrawSlot);
+    BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
+    CountInstance((uint)ResolveAcceptedTreeDrawSlot(blueprint, visibility.acceptedTier));
 }
 
 [numthreads(64, 1, 1)]
-void CountBranches(uint3 dispatchThreadId : SV_DispatchThreadID)
+void CountExpandedBranches(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    uint branchIndex = dispatchThreadId.x;
-    if (branchIndex >= (uint)_BranchCount)
-    {
-        return;
-    }
-
-    BranchDecisionGpu branchDecision = _BranchDecisions[branchIndex];
-    if (branchDecision.runtimeTier == BranchTierInactive)
-    {
-        return;
-    }
-
-    CountBranchInstances(_Branches[branchIndex], branchDecision);
+    CountExpandedBranch(dispatchThreadId.x);
 }
 
 [numthreads(1, 1, 1)]
@@ -538,49 +777,23 @@ void EmitTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
+    TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
+    if (visibility.acceptedTier == TierCulled)
+    {
+        return;
+    }
+
     TreeGpu tree = _Trees[treeIndex];
-    int treeMode = _TreeModes[treeIndex];
-    if (treeMode == TreeModeCulled || !TestFrustumBounds(tree.worldBounds))
-    {
-        return;
-    }
-
-    if (treeMode == TreeModeImpostor)
-    {
-        EmitInstance((uint)tree.impostorDrawSlot, tree.uploadInstanceData);
-        return;
-    }
-
-    bool useFullTrunk = false;
-    for (int branchOffset = 0; branchOffset < tree.sceneBranchCount; branchOffset++)
-    {
-        BranchDecisionGpu branchDecision = _BranchDecisions[tree.sceneBranchStartIndex + branchOffset];
-        if (branchDecision.runtimeTier == BranchTierL0 || branchDecision.runtimeTier == BranchTierL1)
-        {
-            useFullTrunk = true;
-            break;
-        }
-    }
-
-    EmitInstance(useFullTrunk ? (uint)tree.trunkFullDrawSlot : (uint)tree.trunkL3DrawSlot, tree.uploadInstanceData);
+    BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
+    EmitInstance(
+        (uint)ResolveAcceptedTreeDrawSlot(blueprint, visibility.acceptedTier),
+        CreateInstanceData(tree.uploadInstanceData.objectToWorld, tree.uploadInstanceData.worldToObject, 0u));
 }
 
 [numthreads(64, 1, 1)]
-void EmitBranches(uint3 dispatchThreadId : SV_DispatchThreadID)
+void EmitExpandedBranches(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    uint branchIndex = dispatchThreadId.x;
-    if (branchIndex >= (uint)_BranchCount)
-    {
-        return;
-    }
-
-    BranchDecisionGpu branchDecision = _BranchDecisions[branchIndex];
-    if (branchDecision.runtimeTier == BranchTierInactive)
-    {
-        return;
-    }
-
-    EmitBranchInstances(_Branches[branchIndex], branchDecision);
+    EmitExpandedBranch(dispatchThreadId.x);
 }
 
 [numthreads(64, 1, 1)]

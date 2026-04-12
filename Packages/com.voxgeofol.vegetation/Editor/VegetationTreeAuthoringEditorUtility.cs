@@ -49,6 +49,22 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         }
 
         /// <summary>
+        /// [INTEGRATION] Bakes the mandatory whole-tree TreeL3 floor mesh for one tree blueprint referenced by the authoring component.
+        /// </summary>
+        public static void BakeTreeL3(VegetationTreeAuthoring authoring)
+        {
+            // Range: requires a valid blueprint with readable trunk and source branch meshes. Condition: tree-local source geometry is merged once and simplified into the mandatory TreeL3 floor mesh. Output: the blueprint receives a refreshed treeL3Mesh asset.
+            if (authoring == null)
+            {
+                throw new ArgumentNullException(nameof(authoring));
+            }
+
+            TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
+            BakeTreeL3WithoutSave(blueprint);
+            SaveAuthoringChanges(authoring, blueprint);
+        }
+
+        /// <summary>
         /// [INTEGRATION] Bakes the far impostor mesh for one tree blueprint referenced by the authoring component.
         /// </summary>
         public static void BakeImpostor(VegetationTreeAuthoring authoring)
@@ -65,11 +81,11 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         }
 
         /// <summary>
-        /// [INTEGRATION] Refreshes shells, trunkL3Mesh, and far impostor mesh in one editor operation.
+        /// [INTEGRATION] Refreshes shells, trunkL3Mesh, treeL3Mesh, and far impostor mesh in one editor operation.
         /// </summary>
         public static void BakeAllGeneratedMeshes(VegetationTreeAuthoring authoring)
         {
-            // Range: requires the same authoring data as the individual shell, trunk, and impostor bake steps. Condition: all generated meshes are refreshed before one final asset save/refresh. Output: referenced prototypes and the blueprint are updated in one command.
+            // Range: requires the same authoring data as the individual shell, trunk, TreeL3, and impostor bake steps. Condition: all generated meshes are refreshed before one final asset save/refresh. Output: referenced prototypes and the blueprint are updated in one command.
             if (authoring == null)
             {
                 throw new ArgumentNullException(nameof(authoring));
@@ -78,6 +94,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
             BakeCanopyShellsWithoutSave(blueprint);
             BakeTrunkL3WithoutSave(blueprint);
+            BakeTreeL3WithoutSave(blueprint);
             BakeImpostorWithoutSave(blueprint);
             SaveAuthoringChanges(authoring, blueprint);
         }
@@ -132,6 +149,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             int l1Triangles = GetTriangleCount(blueprint.TrunkMesh);
             int l2Triangles = GetTriangleCount(blueprint.TrunkL3Mesh);
             int l3Triangles = GetTriangleCount(blueprint.TrunkL3Mesh);
+            int treeL3Triangles = GetTriangleCount(blueprint.TreeL3Mesh);
             int impostorTriangles = GetTriangleCount(blueprint.ImpostorMesh);
             int shellL1OnlyTriangles = 0;
             int shellL2OnlyTriangles = 0;
@@ -145,14 +163,14 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 l0Triangles += GetTriangleCount(prototype.WoodMesh);
                 l0Triangles += GetTriangleCount(prototype.FoliageMesh);
 
-                l1Triangles += GetTriangleCount(prototype.WoodMesh);
-                l1Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL0, 0);
+                l1Triangles += GetTriangleCount(prototype.BranchL1WoodMesh);
+                l1Triangles += GetTriangleCount(prototype.BranchL1CanopyMesh);
 
-                l2Triangles += GetTriangleCount(prototype.ShellL1WoodMesh);
-                l2Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL1, 1);
+                l2Triangles += GetTriangleCount(prototype.BranchL2WoodMesh);
+                l2Triangles += GetTriangleCount(prototype.BranchL2CanopyMesh);
 
-                l3Triangles += GetTriangleCount(prototype.ShellL2WoodMesh);
-                l3Triangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL2, 2);
+                l3Triangles += GetTriangleCount(prototype.BranchL3WoodMesh);
+                l3Triangles += GetTriangleCount(prototype.BranchL3CanopyMesh);
 
                 shellL1OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL0, 0);
 
@@ -168,6 +186,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 l1Triangles,
                 l2Triangles,
                 l3Triangles,
+                treeL3Triangles,
                 impostorTriangles,
                 shellL1OnlyTriangles,
                 shellL2OnlyTriangles,
@@ -292,6 +311,11 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         private static void BakeTrunkL3WithoutSave(TreeBlueprintSO blueprint)
         {
             TrunkL3MeshGenerator.BakeTrunkL3Mesh(blueprint, blueprint.ImposterSettings);
+        }
+
+        private static void BakeTreeL3WithoutSave(TreeBlueprintSO blueprint)
+        {
+            ImpostorMeshGenerator.BakeTreeL3Mesh(blueprint, blueprint.ImposterSettings);
         }
 
         private static void BakeImpostorWithoutSave(TreeBlueprintSO blueprint)
