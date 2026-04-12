@@ -12,6 +12,7 @@ Current implementation note (`2026-04-12`):
 - Runtime registration no longer duplicates per-scene shell-node world bounds or per-scene node-decision slices for every branch instance. Persisted shell hierarchies stay prototype-local.
 - Runtime uses tree spheres from registration for coarse tree classification, then generates branch bounds and shell-node bounds on GPU per frame from prototype-local bounds plus branch transforms.
 - Visible instances are now counted and packed into one hard-bounded shared GPU instance buffer every frame. `VegetationRuntimeContainer.maxVisibleInstanceCapacity` is the active runtime budget; overflow clamps instead of reallocating scene-scale per-slot or per-node memory.
+- `VegetationIndirectRenderer` does not currently compact active slots on the bind hot path. Synchronous CPU readback of `_SlotEmittedInstanceCounts` caused a constant multi-millisecond stall, so registered draw slots stay active after bind and non-zero slot counts remain diagnostics-only telemetry.
 - The urgent redesign authority for dense forests is prioritization-first: mandatory tree presence plus nearest-first promotion must land before any later occlusion or submission-count optimization work.
 - Current shipped tree runtime shape is still flat at the tree level: one tree points to a contiguous `SceneBranchStartIndex + SceneBranchCount` span, not a full-tree hierarchy.
 - Current shipped shell-node metadata is branch-local BFS only, and the compute shader does not yet use `firstChildIndex + childMask` for real subtree skip. It linearly scans the selected shell tier and only emits visible leaf meshes.
@@ -64,7 +65,7 @@ The next architectural steps after MVP are:
   - `ShellNodesL1/L2/L3[]`
 - keep reusable `TreeBlueprints[]`, `BlueprintBranchPlacements[]`, and compact branch prototype tier meshes with separate canopy/wood per level as shared static inputs for promoted trees only
 - promote nearest trees through branch-expanded `L2/L1/L0` tiers first, with `L0` defined as survived original branches
-- compact final submissions down to non-zero emitted slots after accepted content is chosen
+- revisit final submission compaction later, but only through a non-stalling GPU-only or async path after accepted content is chosen
 - revisit branch-local hierarchy traversal later only if the no-BFS branch tiers prove insufficient
 
 ## 1.3 Core Rules
@@ -500,7 +501,7 @@ Required staged work:
 4. per-slot instance counting
 5. per-slot packed-start build for the shared visible-instance buffer
 6. direct GPU emission into the bounded shared visible-instance buffer
-7. final submission compaction to non-zero emitted slots
+7. current shipped renderer submits the registered draw-slot surface after bind; any later submission compaction must avoid CPU readback on the bind hot path
 8. per-draw-slot indirect submission
 
 ## 5.2 Exact Runtime Branch and Emission Payloads
@@ -583,7 +584,7 @@ Per frame:
 7. GPU builds `slotPackedStarts` for the bounded shared visible-instance buffer
 8. GPU emits accepted tree representations into the packed visible-instance buffer
 9. GPU finalizes indirect args with instance counts clamped to remaining shared capacity
-10. renderer compacts final submissions to non-zero emitted slots
+10. renderer currently submits registered draw slots after bind; any later compaction must not rely on synchronous CPU readback
 11. URP renders indirect depth and color passes
 
 ## 6.2 Example Tree Classification Pseudocode
@@ -800,16 +801,15 @@ Tree -> Expanded or Impostor -> flat branch span -> BranchDecision -> shell-tier
 4. Read Unity Console entries from `AuthoringContainerRuntime`.
 
 Current shipped telemetry includes:
-- `TreeBlueprints[]` count
-- `SceneBranches[]` count
-- `BranchPrototypes[]` and `ShellNodesL1/L2/L3[]` counts
-- exact allocated GPU bytes for `branchBuffer`, `branchDecisionBuffer`, prototype buffer, shell-node buffers, and the visible-instance capacity buffer
+- registration counts for `trees`, `TreeBlueprints[]`, `BlueprintBranchPlacements[]`, `BranchPrototypes[]`, `drawSlots`, and `cells`
+- exact allocated GPU bytes for `blueprintPlacementBuffer`, `prototypeBuffer`, `treeVisibilityBuffer`, `expandedBranchWorkItemBuffer`, and the visible-instance capacity buffer
 - `totalBranchTelemetryBufferBytes`
-- one-shot prepared-frame readback for `nonZeroEmittedSlots`, `emittedVisibleInstances`, and `emittedVisibleInstanceBytes`
+- one-shot prepared-frame readback for `visibleTrees`, `acceptedTreeL3`, `promotedL2`, `promotedL1`, `promotedL0`, `rejectedPromotions`, `expandedTrees`, `expandedBranchWorkItems`, `acceptedTierCostUsage`, `nonZeroEmittedSlots`, `emittedVisibleInstances`, and `emittedVisibleInstanceBytes`
+- final render-prep logs from `VegetationIndirectRenderer` that report the registered-slot submission surface after bind, not the non-zero emitted subset
 
 Scope note:
 - this is current runtime-review telemetry only
-- `nonZeroEmittedSlots` and emitted visible-instance totals use one synchronous CPU readback of `_SlotEmittedInstanceCounts`, so leave diagnostics disabled outside review
+- prepared-frame diagnostics still use one synchronous CPU readback of `_SlotEmittedInstanceCounts`, so leave diagnostics disabled outside review. `BindGpuResidentFrame()` must not perform that readback on the hot path
 - it does not replace the later redesign telemetry for promoted trees, acceptance buckets, or overflow outcomes
 
 Milestone 1 should not add a large new runtime test plan yet. It must add strong developer-side verification for the direct GPU emission path.

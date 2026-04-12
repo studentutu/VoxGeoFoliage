@@ -16,13 +16,14 @@ Purpose: track the active milestone, the current blockers, and the next concrete
 - Landed the urgent tree-first runtime redesign from `urgentRedesign.md`.
 - Added the required `treeL3Mesh` authoring/runtime contract and branch split canopy/wood tiers for `L1/L2/L3`.
 - Removed urgent-path runtime ownership of `SceneBranches[]` and prototype shell-node buffers from registration, GPU classification, and submission.
-- Replaced the frame path with tree-first acceptance, nearest-first promotion into branch-expanded `L2/L1/L0`, promoted-tree-only compact branch work generation, and non-zero-slot submission compaction.
+- Replaced the frame path with tree-first acceptance, nearest-first promotion into branch-expanded `L2/L1/L0`, promoted-tree-only compact branch work generation, and final indirect submission over registered draw slots after bind.
 - Added urgent-path telemetry for visible trees, accepted `TreeL3`, promoted trees, rejected promotions, expanded branch work-item count, accepted tier-cost usage, and non-zero emitted slots.
+- Removed the per-frame CPU active-slot compaction from `BindGpuResidentFrame()` after it regressed the hot path to a constant multi-millisecond stall. Non-zero emitted slots remain diagnostics-only telemetry until submission compaction can return without a synchronous bind-path readback.
 - Recompiled through both `Compile by Rider MSBuild` and `Fully Compile by Unity` with no compile errors.
 
 ### Next Validation
 
-- Run the dense-forest one-container scene and confirm the telemetry/visual behavior against `DetailedDocs/urgentRedesign.md`: every visible non-far tree holds at least `TreeL3`, promotions happen nearest-first, and final submissions track only non-zero emitted slots.
+- Run the dense-forest one-container scene and confirm the telemetry/visual behavior against `DetailedDocs/urgentRedesign.md`: every visible non-far tree holds at least `TreeL3`, promotions happen nearest-first, and the current registered-slot submission surface remains acceptable while non-zero emitted slots stay diagnostics-only telemetry.
 
 ### Milestone 2 Breakdown
 

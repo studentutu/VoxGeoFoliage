@@ -11,7 +11,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
     /// [INTEGRATION] Owns draw-slot-scoped runtime materials, indirect args, and final draw submission.
-    /// The urgent path compacts submission down to draw slots with non-zero emitted instance counts only.
+    /// Current shipped limitation: CPU-side active-slot compaction is disabled because synchronous slot-count readback stalls the frame,
+    /// so every registered slot stays active once a frame is bound.
     /// </summary>
     public sealed class VegetationIndirectRenderer : IDisposable
     {
@@ -19,7 +20,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private static readonly ProfilerMarker RenderMarker = new ProfilerMarker("VoxGeoFol.VegetationIndirectRenderer.Render");
         private readonly SlotResources[] slotResources;
         private readonly List<int> activeSlotIndices = new List<int>();
-        private uint[] slotEmittedInstanceCounts = Array.Empty<uint>();
         private int lastDepthRenderCameraInstanceId = -1;
         private int lastDepthRenderUploadedSlotCount = -1;
         private int lastDepthRenderRenderedSlotCount = -1;
@@ -27,6 +27,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private int lastColorRenderUploadedSlotCount = -1;
         private int lastColorRenderRenderedSlotCount = -1;
         private GraphicsBuffer? gpuResidentArgsBuffer;
+        private GraphicsBuffer? lastBoundInstanceBuffer;
+        private ComputeBuffer? lastBoundSlotPackedStartsBuffer;
         private bool hasGpuResidentFrame;
         private bool disposed;
 
@@ -65,7 +67,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         /// <summary>
         /// [INTEGRATION] Binds GPU-resident indirect resources prepared by the compute classification/decode path.
-        /// One args record exists per draw slot, but only non-zero emitted slots stay active for final submission.
+        /// One args record exists per draw slot. Shared material buffers are rebound only when the backing GPU resources change.
         /// </summary>
         public void BindGpuResidentFrame(
             GraphicsBuffer instanceBuffer,
@@ -102,25 +104,28 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                 gpuResidentArgsBuffer = argsBuffer;
                 hasGpuResidentFrame = true;
-                activeSlotIndices.Clear();
-                EnsureSlotCountReadbackCapacity(slotResources.Length);
-                if (slotResources.Length > 0)
+
+                if (activeSlotIndices.Count == 0)
                 {
-                    slotEmittedInstanceCountsBuffer.GetData(slotEmittedInstanceCounts, 0, 0, slotResources.Length);
+                    for (int slotIndex = 0; slotIndex < slotResources.Length; slotIndex++)
+                    {
+                        activeSlotIndices.Add(slotIndex);
+                    }
+                }
+
+                if (ReferenceEquals(lastBoundInstanceBuffer, instanceBuffer) &&
+                    ReferenceEquals(lastBoundSlotPackedStartsBuffer, slotPackedStartsBuffer))
+                {
+                    return;
                 }
 
                 for (int slotIndex = 0; slotIndex < slotResources.Length; slotIndex++)
                 {
-                    uint emittedInstanceCount = slotEmittedInstanceCounts[slotIndex];
-                    if (emittedInstanceCount == 0u)
-                    {
-                        continue;
-                    }
-
-                    SlotResources slot = slotResources[slotIndex];
-                    slot.BindSharedBuffers(instanceBuffer, slotPackedStartsBuffer);
-                    activeSlotIndices.Add(slotIndex);
+                    slotResources[slotIndex].BindSharedBuffers(instanceBuffer, slotPackedStartsBuffer);
                 }
+
+                lastBoundInstanceBuffer = instanceBuffer;
+                lastBoundSlotPackedStartsBuffer = slotPackedStartsBuffer;
             }
         }
 
@@ -224,8 +229,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     SlotIndex = slot.DrawSlot.SlotIndex,
                     DebugLabel = slot.DrawSlot.DebugLabel,
                     MaterialKind = slot.DrawSlot.MaterialKind,
-                    InstanceCount = checked((int)slotEmittedInstanceCounts[slotIndex]),
-                    HasExactInstanceCount = hasGpuResidentFrame,
+                    InstanceCount = 0,
+                    HasExactInstanceCount = false,
                     WorldBounds = slot.ConservativeWorldBounds
                 });
             }
@@ -245,21 +250,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             activeSlotIndices.Clear();
+            lastBoundInstanceBuffer = null;
+            lastBoundSlotPackedStartsBuffer = null;
         }
 
         private GraphicsBuffer ResolveArgsBuffer(SlotResources slot)
         {
             return gpuResidentArgsBuffer ?? throw new InvalidOperationException("GPU-resident args buffer has not been bound.");
-        }
-
-        private void EnsureSlotCountReadbackCapacity(int requiredSlotCount)
-        {
-            if (slotEmittedInstanceCounts.Length >= requiredSlotCount)
-            {
-                return;
-            }
-
-            slotEmittedInstanceCounts = new uint[requiredSlotCount];
         }
 
         private sealed class SlotResources : IDisposable

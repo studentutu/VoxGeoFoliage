@@ -64,7 +64,7 @@ public sealed class VegetationRuntimeFoundationTests
     }
 
     [Test]
-    public void IndirectRenderer_BindGpuResidentFrame_ExposesConservativeSnapshots()
+    public void IndirectRenderer_BindGpuResidentFrame_ExposesRegisteredSlotSnapshotsWithoutExactCounts()
     {
         VegetationTreeAuthoring authoring = CreateAuthoring("RuntimeTree", new Vector3(0f, 0f, 10f));
         VegetationTreeAuthoringRuntime runtimeAuthoring =
@@ -108,13 +108,13 @@ public sealed class VegetationRuntimeFoundationTests
                 List<VegetationIndirectDrawBatchSnapshot> snapshots = new List<VegetationIndirectDrawBatchSnapshot>();
                 indirectRenderer.GetDebugSnapshots(snapshots);
 
-                int expectedActiveSlotCount = registry.DrawSlots.Count > 1 ? 2 : 1;
-                Assert.AreEqual(expectedActiveSlotCount, snapshots.Count);
+                Assert.AreEqual(registry.DrawSlots.Count, indirectRenderer.ActiveSlotIndices.Count);
+                Assert.AreEqual(registry.DrawSlots.Count, snapshots.Count);
                 for (int i = 0; i < snapshots.Count; i++)
                 {
                     VegetationIndirectDrawBatchSnapshot snapshot = snapshots[i];
-                    Assert.IsTrue(snapshot.HasExactInstanceCount);
-                    Assert.AreEqual((int)emittedCounts[snapshot.SlotIndex], snapshot.InstanceCount);
+                    Assert.IsFalse(snapshot.HasExactInstanceCount);
+                    Assert.AreEqual(0, snapshot.InstanceCount);
                     Bounds expectedBounds = registry.DrawSlotConservativeWorldBounds[snapshot.SlotIndex];
                     AssertBoundsEqual(snapshot.WorldBounds, expectedBounds);
                 }
