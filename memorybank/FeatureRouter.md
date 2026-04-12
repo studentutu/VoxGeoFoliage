@@ -33,6 +33,7 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - custom material
   - shader compatibility
 - Read:
+  - [Package README](../Packages/com.voxgeofol.vegetation/README.md) - package consumer contract, runtime terminology, and current lifecycle summary from container input to URP indirect submission
   - [UnityAssembledVegetation_FULL](../DetailedDocs/UnityAssembledVegetation_FULL.md) - architecture authority
   - [AddSubSceneSupport](../DetailedDocs/AddSubSceneSupport.md) - runtime-only SubScene registration bridge authority
   - [urgentRedesign](../DetailedDocs/urgentRedesign.md) - urgent runtime prioritization and dense-forest overflow redesign authority

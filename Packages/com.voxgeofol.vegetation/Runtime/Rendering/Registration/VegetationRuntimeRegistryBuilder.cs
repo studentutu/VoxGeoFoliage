@@ -9,6 +9,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
     /// Builds the frozen runtime registry from scene authoring data without touching editor-only fields.
+    /// Current shipped shape: trees become flat branch spans plus prototype-local shell metadata, not full-tree hierarchies.
     /// </summary>
     public sealed class VegetationRuntimeRegistryBuilder
     {

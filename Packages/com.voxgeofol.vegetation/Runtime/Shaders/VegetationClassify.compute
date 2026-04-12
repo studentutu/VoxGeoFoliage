@@ -325,6 +325,7 @@ void CountBranchInstances(BranchGpu branch, BranchDecisionGpu branchDecision)
 
     int shellNodeStart = ResolveShellNodeStart(prototype, branchDecision.runtimeTier);
     int shellNodeCount = ResolveShellNodeCount(prototype, branchDecision.runtimeTier);
+    // Current shipped limitation: this scans the whole selected shell tier and ignores child-link traversal.
     for (int localNodeIndex = 0; localNodeIndex < shellNodeCount; localNodeIndex++)
     {
         ShellNodeGpu node = GetShellNodeForTier(branchDecision.runtimeTier, shellNodeStart + localNodeIndex);
@@ -357,6 +358,7 @@ void EmitBranchInstances(BranchGpu branch, BranchDecisionGpu branchDecision)
 
     int shellNodeStart = ResolveShellNodeStart(prototype, branchDecision.runtimeTier);
     int shellNodeCount = ResolveShellNodeCount(prototype, branchDecision.runtimeTier);
+    // Current shipped limitation: this scans the whole selected shell tier and ignores child-link traversal.
     for (int localNodeIndex = 0; localNodeIndex < shellNodeCount; localNodeIndex++)
     {
         ShellNodeGpu node = GetShellNodeForTier(branchDecision.runtimeTier, shellNodeStart + localNodeIndex);
@@ -429,6 +431,7 @@ void ClassifyBranches(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
+    // Current shipped limitation: expanded trees still classify branches from the full flat scene branch array.
     LodProfileGpu lodProfile = _LodProfiles[tree.lodProfileIndex];
     float branchDistance = ComputeSphereSurfaceDistance(branch.sphereCenterWorld, branch.boundingSphereRadius);
     branchDecision.runtimeTier = branchDistance < lodProfile.l0Distance

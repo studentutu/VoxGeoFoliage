@@ -15,7 +15,10 @@ Purpose: track the active milestone, the current blockers, and the next concrete
 - `2026-04-12`: Runtime scaling hardening landed. Shell-node runtime caches stay prototype-local, branch and shell-node bounds are generated on GPU per frame from transforms, and `VegetationRuntimeContainer.maxVisibleInstanceCapacity` now hard-bounds the shared visible-instance buffer instead of reserving scene-scale per-slot/node memory.
 - `2026-04-12`: `VegetationRuntimeContainer.maxVisibleInstanceCapacity` default was raised to `262144`, and changing that serialized value now forces the GPU pipeline to rebuild so higher per-container budgets actually apply without a full registration rebuild.
 - `2026-04-12`: Documentation was corrected to state the real runtime scope: `maxVisibleInstanceCapacity` is per container, not a global scene budget. Large forests may be split across multiple containers to avoid one-container overflow, but total scene memory and visible capacity then scale with the number of visible containers because there is still no global coordinator.
-- `2026-04-12`: Urgent dense-forest redesign was documented in `DetailedDocs/urgentRedesign.md`. Current shipped overflow policy is still slot-order-based; the approved direction is guaranteed tree presence first, then nearest-tree and nearest-branch promotion buckets.
+- `2026-04-12`: Urgent dense-forest redesign was tightened back to the real blocker in `DetailedDocs/urgentRedesign.md`. Current shipped overflow policy is still slot-order-based. The approved direction is guaranteed tree presence first, then nearest-tree and nearest-branch promotion buckets. Occlusion was explicitly removed from the urgent path because it does not fix the near-tree capacity bug.
+- `2026-04-12`: Runtime documentation was corrected to match the actual shipped hierarchy state. Trees are still flat branch spans at runtime, and branch-shell BFS metadata is not yet used for true child-link traversal in the shader. The redesign now explicitly calls for `PresenceProxyOnly` / `PromotedExpanded` tree states plus promoted-tree compaction before branch kernels.
+- `2026-04-12`: `DetailedDocs/urgentRedesign.md` now stages targeted BFS correctly: only after tree-level prioritization and promoted-tree compaction, and only for promoted shell branches in `L1/L2/L3`. This is now the approved path for making the existing branch-shell BFS metadata pay for itself.
+- `2026-04-12`: Documentation clarity pass landed. `Packages/com.voxgeofol.vegetation/README.md` and `DetailedDocs/urgentRedesign.md` now define the ambiguous runtime terms explicitly and include the full current lifecycle from `VegetationRuntimeContainer.registeredAuthorings` through runtime registry flattening, GPU classification/emission, draw slots, and final URP indirect submissions.
 - `2026-04-12`: Closed-`SubScene` runtime registration support landed. `AuthoringContainerRuntime` is now the single runtime owner, `VegetationRuntimeContainer` is only the classic-scene lifecycle provider, `VegetationTreeAuthoringRuntime` is the shared registration contract, `VegetationRendererFeature` consumes active runtime owners from `VegetationActiveAuthoringContainerRuntimes`, and `Vegetation.SubScene` bootstraps the same runtime owner from baked `SubSceneAuthoring` data.
 - `2026-04-12`: Unity full compile now passes after the `Vegetation.SubScene` asmdef was added and wired to `Unity.Entities.Hybrid` plus `Unity.Mathematics`.
 - Current production gap 1: hierarchical wind is still not implemented.
@@ -29,8 +32,10 @@ Purpose: track the active milestone, the current blockers, and the next concrete
 
 - Replace slot-order overflow with the `urgentRedesign.md` pipeline: guaranteed tree presence proxy first, then nearest-tree promotion.
 - Add explicit per-frame tree acceptance records before per-slot packing.
+- Add `PresenceProxyOnly` / `PromotedExpanded` tree work states and compact promoted trees before branch kernels.
+- Replace shell-tier flat scans with targeted BFS frontier traversal for promoted shell branches only.
 - Add dense-forest validation for one container with around `6000` tightly packed trees and camera inside the forest.
-- Add overflow telemetry: visible trees, proxy trees, promoted trees, rejected promotions, requested detail, accepted detail, and per-bucket usage.
+- Add overflow telemetry last: visible trees, proxy trees, promoted trees, rejected promotions, requested detail, accepted detail, non-zero accepted slots, and per-bucket usage.
 
 ### Milestone 2 Breakdown
 
@@ -48,7 +53,7 @@ Purpose: track the active milestone, the current blockers, and the next concrete
 - Dithered LOD transitions
 - DFS hierarchy migration plus subtree spans
 - Scale quantization optimization
-- HiZ depth pyramid occlusion (or other deep occlusion in classification)
+- Full HiZ depth pyramid occlusion for tree and branch work after prioritization is shipped and measured
 
 ## Deferred
 

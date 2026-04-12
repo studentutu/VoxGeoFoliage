@@ -6,6 +6,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
     /// Runtime-side flattened scene tree instance payload.
+    /// Current shipped limitation: the tree points to one contiguous branch span via SceneBranchStartIndex + SceneBranchCount,
+    /// not to a full-tree hierarchy.
     /// </summary>
     public struct VegetationTreeInstanceRuntime
     {

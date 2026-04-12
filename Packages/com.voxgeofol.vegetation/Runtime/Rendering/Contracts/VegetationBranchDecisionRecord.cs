@@ -3,7 +3,7 @@
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// Stable branch-tier decision payload for one scene branch instance.
+    /// Stable branch-tier decision payload for one scene branch instance in the flat scene branch array.
     /// </summary>
     public struct VegetationBranchDecisionRecord
     {

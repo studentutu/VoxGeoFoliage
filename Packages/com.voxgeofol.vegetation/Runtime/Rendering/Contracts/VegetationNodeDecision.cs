@@ -3,7 +3,8 @@
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// Runtime shell-node decision contract for the BFS hierarchy decode.
+    /// Intended runtime shell-node decision contract for real hierarchy traversal.
+    /// Current shipped limitation: the shader does not yet consume this as part of a true BFS frontier decode.
     /// </summary>
     public enum VegetationNodeDecision
     {

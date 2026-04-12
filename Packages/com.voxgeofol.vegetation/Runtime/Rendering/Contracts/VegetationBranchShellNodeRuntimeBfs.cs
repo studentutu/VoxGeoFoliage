@@ -5,7 +5,8 @@ using UnityEngine;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// MVP BFS shell-node payload used by the GPU decision path.
+    /// Branch-local shell-node hierarchy metadata authored in BFS order.
+    /// Current shipped limitation: the GPU path uploads child-link data but does not yet use it for real frontier traversal or subtree skip.
     /// </summary>
     public struct VegetationBranchShellNodeRuntimeBfs
     {

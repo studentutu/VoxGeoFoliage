@@ -3,7 +3,7 @@
 ## Quick Navigation
 
 - Basics: [Summary](#summary), [Highlights](#highlights), [Best-Fit Use Cases](#best-fit-use-cases), [Requirements](#requirements), [Setup](#setup)
-- Runtime: [Draw Calls And Draw Slots](#draw-calls-and-draw-slots), [Grass-Like Vegetation Strategies](#grass-like-vegetation-strategies), [Key Settings](#key-settings), [Capacity And Containers](#capacity-and-containers), [Runtime Pipeline](#runtime-pipeline), [Important Limitations](#important-limitations), [Supported Devices](#supported-devices)
+- Runtime: [Draw Calls And Draw Slots](#draw-calls-and-draw-slots), [Runtime Terminology](#runtime-terminology), [Grass-Like Vegetation Strategies](#grass-like-vegetation-strategies), [Key Settings](#key-settings), [Capacity And Containers](#capacity-and-containers), [Current Lifecycle](#current-lifecycle), [Runtime Pipeline](#runtime-pipeline), [Important Limitations](#important-limitations), [Supported Devices](#supported-devices)
 - [Included In This Repo](#included-in-this-repo)
 - [License](#license)
 - [Kudos](#kudos)
@@ -115,11 +115,84 @@ Examples:
 10. If near `L0/L1` detail disappears, first check whether one container owns too much visible content for its own budget before assuming the whole scene budget is too small. 
 11. Visible packed instances are final draw-ready per-slot instances after tree/branch classification and shell-leaf survival.
 
+## Runtime Terminology
+
+| Term | Status | Where Used | Purpose |
+| --- | --- | --- | --- |
+| `registeredAuthorings` | Shipped | `VegetationRuntimeContainer.registeredAuthorings` | Explicit container ownership boundary for `VegetationTreeAuthoring` inputs. |
+| `VegetationTreeAuthoringRuntime` | Shipped | `VegetationRuntimeContainer.BuildRuntimeTreeAuthorings()` -> `AuthoringContainerRuntime` | Runtime-safe tree snapshot used so registration does not depend on live `MonoBehaviour` traversal. |
+| `VegetationRuntimeRegistry` | Shipped | Built by `VegetationRuntimeRegistryBuilder`, then consumed by GPU pipeline and indirect renderer | Frozen flattened runtime snapshot for one container. |
+| `Tree branch span` | Shipped | `VegetationTreeInstanceRuntime.SceneBranchStartIndex + SceneBranchCount` | One tree points to its contiguous slice inside the flat `SceneBranches[]` array. |
+| `Draw slot` | Shipped | `VegetationRuntimeRegistry.DrawSlots`, slot counters, `VegetationIndirectRenderer` | Exact `Mesh + Material + MaterialKind` batch identity. One slot owns one slot index, one indirect-args record, and one potential indirect submission per pass. |
+| `Visible instance` | Shipped | Packed into `residentInstanceBuffer`; bounded by `VegetationRuntimeContainer.maxVisibleInstanceCapacity` | Final draw-ready instance payload written by the compute path. Many visible instances can map to one draw slot. |
+| `Indirect submission` | Shipped | `VegetationIndirectRenderer.Render()` depth/color calls | One final `DrawMeshInstancedIndirect` call for one active draw slot in one pass. This is downstream from visible-instance acceptance. |
+| `Branch-shell BFS metadata` | Shipped limitation | `VegetationBranchShellNodeRuntimeBfs`, `ShellNodesL1/L2/L3`, compute upload | Child-link metadata (`FirstChildIndex + ChildMask`) uploaded for shell nodes. Current shipped shader does not yet use it for real frontier traversal or subtree skip. |
+| `PresenceProxyOnly` | Planned redesign | `DetailedDocs/urgentRedesign.md` Stage `C.5` | Tree is accepted only as one whole-tree proxy for this frame and must skip branch kernels. |
+| `PromotedExpanded` | Planned redesign | `DetailedDocs/urgentRedesign.md` Stages `C.5`, `C.6`, `D` | Tree is accepted for expensive expanded branch work this frame. |
+| `Promoted-tree compaction` | Planned redesign | `DetailedDocs/urgentRedesign.md` Stage `C.5` | Build a dense promoted-tree worklist before branch kernels so non-promoted trees never enter branch traversal. |
+
+## Current Lifecycle
+
+### Registration / Flattening
+
+```text
+VegetationRuntimeContainer.registeredAuthorings
+(List<VegetationTreeAuthoring>)
+-> BuildRuntimeTreeAuthorings()
+-> VegetationTreeAuthoringRuntime[]
+-> AuthoringContainerRuntime.Activate()
+-> AuthoringContainerRuntime.RefreshRuntimeRegistration()
+-> VegetationRuntimeRegistryBuilder.Build()
+-> VegetationRuntimeRegistry
+   -> DrawSlots[]                 exact mesh + material + material-kind buckets
+   -> TreeInstances[]             one per active tree
+   -> SceneBranches[]             flat branch array for all active trees
+   -> BranchPrototypes[]          per-prototype decode data
+   -> ShellNodesL1/L2/L3[]        prototype-local branch-shell BFS metadata
+   -> SpatialGrid                 tree-cell ownership for visibility classification
+```
+
+### Per-Camera / Per-Frame Submission
+
+```text
+Camera
+-> VegetationRendererFeature depth/color pass setup
+-> VegetationActiveAuthoringContainerRuntimes.GetActive()
+-> AuthoringContainerRuntime.PrepareFrameForCamera()
+-> VegetationGpuDecisionPipeline.PrepareResidentFrame()
+   -> ClassifyCells
+   -> ClassifyTrees
+   -> ClassifyBranches      current shipped limitation: full flat SceneBranches[] dispatch
+   -> ResetSlotCounts
+   -> CountTrees
+   -> CountBranches         current shipped limitation: full flat SceneBranches[] dispatch
+   -> BuildSlotStarts
+   -> EmitTrees
+   -> EmitBranches          current shipped limitation: full flat SceneBranches[] dispatch
+   -> FinalizeIndirectArgs
+-> residentInstanceBuffer            packed visible instances
+-> residentArgsBuffer                indirect args per draw slot
+-> slotPackedStartsBuffer            packed range start per draw slot
+-> VegetationIndirectRenderer.BindGpuResidentFrame()
+-> for each registered draw slot:
+   bind shared buffers
+   keep slot active
+-> URP Depth Pass: DrawMeshInstancedIndirect per active draw slot
+-> URP Color Pass: DrawMeshInstancedIndirect per active draw slot
+-> final URP indirect submissions
+```
+
+### What This Means Operationally
+
+1. `VegetationRuntimeContainer.maxVisibleInstanceCapacity` limits packed visible instances, not draw slots.
+2. `DrawSlots.Count` controls how many potential indirect submissions exist for a container, but the current shipped renderer still keeps every registered slot active once the frame is bound.
+3. Tree selection and branch selection currently happen before any urgent prioritization logic, so dense-forest overflow is still structurally driven by slot-order packing.
+
 ## Runtime Pipeline
 
-1. `serialized authorings -> RefreshRuntimeRegistration() -> VegetationRuntimeRegistry + spatial grid + draw slots`
-2. `camera -> frustum planes -> GPU classification/emission -> shared instance buffer + indirect args`
-3. `shared instance buffer + indirect args -> vegetation depth pass -> vegetation color pass`
+1. Registration is `serialized authorings -> VegetationTreeAuthoringRuntime[] -> VegetationRuntimeRegistry`.
+2. Per-camera work is `camera -> GPU classification/emission -> shared instance buffer + indirect args`.
+3. Final rendering is `shared instance buffer + indirect args -> depth pass + color pass -> one indirect submission per active draw slot per pass`.
 4. `changed transforms / hierarchy / blueprint data -> RefreshRuntimeRegistration() -> rebuilt runtime state`
 
 ## Important Limitations

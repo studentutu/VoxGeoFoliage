@@ -10,7 +10,8 @@ using UnityEngine.Rendering;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// [INTEGRATION] Owns per-slot instance buffers, indirect args, runtime materials, and draw submission.
+    /// [INTEGRATION] Owns draw-slot-scoped runtime materials, indirect args, and final draw submission.
+    /// Current shipped limitation: every registered draw slot is treated as active once a frame is bound; non-zero-slot compaction is not implemented yet.
     /// </summary>
     public sealed class VegetationIndirectRenderer : IDisposable
     {
@@ -63,6 +64,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         /// <summary>
         /// [INTEGRATION] Binds GPU-resident indirect resources prepared by the compute classification/decode path.
+        /// One args record exists per draw slot, and the renderer currently keeps every registered draw slot active for submission.
         /// </summary>
         public void BindGpuResidentFrame(GraphicsBuffer instanceBuffer, GraphicsBuffer argsBuffer, ComputeBuffer slotPackedStartsBuffer)
         {

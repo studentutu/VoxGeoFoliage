@@ -11,6 +11,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
     /// GPU-resident vegetation classification and indirect-emission pipeline for the frozen runtime contracts.
+    /// Current shipped limitation: branch kernels still dispatch across the full scene branch array, and shell-tier work still scans selected-tier nodes linearly.
     /// </summary>
     public sealed class VegetationGpuDecisionPipeline : IDisposable
     {

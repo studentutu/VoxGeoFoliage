@@ -8,6 +8,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
     /// Frozen runtime contract built from scene authoring data.
+    /// It stores exact draw-slot registries, flat tree branch spans, and prototype-local shell metadata.
     /// </summary>
     public sealed class VegetationRuntimeRegistry
     {
