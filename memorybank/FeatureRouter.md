@@ -26,6 +26,12 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - classification
   - classify debug
   - debug classify
+  - gpu oom
+  - device removed
+  - d3d12
+  - base vertex
+  - impostor crash
+  - telemetry
   - scene gizmo
   - LOD
   - spatial grid

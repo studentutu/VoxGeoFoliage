@@ -18,11 +18,32 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             commandBuffer = targetCommandBuffer;
         }
 
+        public void ClearCommandBuffer()
+        {
+            commandBuffer = null;
+        }
+
+        public void SetGlobalBuffer(int nameId, GraphicsBuffer value)
+        {
+            commandBuffer?.SetGlobalBuffer(nameId, value);
+        }
+
+        public void SetGlobalBuffer(int nameId, ComputeBuffer value)
+        {
+            commandBuffer?.SetGlobalBuffer(nameId, value);
+        }
+
+        public void SetGlobalInt(int nameId, int value)
+        {
+            commandBuffer?.SetGlobalInt(nameId, value);
+        }
+
         public void DrawMeshInstancedIndirect(
             Mesh mesh,
             Material material,
             GraphicsBuffer argsBuffer,
-            int argsOffset)
+            int argsOffset,
+            int shaderPass)
         {
             if (mesh == null)
             {
@@ -44,7 +65,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 return;
             }
 
-            commandBuffer.DrawMeshInstancedIndirect(mesh, 0, material, 0, argsBuffer, argsOffset);
+            commandBuffer.DrawMeshInstancedIndirect(mesh, 0, material, shaderPass, argsBuffer, argsOffset);
         }
     }
 }

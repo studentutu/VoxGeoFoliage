@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Unity.Profiling;
 using UnityEngine;
@@ -32,11 +33,17 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private static readonly ProfilerMarker EmitTreeInstancesMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.EmitTreeInstances");
         private static readonly ProfilerMarker EmitBranchInstancesMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.EmitBranchInstances");
         private static readonly ProfilerMarker FinalizeIndirectArgsMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.FinalizeIndirectArgs");
+        private static readonly int CellGpuStrideBytes = Marshal.SizeOf<CellGpu>();
+        private static readonly int LodProfileGpuStrideBytes = Marshal.SizeOf<LodProfileGpu>();
+        private static readonly int BlueprintGpuStrideBytes = Marshal.SizeOf<BlueprintGpu>();
         private static readonly int PlacementGpuStrideBytes = Marshal.SizeOf<PlacementGpu>();
         private static readonly int PrototypeGpuStrideBytes = Marshal.SizeOf<PrototypeGpu>();
+        private static readonly int TreeGpuStrideBytes = Marshal.SizeOf<TreeGpu>();
         private static readonly int TreeVisibilityGpuStrideBytes = Marshal.SizeOf<TreeVisibilityGpu>();
         private static readonly int ExpandedBranchWorkItemStrideBytes = Marshal.SizeOf<VegetationBranchDecisionRecord>();
+        private static readonly int SlotGpuStrideBytes = Marshal.SizeOf<SlotGpu>();
         private static readonly int VisibleInstanceStrideBytesInternal = Marshal.SizeOf<VegetationIndirectInstanceData>();
+        private const int UIntStrideBytes = sizeof(uint);
         private readonly ComputeShader classifyShader;
         private readonly VegetationRuntimeRegistry registry;
         private readonly int resetFrameStateKernel;
@@ -116,6 +123,19 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             public long EmittedVisibleInstanceCount { get; }
         }
 
+        public readonly struct PreparedFrameSlotTelemetry
+        {
+            public PreparedFrameSlotTelemetry(int slotIndex, uint emittedInstanceCount)
+            {
+                SlotIndex = slotIndex;
+                EmittedInstanceCount = emittedInstanceCount;
+            }
+
+            public int SlotIndex { get; }
+
+            public uint EmittedInstanceCount { get; }
+        }
+
         public GraphicsBuffer ResidentInstanceBuffer => residentInstanceBuffer;
 
         public GraphicsBuffer ResidentArgsBuffer => residentArgsBuffer;
@@ -127,6 +147,22 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public bool HasResidentFramePrepared => residentFramePrepared;
 
         public int BlueprintCount => registry.TreeBlueprints.Count;
+
+        public int CellCount => registry.SpatialGrid.Cells.Count;
+
+        public int AllocatedCellBufferElementCount => Mathf.Max(1, CellCount);
+
+        public long CellBufferBytes => checked((long)AllocatedCellBufferElementCount * CellGpuStrideBytes);
+
+        public int LodProfileCount => registry.LodProfiles.Count;
+
+        public int AllocatedLodProfileBufferElementCount => Mathf.Max(1, LodProfileCount);
+
+        public long LodProfileBufferBytes => checked((long)AllocatedLodProfileBufferElementCount * LodProfileGpuStrideBytes);
+
+        public int AllocatedBlueprintBufferElementCount => Mathf.Max(1, BlueprintCount);
+
+        public long BlueprintBufferBytes => checked((long)AllocatedBlueprintBufferElementCount * BlueprintGpuStrideBytes);
 
         public int BlueprintPlacementCount => registry.BlueprintBranchPlacements.Count;
 
@@ -140,6 +176,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         public long PrototypeBufferBytes => checked((long)AllocatedPrototypeBufferElementCount * PrototypeGpuStrideBytes);
 
+        public int TreeCount => registry.TreeInstances.Count;
+
+        public int AllocatedTreeBufferElementCount => Mathf.Max(1, TreeCount);
+
+        public long TreeBufferBytes => checked((long)AllocatedTreeBufferElementCount * TreeGpuStrideBytes);
+
         public int AllocatedTreeVisibilityBufferElementCount => Mathf.Max(1, registry.TreeInstances.Count);
 
         public long TreeVisibilityBufferBytes => checked((long)AllocatedTreeVisibilityBufferElementCount * TreeVisibilityGpuStrideBytes);
@@ -147,6 +189,24 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public int ExpandedBranchWorkItemCapacity => visibleInstanceCapacity;
 
         public long ExpandedBranchWorkItemBufferBytes => checked((long)ExpandedBranchWorkItemCapacity * ExpandedBranchWorkItemStrideBytes);
+
+        public int DrawSlotCount => registry.DrawSlots.Count;
+
+        public int AllocatedDrawSlotBufferElementCount => Mathf.Max(1, DrawSlotCount);
+
+        public long SlotMetadataBufferBytes => checked((long)AllocatedDrawSlotBufferElementCount * SlotGpuStrideBytes);
+
+        public long SlotRequestedInstanceCountBufferBytes => checked((long)AllocatedDrawSlotBufferElementCount * UIntStrideBytes);
+
+        public long SlotEmittedInstanceCountBufferBytes => checked((long)AllocatedDrawSlotBufferElementCount * UIntStrideBytes);
+
+        public long SlotPackedStartsBufferBytes => checked((long)AllocatedDrawSlotBufferElementCount * UIntStrideBytes);
+
+        public long CellVisibilityBufferBytes => checked((long)AllocatedCellBufferElementCount * UIntStrideBytes);
+
+        public long ExpandedBranchWorkItemCountBufferBytes => UIntStrideBytes;
+
+        public long FrameStatsBufferBytes => checked((long)FrameStatCount * UIntStrideBytes);
 
         public long TotalBranchTelemetryBufferBytes => checked(
             BlueprintPlacementBufferBytes +
@@ -157,6 +217,31 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public int VisibleInstanceStrideBytes => VisibleInstanceStrideBytesInternal;
 
         public long VisibleInstanceCapacityBytes => checked((long)visibleInstanceCapacity * VisibleInstanceStrideBytesInternal);
+
+        public long IndirectArgsBufferBytes => checked((long)Mathf.Max(1, DrawSlotCount) * GraphicsBuffer.IndirectDrawIndexedArgs.size);
+
+        public long TotalComputeBufferBytes => checked(
+            CellBufferBytes +
+            LodProfileBufferBytes +
+            BlueprintBufferBytes +
+            BlueprintPlacementBufferBytes +
+            PrototypeBufferBytes +
+            TreeBufferBytes +
+            TreeVisibilityBufferBytes +
+            ExpandedBranchWorkItemBufferBytes +
+            ExpandedBranchWorkItemCountBufferBytes +
+            FrameStatsBufferBytes +
+            SlotMetadataBufferBytes +
+            SlotRequestedInstanceCountBufferBytes +
+            SlotEmittedInstanceCountBufferBytes +
+            SlotPackedStartsBufferBytes +
+            CellVisibilityBufferBytes);
+
+        public long TotalGraphicsBufferBytes => checked(
+            VisibleInstanceCapacityBytes +
+            IndirectArgsBufferBytes);
+
+        public long TotalGpuBufferBytes => checked(TotalComputeBufferBytes + TotalGraphicsBufferBytes);
 
         public VegetationGpuDecisionPipeline(ComputeShader classifyShader, VegetationRuntimeRegistry registry, int visibleInstanceCapacity)
         {
@@ -231,26 +316,26 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// <summary>
         /// [INTEGRATION] Executes the full GPU-resident classification and tree-first accepted-content emission path into indirect draw resources.
         /// </summary>
-        public void PrepareResidentFrame(Vector3 cameraWorldPosition, Plane[] frustumPlanes)
+        public void PrepareResidentFrame(Vector3 cameraWorldPosition, Plane[] frustumPlanes, bool allowExpandedTreePromotion)
         {
             using (PrepareResidentFrameMarker.Auto())
             {
                 if (disposed)
                 {
-                    throw new ObjectDisposedException(nameof(VegetationGpuDecisionPipeline));
+                    return;
                 }
 
                 if (frustumPlanes == null)
                 {
-                    throw new ArgumentNullException(nameof(frustumPlanes));
+                    return;
                 }
 
                 if (frustumPlanes.Length < 6)
                 {
-                    throw new ArgumentException("The urgent GPU frustum classification requires six frustum planes.", nameof(frustumPlanes));
+                   return;
                 }
 
-                UploadDynamicFrameData(cameraWorldPosition, frustumPlanes);
+                UploadDynamicFrameData(cameraWorldPosition, frustumPlanes, allowExpandedTreePromotion);
 
                 using (ResetFrameStateMarker.Auto())
                 {
@@ -260,7 +345,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 DispatchKernel(classifyCellsKernel, registry.SpatialGrid.Cells.Count);
                 DispatchKernel(classifyTreesKernel, registry.TreeInstances.Count);
                 DispatchKernel(acceptTreeTiersKernel, 1);
-                DispatchKernel(generateExpandedBranchWorkItemsKernel, registry.TreeInstances.Count);
 
                 DispatchKernel(resetSlotCountsKernel, registry.DrawSlots.Count);
 
@@ -269,9 +353,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     DispatchKernel(countTreesKernel, registry.TreeInstances.Count);
                 }
 
-                using (CountBranchInstancesMarker.Auto())
+                if (allowExpandedTreePromotion)
                 {
-                    DispatchKernel(countExpandedBranchesKernel, visibleInstanceCapacity);
+                    DispatchKernel(generateExpandedBranchWorkItemsKernel, registry.TreeInstances.Count);
+
+                    using (CountBranchInstancesMarker.Auto())
+                    {
+                        DispatchKernel(countExpandedBranchesKernel, visibleInstanceCapacity);
+                    }
                 }
 
                 using (BuildSlotStartsMarker.Auto())
@@ -284,9 +373,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     DispatchKernel(emitTreesKernel, registry.TreeInstances.Count);
                 }
 
-                using (EmitBranchInstancesMarker.Auto())
+                if (allowExpandedTreePromotion)
                 {
-                    DispatchKernel(emitExpandedBranchesKernel, visibleInstanceCapacity);
+                    using (EmitBranchInstancesMarker.Auto())
+                    {
+                        DispatchKernel(emitExpandedBranchesKernel, visibleInstanceCapacity);
+                    }
                 }
 
                 using (FinalizeIndirectArgsMarker.Auto())
@@ -316,18 +408,19 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// </summary>
         public PreparedFrameTelemetry ReadbackPreparedFrameTelemetry()
         {
+            if (disposed)
+            {
+                return new PreparedFrameTelemetry();
+            }
+
             if (!residentFramePrepared)
             {
-                throw new InvalidOperationException("Prepared-frame telemetry requires a resident frame.");
+              return new PreparedFrameTelemetry();
             }
 
             EnsureFrameStatsReadbackCapacity();
             frameStatsBuffer.GetData(frameStatsReadback, 0, 0, FrameStatCount);
-            EnsureSlotEmittedCountsReadbackCapacity(registry.DrawSlots.Count);
-            if (registry.DrawSlots.Count > 0)
-            {
-                slotEmittedInstanceCountBuffer.GetData(slotEmittedCountsReadback, 0, 0, registry.DrawSlots.Count);
-            }
+            ReadbackSlotEmittedCounts();
 
             int nonZeroEmittedSlots = 0;
             long emittedVisibleInstanceCount = 0L;
@@ -354,6 +447,40 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 (int)frameStatsReadback[FrameStatAcceptedTierCostUsage],
                 nonZeroEmittedSlots,
                 emittedVisibleInstanceCount);
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Reads back the emitted instance count for every non-zero draw slot in the prepared frame so diagnostics can estimate draw workload.
+        /// </summary>
+        public void ReadbackPreparedFrameSlotTelemetry(List<PreparedFrameSlotTelemetry> target)
+        {
+            if (disposed)
+            {
+                return;
+            }
+            
+            if (target == null)
+            {
+                return;
+            }
+
+            if (!residentFramePrepared)
+            {
+               return;
+            }
+
+            target.Clear();
+            ReadbackSlotEmittedCounts();
+            for (int slotIndex = 0; slotIndex < registry.DrawSlots.Count; slotIndex++)
+            {
+                uint emittedCount = slotEmittedCountsReadback[slotIndex];
+                if (emittedCount == 0u)
+                {
+                    continue;
+                }
+
+                target.Add(new PreparedFrameSlotTelemetry(slotIndex, emittedCount));
+            }
         }
 
         private void UploadStaticData()
@@ -472,7 +599,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 {
                     IndexCountPerInstance = drawSlot.IndexCountPerInstance,
                     StartIndexLocation = drawSlot.StartIndexLocation,
-                    BaseVertexIndex = checked((uint)drawSlot.BaseVertexLocation)
+                    BaseVertexLocation = drawSlot.BaseVertexLocation
                 };
             }
 
@@ -547,7 +674,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             classifyShader.SetBuffer(finalizeIndirectArgsKernel, "_IndirectArgs", residentArgsBuffer);
         }
 
-        private void UploadDynamicFrameData(Vector3 cameraWorldPosition, Plane[] frustumPlanes)
+        private void UploadDynamicFrameData(Vector3 cameraWorldPosition, Plane[] frustumPlanes, bool allowExpandedTreePromotion)
         {
             for (int i = 0; i < 6; i++)
             {
@@ -560,10 +687,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             classifyShader.SetVectorArray("_FrustumPlanes", frustumPlaneVectors);
             classifyShader.SetInt("_CellCount", registry.SpatialGrid.Cells.Count);
             classifyShader.SetInt("_TreeCount", registry.TreeInstances.Count);
+            classifyShader.SetInt("_LodProfileCount", registry.LodProfiles.Count);
+            classifyShader.SetInt("_BlueprintCount", registry.TreeBlueprints.Count);
             classifyShader.SetInt("_PlacementCount", registry.BlueprintBranchPlacements.Count);
+            classifyShader.SetInt("_PrototypeCount", registry.BranchPrototypes.Count);
             classifyShader.SetInt("_DrawSlotCount", registry.DrawSlots.Count);
             classifyShader.SetInt("_VisibleInstanceCapacity", visibleInstanceCapacity);
             classifyShader.SetInt("_ExpandedBranchWorkItemCapacity", visibleInstanceCapacity);
+            classifyShader.SetInt("_AllowExpandedTierPromotion", allowExpandedTreePromotion ? 1 : 0);
         }
 
         private void DispatchKernel(int kernelIndex, int itemCount)
@@ -596,6 +727,17 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             frameStatsReadback = new uint[FrameStatCount];
+        }
+
+        private void ReadbackSlotEmittedCounts()
+        {
+            EnsureSlotEmittedCountsReadbackCapacity(registry.DrawSlots.Count);
+            if (registry.DrawSlots.Count <= 0)
+            {
+                return;
+            }
+
+            slotEmittedInstanceCountBuffer.GetData(slotEmittedCountsReadback, 0, 0, registry.DrawSlots.Count);
         }
 
         private void ReleaseResources()
@@ -751,7 +893,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             public uint IndexCountPerInstance;
             public uint StartIndexLocation;
-            public uint BaseVertexIndex;
+            public int BaseVertexLocation;
             public uint Padding0;
         }
     }

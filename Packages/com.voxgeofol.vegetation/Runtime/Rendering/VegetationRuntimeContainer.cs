@@ -15,10 +15,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     public sealed class VegetationRuntimeContainer : MonoBehaviour
     {
         // shared instance payload is about 144 bytes per visible instance
-        // so 262144 is roughly 36 MB just for the packed instance buffer
+        // so 131072 is roughly 18 MB just for the packed instance buffer
         // Don’t raise it blindly.
         // this is a chunk of data for a single container!
-        private const int DefaultMaxVisibleInstanceCapacity = 262144;
+        private const int DefaultMaxVisibleInstanceCapacity = 131072;
 
         [Tooltip("World-space origin of the frozen spatial grid built during runtime registration.")]
         [SerializeField] private Vector3 gridOrigin = Vector3.zero;

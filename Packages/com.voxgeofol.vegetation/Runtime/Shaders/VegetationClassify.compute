@@ -121,7 +121,7 @@ struct SlotGpu
 {
     uint indexCountPerInstance;
     uint startIndexLocation;
-    uint baseVertexIndex;
+    int baseVertexLocation;
     uint padding0;
 };
 
@@ -148,10 +148,14 @@ float4 _CameraWorldPosition;
 float4 _FrustumPlanes[6];
 int _CellCount;
 int _TreeCount;
+int _LodProfileCount;
+int _BlueprintCount;
 int _PlacementCount;
+int _PrototypeCount;
 int _DrawSlotCount;
 int _VisibleInstanceCapacity;
 int _ExpandedBranchWorkItemCapacity;
+int _AllowExpandedTierPromotion;
 
 static const int FrameStatVisibleTrees = 0;
 static const int FrameStatAcceptedTreeL3 = 1;
@@ -311,14 +315,29 @@ VegetationInstanceData CreateInstanceData(float4x4 objectToWorld, float4x4 world
     return instanceData;
 }
 
+bool IsValidIndex(int index, int count)
+{
+    return index >= 0 && index < count;
+}
+
 void CountInstance(uint slotIndex)
 {
+    if (slotIndex >= (uint)_DrawSlotCount)
+    {
+        return;
+    }
+
     uint ignored;
     InterlockedAdd(_SlotRequestedInstanceCounts[slotIndex], 1u, ignored);
 }
 
 void EmitInstance(uint slotIndex, VegetationInstanceData instanceData)
 {
+    if (slotIndex >= (uint)_DrawSlotCount)
+    {
+        return;
+    }
+
     uint localOffset;
     InterlockedAdd(_SlotEmittedInstanceCounts[slotIndex], 1u, localOffset);
     uint packedIndex = _SlotPackedStarts[slotIndex] + localOffset;
@@ -436,10 +455,6 @@ void ClassifyTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
-    TreeGpu tree = _Trees[treeIndex];
-    BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
-    LodProfileGpu lodProfile = _LodProfiles[blueprint.lodProfileIndex];
-
     TreeVisibilityGpu visibility;
     visibility.treeDistance = 0.0f;
     visibility.priorityRing = 0;
@@ -450,7 +465,26 @@ void ClassifyTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
     visibility.padding0 = 0u;
     visibility.padding1 = 0u;
 
-    if (tree.cellIndex < 0 || _CellVisibility[tree.cellIndex] == 0u || !TestFrustumBounds(tree.worldBounds))
+    TreeGpu tree = _Trees[treeIndex];
+    if (!IsValidIndex(tree.blueprintIndex, _BlueprintCount))
+    {
+        _TreeVisibility[treeIndex] = visibility;
+        return;
+    }
+
+    BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
+    if (!IsValidIndex(blueprint.lodProfileIndex, _LodProfileCount))
+    {
+        _TreeVisibility[treeIndex] = visibility;
+        return;
+    }
+
+    LodProfileGpu lodProfile = _LodProfiles[blueprint.lodProfileIndex];
+
+    if (tree.cellIndex < 0 ||
+        tree.cellIndex >= _CellCount ||
+        _CellVisibility[tree.cellIndex] == 0u ||
+        !TestFrustumBounds(tree.worldBounds))
     {
         _TreeVisibility[treeIndex] = visibility;
         return;
@@ -599,9 +633,13 @@ void AcceptTreeTiers(uint3 dispatchThreadId : SV_DispatchThreadID)
         _TreeVisibility[treeIndex] = visibility;
     }
 
-    ApplyPromotionStage(TierTreeL3, TierL2, acceptedCostUsage, acceptedTreeL3, promotedL2, rejectedPromotions);
-    ApplyPromotionStage(TierL2, TierL1, acceptedCostUsage, promotedL2, promotedL1, rejectedPromotions);
-    ApplyPromotionStage(TierL1, TierL0, acceptedCostUsage, promotedL1, promotedL0, rejectedPromotions);
+    if (_AllowExpandedTierPromotion != 0)
+    {
+        ApplyPromotionStage(TierTreeL3, TierL2, acceptedCostUsage, acceptedTreeL3, promotedL2, rejectedPromotions);
+        ApplyPromotionStage(TierL2, TierL1, acceptedCostUsage, promotedL2, promotedL1, rejectedPromotions);
+        ApplyPromotionStage(TierL1, TierL0, acceptedCostUsage, promotedL1, promotedL0, rejectedPromotions);
+    }
+
     AcceptFarImpostors(acceptedCostUsage, rejectedPromotions);
 
     _FrameStats[FrameStatVisibleTrees] = visibleTrees;
@@ -665,8 +703,18 @@ void CountExpandedBranch(uint workItemIndex)
     }
 
     BranchDecisionGpu workItem = _ExpandedBranchWorkItems[workItemIndex];
+    if (!IsValidIndex(workItem.treeIndex, _TreeCount) || !IsValidIndex(workItem.branchPlacementIndex, _PlacementCount))
+    {
+        return;
+    }
+
     TreeGpu tree = _Trees[workItem.treeIndex];
     PlacementGpu placement = _Placements[workItem.branchPlacementIndex];
+    if (!IsValidIndex(placement.prototypeIndex, _PrototypeCount))
+    {
+        return;
+    }
+
     PrototypeGpu prototype = _Prototypes[placement.prototypeIndex];
     float4x4 branchObjectToWorld = mul(tree.uploadInstanceData.objectToWorld, placement.localToTree);
 
@@ -690,8 +738,18 @@ void EmitExpandedBranch(uint workItemIndex)
     }
 
     BranchDecisionGpu workItem = _ExpandedBranchWorkItems[workItemIndex];
+    if (!IsValidIndex(workItem.treeIndex, _TreeCount) || !IsValidIndex(workItem.branchPlacementIndex, _PlacementCount))
+    {
+        return;
+    }
+
     TreeGpu tree = _Trees[workItem.treeIndex];
     PlacementGpu placement = _Placements[workItem.branchPlacementIndex];
+    if (!IsValidIndex(placement.prototypeIndex, _PrototypeCount))
+    {
+        return;
+    }
+
     PrototypeGpu prototype = _Prototypes[placement.prototypeIndex];
     float4x4 branchObjectToWorld = mul(tree.uploadInstanceData.objectToWorld, placement.localToTree);
     float4x4 branchWorldToObject = mul(placement.treeToLocal, tree.uploadInstanceData.worldToObject);
@@ -742,6 +800,11 @@ void CountTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     TreeGpu tree = _Trees[treeIndex];
+    if (!IsValidIndex(tree.blueprintIndex, _BlueprintCount))
+    {
+        return;
+    }
+
     BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
     CountInstance((uint)ResolveAcceptedTreeDrawSlot(blueprint, visibility.acceptedTier));
 }
@@ -784,6 +847,11 @@ void EmitTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     TreeGpu tree = _Trees[treeIndex];
+    if (!IsValidIndex(tree.blueprintIndex, _BlueprintCount))
+    {
+        return;
+    }
+
     BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
     EmitInstance(
         (uint)ResolveAcceptedTreeDrawSlot(blueprint, visibility.acceptedTier),
@@ -820,6 +888,6 @@ void FinalizeIndirectArgs(uint3 dispatchThreadId : SV_DispatchThreadID)
         slot.indexCountPerInstance,
         instanceCount,
         slot.startIndexLocation,
-        slot.baseVertexIndex));
+        asuint(slot.baseVertexLocation)));
     _IndirectArgs.Store(argsOffset + 16u, 0u);
 }

@@ -13,7 +13,8 @@ Current implementation note (`2026-04-12`):
 - Runtime uses tree spheres from registration for coarse tree classification, then generates branch bounds and shell-node bounds on GPU per frame from prototype-local bounds plus branch transforms.
 - Visible instances are now counted and packed into one hard-bounded shared GPU instance buffer every frame. `VegetationRuntimeContainer.maxVisibleInstanceCapacity` is the active runtime budget; overflow clamps instead of reallocating scene-scale per-slot or per-node memory.
 - `VegetationIndirectRenderer` does not currently compact active slots on the bind hot path. Synchronous CPU readback of `_SlotEmittedInstanceCounts` caused a constant multi-millisecond stall, so registered draw slots stay active after bind and non-zero slot counts remain diagnostics-only telemetry.
-- The bundled package shaders now carry main-light shadow attenuation and `ShadowCaster` passes, but the indirect runtime still only submits depth and color passes. Full vegetation shadow-atlas submission remains separate follow-up work.
+- The bundled package shaders now carry main-light shadow attenuation and `ShadowCaster` passes, and `VegetationRendererFeature` now appends indirect vegetation casters into the URP main-light shadow atlas through a render-graph unsafe pass.
+- Current shipped shadow limits are still strict: main-light directional shadows only, cascade-specific resident frames derived from the camera-visible vegetation set, default `TreeL3`/impostor shadow casters with expanded branch shadow promotion disabled unless explicitly enabled, and no additional-light shadow atlas integration yet.
 - The urgent redesign authority for dense forests is prioritization-first: mandatory tree presence plus nearest-first promotion must land before any later occlusion or submission-count optimization work.
 - Current shipped tree runtime shape is still flat at the tree level: one tree points to a contiguous `SceneBranchStartIndex + SceneBranchCount` span, not a full-tree hierarchy.
 - Current shipped shell-node metadata is branch-local BFS only, and the compute shader does not yet use `firstChildIndex + childMask` for real subtree skip. It linearly scans the selected shell tier and only emits visible leaf meshes.
@@ -47,7 +48,7 @@ The runtime backend is `Graphics.RenderMeshIndirect` driven from a URP renderer 
 
 ## 1.1 High-Level Pipeline
 
-Editor Authoring -> Editor Bake -> Runtime Registration/Flattening -> GPU-primary cell visibility -> GPU tree classification -> GPU branch and hierarchy survival evaluation -> accepted-content prioritization -> GPU-resident count/pack/emit -> optional URP indirect depth pass -> URP indirect color pass
+Editor Authoring -> Editor Bake -> Runtime Registration/Flattening -> GPU-primary cell visibility -> GPU tree classification -> GPU branch and hierarchy survival evaluation -> accepted-content prioritization -> GPU-resident count/pack/emit -> optional URP indirect main-light shadow pass -> URP indirect depth pass -> URP indirect color pass
 
 Key  target principle: minimum draw-calls with minimum geometry.
 
@@ -326,7 +327,7 @@ It is not enough for efficient subtree skipping at scale until the shader actual
 - GPU-resident count/pack/emit of visible instances into one shared bounded buffer
 - `Graphics.RenderMeshIndirect`
 - per-draw-slot indirect args and visible instance buffers
-- URP renderer feature for depth and color pass integration
+- URP renderer feature for main-light shadow, depth, and color pass integration
 
 ---
 
@@ -586,7 +587,7 @@ Per frame:
 8. GPU emits accepted tree representations into the packed visible-instance buffer
 9. GPU finalizes indirect args with instance counts clamped to remaining shared capacity
 10. renderer currently submits registered draw slots after bind; any later compaction must not rely on synchronous CPU readback
-11. URP renders indirect depth and color passes
+11. URP renders indirect main-light shadow, depth, and color passes
 
 ## 6.2 Example Tree Classification Pseudocode
 
@@ -783,9 +784,11 @@ Tree -> Expanded or Impostor -> flat branch span -> BranchDecision -> shell-tier
 
 `VegetationRendererFeature` owns:
 - the shared `VegetationClassify.compute` asset reference through feature settings
+- indirect main-light shadow pass
 - indirect depth pass
 - indirect color pass
 - `VegetationFoliageFeatureSettings.EnableDiagnostics` as the current shipped runtime-review telemetry gate for registration, preparation, indirect submission, exact branch/shell/visible-instance byte logs, and one-shot emitted-slot readback
+- no-throw render-loop behavior: unsupported/runtime-faulted paths must log and fault-disable instead of throwing out of URP render-graph callbacks
 - optional later optimization hook points for depth-aware culling or other submission reductions after prioritization is stable
 
 `VegetationRuntimeContainer` still owns runtime registration and GPU-frame preparation; urgent dense-forest work should keep that path focused on accepted-content prioritization first. It is not a BRG wrapper.

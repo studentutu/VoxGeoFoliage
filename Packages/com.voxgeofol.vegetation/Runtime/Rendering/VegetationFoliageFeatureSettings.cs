@@ -24,6 +24,18 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         [Tooltip("Render event for the vegetation color pass after the GPU-resident frame has been prepared.")]
         public RenderPassEvent ColorPassEvent = RenderPassEvent.AfterRenderingOpaques;
 
+        /// <summary>
+        /// Main-light shadow atlas submission runs here.
+        /// </summary>
+        [Tooltip("Render event for vegetation shadow-map submission. Current contract: main-light directional shadow atlas only, using cascade-specific resident frames derived from the camera-visible vegetation set.")]
+        public RenderPassEvent ShadowPassEvent = RenderPassEvent.AfterRenderingShadows;
+
+        [Tooltip("When enabled, the feature appends vegetation shadow casters into the main-light shadow atlas. Current contract: main-light directional shadows only, using cascade-specific resident frames derived from the camera-visible vegetation set.")]
+        public bool RenderMainLightShadows = true;
+
+        [Tooltip("When disabled, shadow preparation clamps visible non-far vegetation to the TreeL3 floor and skips expanded branch shadow casters. Keep this off unless you can afford the GPU cost of dense near-shadow foliage.")]
+        public bool AllowExpandedTreePromotionInShadows;
+
         [Tooltip("When enabled, vegetation renders for Game cameras.")]
         public bool RenderGameCameras = true;
 

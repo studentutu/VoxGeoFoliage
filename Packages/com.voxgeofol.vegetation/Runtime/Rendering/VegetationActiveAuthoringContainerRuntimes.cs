@@ -92,6 +92,20 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
         }
 
+        /// <summary>
+        /// [INTEGRATION] Clears the static runtime-owner registry and releases runtime state for editor/play-mode resets.
+        /// </summary>
+        public static void Reset()
+        {
+            for (int i = ActiveRuntimesInternal.Count - 1; i >= 0; i--)
+            {
+                ActiveRuntimesInternal[i]?.HandleRegistrySuperseded();
+            }
+
+            ActiveRuntimesInternal.Clear();
+            ActiveRuntimesByContainerId.Clear();
+        }
+
         private static void ReplaceActiveRuntime(AuthoringContainerRuntime incomingRuntime, AuthoringContainerRuntime existingRuntime)
         {
             int activeIndex = ActiveRuntimesInternal.IndexOf(existingRuntime);

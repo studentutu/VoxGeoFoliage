@@ -10,7 +10,7 @@
 
 ## Summary
 
-`com.voxgeofol.vegetation` is a Unity 6 URP package for opaque-only, branch-assembled vegetation with a GPU-resident tree-first runtime path. Authorings are frozen into a container-owned runtime registry, every visible non-far tree is accepted to at least `TreeL3` before optional branch expansion, and URP submits the compact accepted-content set through indirect depth and color passes.
+`com.voxgeofol.vegetation` is a Unity 6 URP package for opaque-only, branch-assembled vegetation with a GPU-resident tree-first runtime path. Authorings are frozen into a container-owned runtime registry, every visible non-far tree is accepted to at least `TreeL3` before optional branch expansion, and URP submits the compact accepted-content set through indirect main-light shadow, depth, and color passes.
 
 ## Highlights
 
@@ -41,7 +41,7 @@
 3. If different trees or branch prototypes resolve to the same slot key, they batch into the same indirect draw.
 4. If mesh, material, or material kind changes, a new draw slot is created.
 5. Instance count grows instance-buffer usage; draw-slot count is what grows draw calls.
-6. The renderer pays active slots once in depth and once in color. Current shipped limitation: once a frame is bound, active slots equal every registered slot for that container.
+6. The renderer pays active submitted slots once in depth and once in color. Current shipped safety path synchronously filters submission to the non-zero emitted subset after bind.
 
 Examples:
 
@@ -91,13 +91,19 @@ Examples:
    World-space origin of the frozen spatial grid. It changes cell assignment and culling layout.
 2. `VegetationRuntimeContainer.cellSize`
    World-space size of the frozen spatial grid. Smaller cells improve culling granularity but increase cell count; larger cells are cheaper but more conservative.
-3. `VegetationRendererFeature.DepthPassEvent`
+3. `VegetationFoliageFeatureSettings.ShadowPassEvent`
+   URP event for vegetation main-light shadow submission. Current contract: main-light directional atlas only, using cascade-specific resident frames derived from the camera-visible vegetation set.
+4. `VegetationFoliageFeatureSettings.RenderMainLightShadows`
+   Enables or disables vegetation submission into the URP main-light shadow atlas.
+5. `VegetationFoliageFeatureSettings.AllowExpandedTreePromotionInShadows`
+   When disabled, shadow preparation clamps visible non-far vegetation to the `TreeL3` floor and skips expanded branch shadow casters. This is the default because dense near-shadow foliage can otherwise cause pathological GPU cost and even device removal on D3D12.
+5. `VegetationFoliageFeatureSettings.DepthPassEvent`
    URP event for vegetation depth submission. The first vegetation pass of the frame also prepares the GPU-resident buffers.
-4. `VegetationRendererFeature.ColorPassEvent`
+6. `VegetationFoliageFeatureSettings.ColorPassEvent`
    URP event for vegetation color submission. It controls ordering against the rest of the opaque pipeline.
-5. `VegetationFoliageFeatureSettings.EnableDiagnostics`
+7. `VegetationFoliageFeatureSettings.EnableDiagnostics`
    Renderer-wide diagnostics toggle for every active container rendered by that feature. This is also the switch for current runtime-review telemetry in the Unity Console.
-6. `VegetationRuntimeContainer.maxVisibleInstanceCapacity`
+8. `VegetationRuntimeContainer.maxVisibleInstanceCapacity`
    Per-container hard cap for visible packed instances. This does not define a global full-scene budget unless the whole scene is rendered through one container.
 
 ## Diagnostics
@@ -115,13 +121,15 @@ Current shipped diagnostics include:
    `blueprintPlacementBufferBytes`, `prototypeBufferBytes`, `treeVisibilityBufferBytes`, `expandedBranchWorkItemBufferBytes`, `totalBranchTelemetryBufferBytes`, `visibleInstanceStrideBytes`, and `visibleInstanceCapacityBytes`.
 3. One-shot prepared-frame acceptance telemetry:
    `visibleTrees`, `acceptedTreeL3`, `promotedL2`, `promotedL1`, `promotedL0`, `rejectedPromotions`, `expandedTrees`, `expandedBranchWorkItems`, `acceptedTierCostUsage`, `nonZeroEmittedSlots`, `emittedVisibleInstances`, and `emittedVisibleInstanceBytes`.
-4. Final render-prep diagnostics now surface the registered-slot submission set from `VegetationIndirectRenderer`, while prepared-frame telemetry still reports the non-zero emitted slot subset from the GPU pipeline.
+4. Final render-prep diagnostics now surface the submitted non-zero slot set from `VegetationIndirectRenderer`, while prepared-frame telemetry reports the same non-zero emitted subset from the GPU pipeline.
+5. Per-slot render diagnostics now include mesh name, material kind, emitted instance count, index count, start index, base vertex, shader pass, and runtime shader name for the submitted subset.
 
 Scope note:
 
 1. This is current runtime-review telemetry only.
-2. `nonZeroEmittedSlots` and emitted visible-instance totals still come from one synchronous CPU readback of `_SlotEmittedInstanceCounts` inside diagnostics-only prepared-frame telemetry. `BindGpuResidentFrame()` no longer performs that readback on the hot path, but diagnostics should still stay off outside review.
-3. Dense-forest validation still needs scene-level visual review; the runtime logs the counts, but it does not replace inspecting the one-container forest scenario from `DetailedDocs/urgentRedesign.md`.
+2. `nonZeroEmittedSlots`, emitted visible-instance totals, and current submitted-slot filtering now come from a synchronous CPU readback of `_SlotEmittedInstanceCounts`. This is a temporary correctness guard against D3D12 device-removal crashes while the final non-stalling submission path is still pending.
+3. Dense-scene crash review now also depends on the per-slot draw metadata from `VegetationIndirectRenderer`, because recent D3D12 device removals survived the all-zero submission fix and were isolated to a single submitted `Impostor`/`FarMesh` slot.
+4. Dense-forest validation still needs scene-level visual review; the runtime logs the counts, but it does not replace inspecting the one-container forest scenario from `DetailedDocs/urgentRedesign.md`.
 
 ## Capacity And Containers
 
@@ -151,11 +159,11 @@ Scope note:
 | `Registered draw slot` | Shipped | `VegetationRuntimeRegistry.DrawSlots` | One slot that exists in the runtime registry, whether or not the current frame emitted any instances into it. |
 | `Non-zero emitted slot` | Shipped telemetry | `_SlotEmittedInstanceCounts`, `AuthoringContainerRuntime preparedFrameTelemetry` | One draw slot whose emitted instance count is greater than zero for the prepared frame. This is the measured submission-worthy subset. |
 | `Visible instance` | Shipped | Packed into `residentInstanceBuffer`; bounded by `VegetationRuntimeContainer.maxVisibleInstanceCapacity` | Final draw-ready instance payload written by the compute path. Many visible instances can map to one draw slot. |
-| `Indirect submission` | Shipped urgent path | `VegetationIndirectRenderer.Render()` depth/color calls | One final `DrawMeshInstancedIndirect` call for one active registered draw slot in one pass. Current shipped limitation: the active set equals all registered draw slots after bind, not only the non-zero emitted subset. |
+| `Indirect submission` | Shipped urgent path | `VegetationIndirectRenderer.Render()` depth/color calls | One final `DrawMeshInstancedIndirect` call for one active submitted draw slot in one pass. Current shipped path filters the active set to the non-zero emitted subset after bind. |
 | `Branch split tier` | Shipped urgent path | `BranchPrototypeSO.branchL1/2/3CanopyMesh`, `BranchPrototypeSO.branchL1WoodMesh`, `shellL1WoodMesh`, `shellL2WoodMesh` | Separate baked canopy and wood meshes used for promoted branch-expanded `L1/L2/L3`; no BFS traversal is involved. |
 | `Accepted tree tier` | Shipped urgent path | `VegetationGpuDecisionPipeline`, `TreeVisibilityGpu.acceptedTier` | The one final representation chosen for one visible tree in the current frame: `Impostor`, `TreeL3`, `L2`, `L1`, or `L0`. |
 | `Compact expanded branch work item` | Shipped urgent path | `_ExpandedBranchWorkItems`, promoted-tree branch count/emit kernels | Per-frame branch placement work generated only for trees already promoted above `TreeL3`. |
-| `Active-slot filtering` | Deferred follow-up | `VegetationIndirectRenderer.BindGpuResidentFrame()` | Desired final submission compaction to the non-zero emitted subset. It is not currently shipped because synchronous CPU readback in the bind hot path stalled frames. |
+| `Active-slot filtering` | Shipped temporary safety path | `VegetationIndirectRenderer.BindGpuResidentFrame()` | Synchronous CPU readback filters submission to the non-zero emitted subset after bind. This is a correctness/stability guard and is expected to be replaced by a non-stalling path later. |
 
 ## Current Lifecycle
 
@@ -182,7 +190,7 @@ VegetationRuntimeContainer.registeredAuthorings
 
 ```text
 Camera
--> VegetationRendererFeature depth/color pass setup
+-> VegetationRendererFeature shadow/depth/color pass setup
 -> VegetationActiveAuthoringContainerRuntimes.GetActive()
 -> AuthoringContainerRuntime.PrepareFrameForCamera()
 -> VegetationGpuDecisionPipeline.PrepareResidentFrame()
@@ -203,7 +211,8 @@ Camera
 -> slotEmittedInstanceCountsBuffer   diagnostics readback source for non-zero emitted slots
 -> VegetationIndirectRenderer.BindGpuResidentFrame()
 -> bind shared buffers for registered draw slots when GPU resources change
--> active draw slots after bind      current shipped limitation: every registered draw slot
+-> active draw slots after bind      current shipped path: submitted non-zero emitted subset
+-> URP Main-Light Shadow Pass: DrawMeshInstancedIndirect per active draw slot after bind
 -> URP Depth Pass: DrawMeshInstancedIndirect per active draw slot after bind
 -> URP Color Pass: DrawMeshInstancedIndirect per active draw slot after bind
 -> final URP indirect submissions
@@ -231,12 +240,12 @@ Per-frame worklists:
 2. `residentInstanceBuffer` and `residentArgsBuffer`
    Frame-local accepted-content outputs used for indirect submission.
 3. `slotEmittedInstanceCountsBuffer` and `ActiveSlotIndices`
-   `slotEmittedInstanceCountsBuffer` is diagnostics telemetry for the non-zero emitted subset. `ActiveSlotIndices` currently mirrors every registered draw slot after bind so the renderer avoids synchronous CPU compaction on the hot path.
+   `slotEmittedInstanceCountsBuffer` is both diagnostics telemetry and the current temporary submission filter for the non-zero emitted subset. `ActiveSlotIndices` now mirrors only the submitted non-zero emitted slots after bind.
 
 ### What This Means Operationally
 
 1. `VegetationRuntimeContainer.maxVisibleInstanceCapacity` limits packed visible instances, not draw slots.
-2. `DrawSlots.Count` controls how many potential indirect submissions exist for a container, and the current renderer keeps that full registered-slot submission surface once a frame is bound. The non-zero emitted subset is telemetry only until compaction returns through a non-stalling path.
+2. `DrawSlots.Count` controls how many potential indirect submissions exist for a container, but the current shipped renderer now submits only the non-zero emitted subset after bind through a synchronous CPU readback safety path.
 3. Runtime memory no longer scales with pre-populated scene-wide branch ownership. Branch work exists only for trees that already promoted above `TreeL3`.
 4. Dense-forest survival is decided before slot packing: every visible non-far tree is accepted to at least `TreeL3`, and only then can nearer trees spend budget on branch-expanded detail.
 
@@ -244,7 +253,7 @@ Per-frame worklists:
 
 1. Registration is `serialized authorings -> VegetationTreeAuthoringRuntime[] -> VegetationRuntimeRegistry`.
 2. Per-camera work is `camera -> GPU classification/emission -> shared instance buffer + indirect args`.
-3. Final rendering is `shared instance buffer + indirect args -> depth pass + color pass -> one indirect submission per active draw slot per pass`.
+3. Final rendering is `shared instance buffer + indirect args -> main-light shadow pass + depth pass + color pass -> one indirect submission per active draw slot per pass`.
 4. `changed transforms / hierarchy / blueprint data -> RefreshRuntimeRegistration() -> rebuilt runtime state`
 
 ## Important Limitations
@@ -262,7 +271,7 @@ Per-frame worklists:
 11. The urgent runtime now reprioritizes inside one container with `TreeL3` floor plus nearest-first promotion, but there is still no global cross-container arbiter.
 12. Multi-container prioritization stays unresolved follow-up work; the dense-forest one-container design authority remains [../../DetailedDocs/urgentRedesign.md](../../DetailedDocs/urgentRedesign.md).
 13. Closed `SubScene` runtime loading requires `SubSceneAuthoring` on the same GameObject as `VegetationRuntimeContainer`; the plain container alone is only the classic-scene lifecycle provider.
-14. The bundled package shaders now include a `ShadowCaster` pass and main-light shadow attenuation, but the current indirect runtime still submits only depth and color passes. That means shader-level shadow support is ready, while full runtime vegetation shadow-atlas submission is still follow-up work.
+14. Runtime shadow support is currently limited to the URP main-light directional shadow atlas, using cascade-specific resident frames derived from the camera-visible vegetation set. Default shipped behavior clamps visible non-far shadow casters to `TreeL3` and skips expanded branch shadow promotion unless `AllowExpandedTreePromotionInShadows` is explicitly enabled. Offscreen vegetation casters and additional-light shadow atlases are still follow-up work.
 
 ## Supported Devices
 

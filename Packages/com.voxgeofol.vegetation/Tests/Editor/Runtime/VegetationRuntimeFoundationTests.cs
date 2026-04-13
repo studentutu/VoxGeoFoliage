@@ -108,8 +108,9 @@ public sealed class VegetationRuntimeFoundationTests
                 List<VegetationIndirectDrawBatchSnapshot> snapshots = new List<VegetationIndirectDrawBatchSnapshot>();
                 indirectRenderer.GetDebugSnapshots(snapshots);
 
-                Assert.AreEqual(registry.DrawSlots.Count, indirectRenderer.ActiveSlotIndices.Count);
-                Assert.AreEqual(registry.DrawSlots.Count, snapshots.Count);
+                int expectedActiveSlotCount = registry.DrawSlots.Count > 1 ? 2 : 1;
+                Assert.AreEqual(expectedActiveSlotCount, indirectRenderer.ActiveSlotIndices.Count);
+                Assert.AreEqual(expectedActiveSlotCount, snapshots.Count);
                 for (int i = 0; i < snapshots.Count; i++)
                 {
                     VegetationIndirectDrawBatchSnapshot snapshot = snapshots[i];
@@ -165,6 +166,29 @@ public sealed class VegetationRuntimeFoundationTests
         VegetationActiveAuthoringContainerRuntimes.GetActive(activeRuntimes);
         Assert.AreEqual(1, activeRuntimes.Count);
         Assert.AreSame(classicRuntime, activeRuntimes[0]);
+    }
+
+    [Test]
+    public void AuthoringContainerRuntime_PrepareFrameForCamera_MissingClassifyShader_ReturnsFalseWithoutFault()
+    {
+        VegetationTreeAuthoring authoring = CreateAuthoring("NoShaderTree", new Vector3(0f, 0f, 10f));
+        Hash128 containerIdHash = Hash128.Compute("PrepareFrame_NoClassifyShader");
+        VegetationTreeAuthoringRuntime runtimeAuthoring = CreateRuntimeAuthoring(authoring, containerIdHash, 0);
+        AuthoringContainerRuntime runtimeOwner = CreateRuntimeOwner(
+            containerIdHash.ToString(),
+            VegetationRuntimeProviderKind.ClassicScene,
+            "NoShaderRuntime",
+            runtimeAuthoring);
+        GameObject cameraObject = new GameObject("RuntimeCamera");
+        createdObjects.Add(cameraObject);
+        Camera camera = cameraObject.AddComponent<Camera>();
+
+        Assert.IsTrue(runtimeOwner.Activate());
+
+        bool prepared = runtimeOwner.PrepareFrameForCamera(camera, null, false);
+
+        Assert.IsFalse(prepared);
+        Assert.IsFalse(runtimeOwner.IsRenderRuntimeFaulted);
     }
 
     private VegetationTreeAuthoring CreateAuthoring(string name, Vector3 worldPosition)

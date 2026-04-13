@@ -274,6 +274,7 @@ These are allowed only when they directly support the three main pillars:
 - package-consumer smoke pass and docs cleanup
 - runtime lifecycle hardening around `RefreshRuntimeRegistration()`
 - diagnostics needed to inspect resolved runtime materials and wind inputs
+- split editor-preview shell data away from the runtime-facing asset graph so runtime assets do not retain preview-only shell payloads once the current urgent path is stabilized
 
 These are not the milestone focus:
 - DFS hierarchy migration
