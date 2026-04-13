@@ -77,8 +77,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private GraphicsBuffer residentInstanceBuffer = null!;
         private GraphicsBuffer residentArgsBuffer = null!;
         private readonly Vector4[] frustumPlaneVectors = new Vector4[6];
-        private uint[] slotEmittedCountsReadback = Array.Empty<uint>();
-        private uint[] frameStatsReadback = Array.Empty<uint>();
         private bool residentFramePrepared;
         private bool disposed;
 
@@ -399,88 +397,27 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             disposed = true;
             ReleaseResources();
-            slotEmittedCountsReadback = Array.Empty<uint>();
-            frameStatsReadback = Array.Empty<uint>();
         }
 
         /// <summary>
-        /// [INTEGRATION] Reads back one prepared-frame summary from emitted slot counts and frame stats so diagnostics can inspect urgent acceptance behavior.
+        /// [INTEGRATION] Synchronous prepared-frame readback is disabled because it introduces render-thread GPU fences.
         /// </summary>
         public PreparedFrameTelemetry ReadbackPreparedFrameTelemetry()
         {
-            if (disposed)
-            {
-                return new PreparedFrameTelemetry();
-            }
-
-            if (!residentFramePrepared)
-            {
-              return new PreparedFrameTelemetry();
-            }
-
-            EnsureFrameStatsReadbackCapacity();
-            frameStatsBuffer.GetData(frameStatsReadback, 0, 0, FrameStatCount);
-            ReadbackSlotEmittedCounts();
-
-            int nonZeroEmittedSlots = 0;
-            long emittedVisibleInstanceCount = 0L;
-            for (int slotIndex = 0; slotIndex < registry.DrawSlots.Count; slotIndex++)
-            {
-                uint emittedCount = slotEmittedCountsReadback[slotIndex];
-                if (emittedCount > 0u)
-                {
-                    nonZeroEmittedSlots++;
-                }
-
-                emittedVisibleInstanceCount += emittedCount;
-            }
-
-            return new PreparedFrameTelemetry(
-                (int)frameStatsReadback[FrameStatVisibleTrees],
-                (int)frameStatsReadback[FrameStatAcceptedTreeL3],
-                (int)frameStatsReadback[FrameStatPromotedL2],
-                (int)frameStatsReadback[FrameStatPromotedL1],
-                (int)frameStatsReadback[FrameStatPromotedL0],
-                (int)frameStatsReadback[FrameStatRejectedPromotions],
-                (int)frameStatsReadback[FrameStatExpandedTrees],
-                (int)frameStatsReadback[FrameStatExpandedBranchWorkItems],
-                (int)frameStatsReadback[FrameStatAcceptedTierCostUsage],
-                nonZeroEmittedSlots,
-                emittedVisibleInstanceCount);
+            return default;
         }
 
         /// <summary>
-        /// [INTEGRATION] Reads back the emitted instance count for every non-zero draw slot in the prepared frame so diagnostics can estimate draw workload.
+        /// [INTEGRATION] Synchronous prepared-frame slot readback is disabled because it introduces render-thread GPU fences.
         /// </summary>
         public void ReadbackPreparedFrameSlotTelemetry(List<PreparedFrameSlotTelemetry> target)
         {
-            if (disposed)
-            {
-                return;
-            }
-            
             if (target == null)
             {
                 return;
             }
 
-            if (!residentFramePrepared)
-            {
-               return;
-            }
-
             target.Clear();
-            ReadbackSlotEmittedCounts();
-            for (int slotIndex = 0; slotIndex < registry.DrawSlots.Count; slotIndex++)
-            {
-                uint emittedCount = slotEmittedCountsReadback[slotIndex];
-                if (emittedCount == 0u)
-                {
-                    continue;
-                }
-
-                target.Add(new PreparedFrameSlotTelemetry(slotIndex, emittedCount));
-            }
         }
 
         private void UploadStaticData()
@@ -709,37 +646,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private static ComputeBuffer CreateStructuredBuffer<T>(int count) where T : struct
         {
             return new ComputeBuffer(count, Marshal.SizeOf<T>());
-        }
-
-        private void EnsureSlotEmittedCountsReadbackCapacity(int requiredSlotCount)
-        {
-            if (slotEmittedCountsReadback.Length >= requiredSlotCount)
-            {
-                return;
-            }
-
-            slotEmittedCountsReadback = new uint[requiredSlotCount];
-        }
-
-        private void EnsureFrameStatsReadbackCapacity()
-        {
-            if (frameStatsReadback.Length >= FrameStatCount)
-            {
-                return;
-            }
-
-            frameStatsReadback = new uint[FrameStatCount];
-        }
-
-        private void ReadbackSlotEmittedCounts()
-        {
-            EnsureSlotEmittedCountsReadbackCapacity(registry.DrawSlots.Count);
-            if (registry.DrawSlots.Count <= 0)
-            {
-                return;
-            }
-
-            slotEmittedInstanceCountBuffer.GetData(slotEmittedCountsReadback, 0, 0, registry.DrawSlots.Count);
         }
 
         private void ReleaseResources()

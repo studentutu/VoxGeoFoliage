@@ -27,8 +27,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private readonly IReadOnlyList<VegetationTreeAuthoringRuntime> authorings;
         private readonly Plane[] reusableFrustumPlanes = new Plane[6];
-        private readonly List<VegetationGpuDecisionPipeline.PreparedFrameSlotTelemetry> reusablePreparedFrameSlotTelemetry =
-            new List<VegetationGpuDecisionPipeline.PreparedFrameSlotTelemetry>();
         private readonly string containerId;
         private readonly string debugName;
         private readonly UnityEngine.Object? diagnosticsContext;
@@ -421,8 +419,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 indirectRenderer!.BindGpuResidentFrame(
                     pipeline.ResidentInstanceBuffer,
                     pipeline.ResidentArgsBuffer,
-                    pipeline.ResidentSlotPackedStartsBuffer,
-                    pipeline.ResidentSlotEmittedInstanceCountsBuffer);
+                    pipeline.ResidentSlotPackedStartsBuffer);
                 LogPreparedFrameTelemetry(diagnosticsEnabled, pipeline);
                 return indirectRenderer.HasUploadedFrame;
             }
@@ -574,62 +571,22 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private void LogPreparedFrameTelemetry(bool diagnosticsEnabled, VegetationGpuDecisionPipeline pipeline)
         {
-            if (!diagnosticsEnabled || !preparedFrameTelemetryDiagnosticsDirty || registry == null)
+            if (!diagnosticsEnabled || !preparedFrameTelemetryDiagnosticsDirty || registry == null || indirectRenderer == null)
             {
                 return;
             }
 
-            VegetationGpuDecisionPipeline.PreparedFrameTelemetry telemetry = pipeline.ReadbackPreparedFrameTelemetry();
-            long emittedVisibleInstanceBytes = checked(telemetry.EmittedVisibleInstanceCount * pipeline.VisibleInstanceStrideBytes);
-
-            StringBuilder builder = new StringBuilder(384);
+            StringBuilder builder = new StringBuilder(256);
             builder.Append("AuthoringContainerRuntime preparedFrameTelemetry");
             builder.Append(" container=").Append(debugName);
             builder.Append(" provider=").Append(providerKind);
             builder.Append(" blueprints=").Append(pipeline.BlueprintCount);
-            builder.Append(" registeredDrawSlots=").Append(indirectRenderer?.RegisteredDrawSlotCount ?? registry.DrawSlots.Count);
-            builder.Append(" runtimeMaterialCopies=").Append(indirectRenderer?.RuntimeMaterialCopyCount ?? 0);
-            builder.Append(" visibleTrees=").Append(telemetry.VisibleTrees);
-            builder.Append(" acceptedTreeL3=").Append(telemetry.AcceptedTreeL3);
-            builder.Append(" promotedL2=").Append(telemetry.PromotedL2);
-            builder.Append(" promotedL1=").Append(telemetry.PromotedL1);
-            builder.Append(" promotedL0=").Append(telemetry.PromotedL0);
-            builder.Append(" rejectedPromotions=").Append(telemetry.RejectedPromotions);
-            builder.Append(" expandedTrees=").Append(telemetry.ExpandedTrees);
-            builder.Append(" expandedBranchWorkItems=").Append(telemetry.ExpandedBranchWorkItems);
-            builder.Append(" acceptedTierWorkCostUsage=").Append(telemetry.AcceptedTierCostUsage);
-            builder.Append(" nonZeroEmittedSlots=").Append(telemetry.NonZeroEmittedSlots);
-            builder.Append(" emittedVisibleInstances=").Append(telemetry.EmittedVisibleInstanceCount);
-            builder.Append(" emittedVisibleInstanceBytes=").Append(emittedVisibleInstanceBytes);
+            builder.Append(" registeredDrawSlots=").Append(indirectRenderer.RegisteredDrawSlotCount);
+            builder.Append(" runtimeMaterialCopies=").Append(indirectRenderer.RuntimeMaterialCopyCount);
             builder.Append(" visibleInstanceCapacity=").Append(maxVisibleInstanceCapacity);
             builder.Append(" visibleInstanceCapacityBytes=").Append(pipeline.VisibleInstanceCapacityBytes);
-
-            if (registry.DrawSlots.Count > 0 && telemetry.NonZeroEmittedSlots > 0)
-            {
-                pipeline.ReadbackPreparedFrameSlotTelemetry(reusablePreparedFrameSlotTelemetry);
-                long totalEstimatedIndexCount = 0L;
-                builder.Append(" emittedSlots=[");
-                for (int slotTelemetryIndex = 0; slotTelemetryIndex < reusablePreparedFrameSlotTelemetry.Count; slotTelemetryIndex++)
-                {
-                    VegetationGpuDecisionPipeline.PreparedFrameSlotTelemetry slotTelemetry =
-                        reusablePreparedFrameSlotTelemetry[slotTelemetryIndex];
-                    VegetationDrawSlot drawSlot = registry.DrawSlots[slotTelemetry.SlotIndex];
-                    long estimatedIndexCount = checked((long)drawSlot.IndexCountPerInstance * slotTelemetry.EmittedInstanceCount);
-                    totalEstimatedIndexCount += estimatedIndexCount;
-                    if (slotTelemetryIndex > 0)
-                    {
-                        builder.Append("; ");
-                    }
-
-                    builder.Append(drawSlot.DebugLabel)
-                        .Append(":instances=").Append(slotTelemetry.EmittedInstanceCount)
-                        .Append(",indexCount=").Append(drawSlot.IndexCountPerInstance)
-                        .Append(",estimatedIndices=").Append(estimatedIndexCount);
-                }
-
-                builder.Append(']');
-                builder.Append(" totalEstimatedIndices=").Append(totalEstimatedIndexCount);
-            }
+            builder.Append(" syncReadbackTelemetry=disabled");
+            builder.Append(" reason=avoid-gpu-fence-on-render-thread");
 
             Debug.Log(builder.ToString(), diagnosticsContext);
             preparedFrameTelemetryDiagnosticsDirty = false;
