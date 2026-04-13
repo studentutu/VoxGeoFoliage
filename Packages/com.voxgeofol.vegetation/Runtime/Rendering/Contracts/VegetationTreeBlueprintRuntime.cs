@@ -14,6 +14,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public int TrunkL3DrawSlot;
         public int TreeL3DrawSlot;
         public int ImpostorDrawSlot;
+        public int TreeL3WorkCost;
+        public int ImpostorWorkCost;
         public int ExpandedTierCostL2;
         public int ExpandedTierCostL1;
         public int ExpandedTierCostL0;

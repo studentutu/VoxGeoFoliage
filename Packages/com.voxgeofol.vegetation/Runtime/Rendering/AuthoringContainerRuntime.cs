@@ -597,7 +597,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             builder.Append(" rejectedPromotions=").Append(telemetry.RejectedPromotions);
             builder.Append(" expandedTrees=").Append(telemetry.ExpandedTrees);
             builder.Append(" expandedBranchWorkItems=").Append(telemetry.ExpandedBranchWorkItems);
-            builder.Append(" acceptedTierCostUsage=").Append(telemetry.AcceptedTierCostUsage);
+            builder.Append(" acceptedTierWorkCostUsage=").Append(telemetry.AcceptedTierCostUsage);
             builder.Append(" nonZeroEmittedSlots=").Append(telemetry.NonZeroEmittedSlots);
             builder.Append(" emittedVisibleInstances=").Append(telemetry.EmittedVisibleInstanceCount);
             builder.Append(" emittedVisibleInstanceBytes=").Append(emittedVisibleInstanceBytes);

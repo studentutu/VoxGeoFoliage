@@ -55,6 +55,8 @@ struct BlueprintGpu
     int trunkL3DrawSlot;
     int treeL3DrawSlot;
     int impostorDrawSlot;
+    int treeL3WorkCost;
+    int impostorWorkCost;
     int expandedTierCostL2;
     int expandedTierCostL1;
     int expandedTierCostL0;
@@ -297,7 +299,7 @@ int ResolveAcceptedTierCost(BlueprintGpu blueprint, int acceptedTier)
 
     if (acceptedTier == TierTreeL3 || acceptedTier == TierImpostor)
     {
-        return 1;
+        return acceptedTier == TierTreeL3 ? blueprint.treeL3WorkCost : blueprint.impostorWorkCost;
     }
 
     return 0;

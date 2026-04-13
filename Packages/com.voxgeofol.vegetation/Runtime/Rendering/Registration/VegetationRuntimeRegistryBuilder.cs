@@ -14,6 +14,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     /// </summary>
     public sealed class VegetationRuntimeRegistryBuilder
     {
+        // Range-Condition-Output: convert per-instance index count into coarse work units so
+        // one huge canopy mesh cannot consume the same acceptance budget as one tiny impostor.
+        private const int IndirectWorkCostIndexQuantum = 1024;
         private readonly Vector3 gridOrigin;
         private readonly Vector3 cellSize;
         private readonly List<VegetationDrawSlot> drawSlots = new List<VegetationDrawSlot>();
@@ -239,19 +242,38 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 });
             }
 
-            int expandedTierCost = 1 + (blueprint.Branches.Length * 2);
+            int trunkFullDrawSlot = RegisterDrawSlot(trunkMesh, trunkMaterial, VegetationRenderMaterialKind.Trunk, $"{blueprint.name}:TrunkFull");
+            int trunkL3DrawSlot = RegisterDrawSlot(trunkL3Mesh, trunkMaterial, VegetationRenderMaterialKind.Trunk, $"{blueprint.name}:TrunkL3");
+            int treeL3DrawSlot = RegisterDrawSlot(treeL3Mesh, impostorMaterial, VegetationRenderMaterialKind.FarMesh, $"{blueprint.name}:TreeL3");
+            int impostorDrawSlot = RegisterDrawSlot(impostorMesh, impostorMaterial, VegetationRenderMaterialKind.FarMesh, $"{blueprint.name}:Impostor");
+            int expandedTierCostL2 = ComputeDrawSlotWorkCost(trunkL3DrawSlot);
+            int expandedTierCostL1 = ComputeDrawSlotWorkCost(trunkFullDrawSlot);
+            int expandedTierCostL0 = ComputeDrawSlotWorkCost(trunkFullDrawSlot);
+            for (int branchPlacementIndex = branchPlacementStart;
+                 branchPlacementIndex < blueprintBranchPlacements.Count;
+                 branchPlacementIndex++)
+            {
+                VegetationBlueprintBranchPlacementRuntime placement = blueprintBranchPlacements[branchPlacementIndex];
+                VegetationBranchPrototypeRuntime prototypeRuntime = branchPrototypes[placement.PrototypeIndex];
+                expandedTierCostL2 += ComputePrototypeTierWorkCost(prototypeRuntime.WoodDrawSlotL2, prototypeRuntime.CanopyDrawSlotL2);
+                expandedTierCostL1 += ComputePrototypeTierWorkCost(prototypeRuntime.WoodDrawSlotL1, prototypeRuntime.CanopyDrawSlotL1);
+                expandedTierCostL0 += ComputePrototypeTierWorkCost(prototypeRuntime.WoodDrawSlotL0, prototypeRuntime.FoliageDrawSlotL0);
+            }
+
             treeBlueprints.Add(new VegetationTreeBlueprintRuntime
             {
                 LodProfileIndex = RegisterLodProfile(lodProfile),
                 BranchPlacementStartIndex = branchPlacementStart,
                 BranchPlacementCount = blueprint.Branches.Length,
-                TrunkFullDrawSlot = RegisterDrawSlot(trunkMesh, trunkMaterial, VegetationRenderMaterialKind.Trunk, $"{blueprint.name}:TrunkFull"),
-                TrunkL3DrawSlot = RegisterDrawSlot(trunkL3Mesh, trunkMaterial, VegetationRenderMaterialKind.Trunk, $"{blueprint.name}:TrunkL3"),
-                TreeL3DrawSlot = RegisterDrawSlot(treeL3Mesh, impostorMaterial, VegetationRenderMaterialKind.FarMesh, $"{blueprint.name}:TreeL3"),
-                ImpostorDrawSlot = RegisterDrawSlot(impostorMesh, impostorMaterial, VegetationRenderMaterialKind.FarMesh, $"{blueprint.name}:Impostor"),
-                ExpandedTierCostL2 = expandedTierCost,
-                ExpandedTierCostL1 = expandedTierCost,
-                ExpandedTierCostL0 = expandedTierCost
+                TrunkFullDrawSlot = trunkFullDrawSlot,
+                TrunkL3DrawSlot = trunkL3DrawSlot,
+                TreeL3DrawSlot = treeL3DrawSlot,
+                ImpostorDrawSlot = impostorDrawSlot,
+                TreeL3WorkCost = ComputeDrawSlotWorkCost(treeL3DrawSlot),
+                ImpostorWorkCost = ComputeDrawSlotWorkCost(impostorDrawSlot),
+                ExpandedTierCostL2 = expandedTierCostL2,
+                ExpandedTierCostL1 = expandedTierCostL1,
+                ExpandedTierCostL0 = expandedTierCostL0
             });
 
             blueprintIndices.Add(blueprint, blueprintIndex);
@@ -340,6 +362,18 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             drawSlots.Add(new VegetationDrawSlot(slotIndex, mesh, material, materialKind, debugLabel));
             drawSlotIndices.Add(key, slotIndex);
             return slotIndex;
+        }
+
+        private int ComputeDrawSlotWorkCost(int drawSlotIndex)
+        {
+            VegetationDrawSlot drawSlot = drawSlots[drawSlotIndex];
+            int indexCountPerInstance = checked((int)Math.Max(1u, drawSlot.IndexCountPerInstance));
+            return Math.Max(1, (indexCountPerInstance + (IndirectWorkCostIndexQuantum - 1)) / IndirectWorkCostIndexQuantum);
+        }
+
+        private int ComputePrototypeTierWorkCost(int woodDrawSlot, int canopyDrawSlot)
+        {
+            return checked(ComputeDrawSlotWorkCost(woodDrawSlot) + ComputeDrawSlotWorkCost(canopyDrawSlot));
         }
 
         private readonly struct DrawSlotKey : IEquatable<DrawSlotKey>

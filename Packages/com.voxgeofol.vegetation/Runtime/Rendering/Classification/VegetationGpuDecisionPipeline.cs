@@ -527,6 +527,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     TrunkL3DrawSlot = source.TrunkL3DrawSlot,
                     TreeL3DrawSlot = source.TreeL3DrawSlot,
                     ImpostorDrawSlot = source.ImpostorDrawSlot,
+                    TreeL3WorkCost = source.TreeL3WorkCost,
+                    ImpostorWorkCost = source.ImpostorWorkCost,
                     ExpandedTierCostL2 = source.ExpandedTierCostL2,
                     ExpandedTierCostL1 = source.ExpandedTierCostL1,
                     ExpandedTierCostL0 = source.ExpandedTierCostL0
@@ -821,6 +823,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             public int TrunkL3DrawSlot;
             public int TreeL3DrawSlot;
             public int ImpostorDrawSlot;
+            public int TreeL3WorkCost;
+            public int ImpostorWorkCost;
             public int ExpandedTierCostL2;
             public int ExpandedTierCostL1;
             public int ExpandedTierCostL0;
