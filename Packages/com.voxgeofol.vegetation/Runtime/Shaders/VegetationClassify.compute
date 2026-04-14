@@ -6,6 +6,7 @@
 #pragma kernel ResetSlotCounts
 #pragma kernel CountTrees
 #pragma kernel CountExpandedBranches
+#pragma kernel ClampRequestedSlotCounts
 #pragma kernel BuildSlotStarts
 #pragma kernel EmitTrees
 #pragma kernel EmitExpandedBranches
@@ -140,6 +141,9 @@ RWStructuredBuffer<TreeVisibilityGpu> _TreeVisibility;
 RWStructuredBuffer<BranchDecisionGpu> _ExpandedBranchWorkItems;
 RWStructuredBuffer<uint> _ExpandedBranchWorkItemCount;
 RWStructuredBuffer<uint> _FrameStats;
+RWStructuredBuffer<uint> _PriorityRingTreeCounts;
+RWStructuredBuffer<uint> _PriorityRingOffsets;
+RWStructuredBuffer<uint> _PriorityOrderedVisibleTreeIndices;
 RWStructuredBuffer<uint> _SlotRequestedInstanceCounts;
 RWStructuredBuffer<uint> _SlotEmittedInstanceCounts;
 RWStructuredBuffer<uint> _SlotPackedStarts;
@@ -158,6 +162,7 @@ int _DrawSlotCount;
 int _VisibleInstanceCapacity;
 int _ExpandedBranchWorkItemCapacity;
 int _AllowExpandedTierPromotion;
+int _PriorityRingCount;
 
 static const int FrameStatVisibleTrees = 0;
 static const int FrameStatAcceptedTreeL3 = 1;
@@ -175,8 +180,6 @@ static const int TierL1 = 1;
 static const int TierL2 = 2;
 static const int TierTreeL3 = 3;
 static const int TierImpostor = 4;
-
-static const float DistanceTieEpsilon = 0.0001f;
 
 bool TestFrustumAabb(float3 center, float3 extents)
 {
@@ -342,6 +345,12 @@ void EmitInstance(uint slotIndex, VegetationInstanceData instanceData)
 
     uint localOffset;
     InterlockedAdd(_SlotEmittedInstanceCounts[slotIndex], 1u, localOffset);
+    uint requestedCount = _SlotRequestedInstanceCounts[slotIndex];
+    if (localOffset >= requestedCount)
+    {
+        return;
+    }
+
     uint packedIndex = _SlotPackedStarts[slotIndex] + localOffset;
     if (packedIndex >= (uint)_VisibleInstanceCapacity)
     {
@@ -351,74 +360,105 @@ void EmitInstance(uint slotIndex, VegetationInstanceData instanceData)
     _VisibleInstances[packedIndex] = instanceData;
 }
 
-bool IsOrderedAfter(float distanceValue, int treeIndex, float previousDistance, int previousTreeIndex)
+int ClampPriorityRingIndex(int priorityRing)
 {
-    if (distanceValue > previousDistance + DistanceTieEpsilon)
-    {
-        return true;
-    }
-
-    return abs(distanceValue - previousDistance) <= DistanceTieEpsilon && treeIndex > previousTreeIndex;
+    return clamp(priorityRing, 0, max(0, _PriorityRingCount - 1));
 }
 
-int FindNextPromotionCandidate(int currentTier, int targetTier, float previousDistance, int previousTreeIndex)
+void ResetPriorityRingBuffers()
 {
-    int bestTreeIndex = -1;
-    float bestDistance = 0.0f;
+    for (int ringIndex = 0; ringIndex < _PriorityRingCount; ringIndex++)
+    {
+        _PriorityRingTreeCounts[ringIndex] = 0u;
+        _PriorityRingOffsets[ringIndex] = 0u;
+    }
+}
+
+void BuildPriorityOrderedVisibleTreeList(out uint visibleTrees, out uint orderedVisibleTreeCount)
+{
+    visibleTrees = 0u;
+    orderedVisibleTreeCount = 0u;
+    ResetPriorityRingBuffers();
 
     for (int treeIndex = 0; treeIndex < _TreeCount; treeIndex++)
     {
         TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
-        if (visibility.visible == 0u || visibility.acceptedTier != currentTier || visibility.desiredTier > targetTier)
+        visibility.acceptedTier = TierCulled;
+        visibility.acceptedTierCost = 0;
+        _TreeVisibility[treeIndex] = visibility;
+
+        if (visibility.visible == 0u)
         {
             continue;
         }
 
-        if (!IsOrderedAfter(visibility.treeDistance, treeIndex, previousDistance, previousTreeIndex))
-        {
-            continue;
-        }
-
-        if (bestTreeIndex < 0 ||
-            visibility.treeDistance < bestDistance - DistanceTieEpsilon ||
-            (abs(visibility.treeDistance - bestDistance) <= DistanceTieEpsilon && treeIndex < bestTreeIndex))
-        {
-            bestTreeIndex = treeIndex;
-            bestDistance = visibility.treeDistance;
-        }
+        visibleTrees++;
+        uint ringIndex = (uint)ClampPriorityRingIndex(visibility.priorityRing);
+        _PriorityRingTreeCounts[ringIndex] = _PriorityRingTreeCounts[ringIndex] + 1u;
     }
 
-    return bestTreeIndex;
-}
+    uint runningOffset = 0u;
+    for (int ringIndex = 0; ringIndex < _PriorityRingCount; ringIndex++)
+    {
+        uint ringVisibleTreeCount = _PriorityRingTreeCounts[ringIndex];
+        _PriorityRingOffsets[ringIndex] = runningOffset;
+        runningOffset += ringVisibleTreeCount;
+        _PriorityRingTreeCounts[ringIndex] = 0u;
+    }
 
-int FindNextFarCandidate(float previousDistance, int previousTreeIndex)
-{
-    int bestTreeIndex = -1;
-    float bestDistance = 0.0f;
+    orderedVisibleTreeCount = runningOffset;
 
     for (int treeIndex = 0; treeIndex < _TreeCount; treeIndex++)
     {
         TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
-        if (visibility.visible == 0u || visibility.desiredTier != TierImpostor || visibility.acceptedTier != TierCulled)
+        if (visibility.visible == 0u)
         {
             continue;
         }
 
-        if (!IsOrderedAfter(visibility.treeDistance, treeIndex, previousDistance, previousTreeIndex))
+        uint ringIndex = (uint)ClampPriorityRingIndex(visibility.priorityRing);
+        uint ringOffset = _PriorityRingTreeCounts[ringIndex];
+        _PriorityRingTreeCounts[ringIndex] = ringOffset + 1u;
+        uint orderedIndex = _PriorityRingOffsets[ringIndex] + ringOffset;
+        if (orderedIndex < (uint)_TreeCount)
         {
-            continue;
-        }
-
-        if (bestTreeIndex < 0 ||
-            visibility.treeDistance < bestDistance - DistanceTieEpsilon ||
-            (abs(visibility.treeDistance - bestDistance) <= DistanceTieEpsilon && treeIndex < bestTreeIndex))
-        {
-            bestTreeIndex = treeIndex;
-            bestDistance = visibility.treeDistance;
+            _PriorityOrderedVisibleTreeIndices[orderedIndex] = (uint)treeIndex;
         }
     }
+}
 
-    return bestTreeIndex;
+void ApplyOrderedBaselineTreeL3(
+    uint orderedVisibleTreeCount,
+    inout uint acceptedCostUsage,
+    inout uint acceptedTreeL3,
+    inout uint rejectedPromotions)
+{
+    for (uint orderedIndex = 0u; orderedIndex < orderedVisibleTreeCount; orderedIndex++)
+    {
+        uint treeIndex = _PriorityOrderedVisibleTreeIndices[orderedIndex];
+        TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
+        if (visibility.visible == 0u || visibility.desiredTier == TierImpostor)
+        {
+            continue;
+        }
+
+        TreeGpu tree = _Trees[treeIndex];
+        BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
+        uint treeL3Cost = (uint)max(1, ResolveAcceptedTierCost(blueprint, TierTreeL3));
+        if (acceptedCostUsage + treeL3Cost <= (uint)_VisibleInstanceCapacity)
+        {
+            acceptedCostUsage += treeL3Cost;
+            visibility.acceptedTier = TierTreeL3;
+            visibility.acceptedTierCost = (int)treeL3Cost;
+            acceptedTreeL3++;
+        }
+        else
+        {
+            rejectedPromotions++;
+        }
+
+        _TreeVisibility[treeIndex] = visibility;
+    }
 }
 
 [numthreads(64, 1, 1)]
@@ -500,7 +540,7 @@ void ClassifyTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     visibility.treeDistance = treeDistance;
-    visibility.priorityRing = (int)floor(max(treeDistance, 0.0f) * 4.0f);
+    visibility.priorityRing = ClampPriorityRingIndex((int)floor(max(treeDistance, 0.0f) * 4.0f));
     visibility.visible = 1u;
     visibility.desiredTier =
         treeDistance < lodProfile.l0Distance ? TierL0 :
@@ -512,22 +552,26 @@ void ClassifyTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
     _TreeVisibility[treeIndex] = visibility;
 }
 
-void ApplyPromotionStage(int currentTier, int targetTier, inout uint acceptedCostUsage, inout uint currentTierCount, inout uint targetTierCount, inout uint rejectedPromotions)
+void ApplyOrderedPromotionStage(
+    uint orderedVisibleTreeCount,
+    int currentTier,
+    int targetTier,
+    inout uint acceptedCostUsage,
+    inout uint currentTierCount,
+    inout uint targetTierCount,
+    inout uint rejectedPromotions)
 {
-    float previousDistance = -1.0f;
-    int previousTreeIndex = -1;
-
-    while (true)
+    for (uint orderedIndex = 0u; orderedIndex < orderedVisibleTreeCount; orderedIndex++)
     {
-        int candidateTreeIndex = FindNextPromotionCandidate(currentTier, targetTier, previousDistance, previousTreeIndex);
-        if (candidateTreeIndex < 0)
+        uint treeIndex = _PriorityOrderedVisibleTreeIndices[orderedIndex];
+        TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
+        if (visibility.visible == 0u || visibility.acceptedTier != currentTier || visibility.desiredTier > targetTier)
         {
-            return;
+            continue;
         }
 
-        TreeGpu tree = _Trees[candidateTreeIndex];
+        TreeGpu tree = _Trees[treeIndex];
         BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
-        TreeVisibilityGpu visibility = _TreeVisibility[candidateTreeIndex];
         uint nextTierCost = (uint)ResolveAcceptedTierCost(blueprint, targetTier);
         uint currentCost = (uint)max(0, visibility.acceptedTierCost);
         uint additionalCost = nextTierCost > currentCost ? nextTierCost - currentCost : 0u;
@@ -537,7 +581,6 @@ void ApplyPromotionStage(int currentTier, int targetTier, inout uint acceptedCos
             acceptedCostUsage += additionalCost;
             visibility.acceptedTier = targetTier;
             visibility.acceptedTierCost = (int)nextTierCost;
-            _TreeVisibility[candidateTreeIndex] = visibility;
             if (currentTierCount > 0u)
             {
                 currentTierCount--;
@@ -550,39 +593,39 @@ void ApplyPromotionStage(int currentTier, int targetTier, inout uint acceptedCos
             rejectedPromotions++;
         }
 
-        previousDistance = visibility.treeDistance;
-        previousTreeIndex = candidateTreeIndex;
+        _TreeVisibility[treeIndex] = visibility;
     }
 }
 
-void AcceptFarImpostors(inout uint acceptedCostUsage, inout uint rejectedPromotions)
+void ApplyOrderedFarImpostors(
+    uint orderedVisibleTreeCount,
+    inout uint acceptedCostUsage,
+    inout uint rejectedPromotions)
 {
-    float previousDistance = -1.0f;
-    int previousTreeIndex = -1;
-
-    while (true)
+    for (uint orderedIndex = 0u; orderedIndex < orderedVisibleTreeCount; orderedIndex++)
     {
-        int candidateTreeIndex = FindNextFarCandidate(previousDistance, previousTreeIndex);
-        if (candidateTreeIndex < 0)
+        uint treeIndex = _PriorityOrderedVisibleTreeIndices[orderedIndex];
+        TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
+        if (visibility.visible == 0u || visibility.desiredTier != TierImpostor || visibility.acceptedTier != TierCulled)
         {
-            return;
+            continue;
         }
 
-        TreeVisibilityGpu visibility = _TreeVisibility[candidateTreeIndex];
-        if (acceptedCostUsage + 1u <= (uint)_VisibleInstanceCapacity)
+        TreeGpu tree = _Trees[treeIndex];
+        BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
+        uint impostorCost = (uint)max(1, ResolveAcceptedTierCost(blueprint, TierImpostor));
+        if (acceptedCostUsage + impostorCost <= (uint)_VisibleInstanceCapacity)
         {
-            acceptedCostUsage += 1u;
+            acceptedCostUsage += impostorCost;
             visibility.acceptedTier = TierImpostor;
-            visibility.acceptedTierCost = 1;
-            _TreeVisibility[candidateTreeIndex] = visibility;
+            visibility.acceptedTierCost = (int)impostorCost;
         }
         else
         {
             rejectedPromotions++;
         }
 
-        previousDistance = visibility.treeDistance;
-        previousTreeIndex = candidateTreeIndex;
+        _TreeVisibility[treeIndex] = visibility;
     }
 }
 
@@ -595,54 +638,24 @@ void AcceptTreeTiers(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     uint visibleTrees = 0u;
+    uint orderedVisibleTreeCount = 0u;
     uint acceptedTreeL3 = 0u;
     uint promotedL2 = 0u;
     uint promotedL1 = 0u;
     uint promotedL0 = 0u;
     uint rejectedPromotions = 0u;
     uint acceptedCostUsage = 0u;
-
-    for (int treeIndex = 0; treeIndex < _TreeCount; treeIndex++)
-    {
-        TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
-        if (visibility.visible == 0u)
-        {
-            visibility.acceptedTier = TierCulled;
-            visibility.acceptedTierCost = 0;
-            _TreeVisibility[treeIndex] = visibility;
-            continue;
-        }
-
-        visibleTrees++;
-        visibility.acceptedTier = TierCulled;
-        visibility.acceptedTierCost = 0;
-
-        if (visibility.desiredTier != TierImpostor)
-        {
-            if (acceptedCostUsage + 1u <= (uint)_VisibleInstanceCapacity)
-            {
-                acceptedCostUsage += 1u;
-                visibility.acceptedTier = TierTreeL3;
-                visibility.acceptedTierCost = 1;
-                acceptedTreeL3++;
-            }
-            else
-            {
-                rejectedPromotions++;
-            }
-        }
-
-        _TreeVisibility[treeIndex] = visibility;
-    }
+    BuildPriorityOrderedVisibleTreeList(visibleTrees, orderedVisibleTreeCount);
+    ApplyOrderedBaselineTreeL3(orderedVisibleTreeCount, acceptedCostUsage, acceptedTreeL3, rejectedPromotions);
 
     if (_AllowExpandedTierPromotion != 0)
     {
-        ApplyPromotionStage(TierTreeL3, TierL2, acceptedCostUsage, acceptedTreeL3, promotedL2, rejectedPromotions);
-        ApplyPromotionStage(TierL2, TierL1, acceptedCostUsage, promotedL2, promotedL1, rejectedPromotions);
-        ApplyPromotionStage(TierL1, TierL0, acceptedCostUsage, promotedL1, promotedL0, rejectedPromotions);
+        ApplyOrderedPromotionStage(orderedVisibleTreeCount, TierTreeL3, TierL2, acceptedCostUsage, acceptedTreeL3, promotedL2, rejectedPromotions);
+        ApplyOrderedPromotionStage(orderedVisibleTreeCount, TierL2, TierL1, acceptedCostUsage, promotedL2, promotedL1, rejectedPromotions);
+        ApplyOrderedPromotionStage(orderedVisibleTreeCount, TierL1, TierL0, acceptedCostUsage, promotedL1, promotedL0, rejectedPromotions);
     }
 
-    AcceptFarImpostors(acceptedCostUsage, rejectedPromotions);
+    ApplyOrderedFarImpostors(orderedVisibleTreeCount, acceptedCostUsage, rejectedPromotions);
 
     _FrameStats[FrameStatVisibleTrees] = visibleTrees;
     _FrameStats[FrameStatAcceptedTreeL3] = acceptedTreeL3;
@@ -818,6 +831,24 @@ void CountExpandedBranches(uint3 dispatchThreadId : SV_DispatchThreadID)
 }
 
 [numthreads(1, 1, 1)]
+void ClampRequestedSlotCounts(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    if (dispatchThreadId.x != 0u)
+    {
+        return;
+    }
+
+    uint remainingCapacity = _VisibleInstanceCapacity > 0 ? (uint)_VisibleInstanceCapacity : 0u;
+    for (int slotIndex = 0; slotIndex < _DrawSlotCount; slotIndex++)
+    {
+        uint requestedCount = _SlotRequestedInstanceCounts[slotIndex];
+        uint clampedCount = min(requestedCount, remainingCapacity);
+        _SlotRequestedInstanceCounts[slotIndex] = clampedCount;
+        remainingCapacity -= clampedCount;
+    }
+}
+
+[numthreads(1, 1, 1)]
 void BuildSlotStarts(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     if (dispatchThreadId.x != 0u)
@@ -825,11 +856,22 @@ void BuildSlotStarts(uint3 dispatchThreadId : SV_DispatchThreadID)
         return;
     }
 
+    uint capacity = _VisibleInstanceCapacity > 0 ? (uint)_VisibleInstanceCapacity : 0u;
     uint runningStart = 0u;
     for (int slotIndex = 0; slotIndex < _DrawSlotCount; slotIndex++)
     {
-        _SlotPackedStarts[slotIndex] = runningStart;
-        runningStart += _SlotRequestedInstanceCounts[slotIndex];
+        uint packedStart = min(runningStart, capacity);
+        _SlotPackedStarts[slotIndex] = packedStart;
+
+        if (packedStart >= capacity)
+        {
+            runningStart = capacity;
+            continue;
+        }
+
+        uint requestedCount = _SlotRequestedInstanceCounts[slotIndex];
+        uint remainingCapacity = capacity - packedStart;
+        runningStart = packedStart + min(requestedCount, remainingCapacity);
     }
 }
 
@@ -877,7 +919,8 @@ void FinalizeIndirectArgs(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     SlotGpu slot = _Slots[slotIndex];
     uint start = _SlotPackedStarts[slotIndex];
-    uint attemptedCount = _SlotEmittedInstanceCounts[slotIndex];
+    uint requestedCount = _SlotRequestedInstanceCounts[slotIndex];
+    uint attemptedCount = min(_SlotEmittedInstanceCounts[slotIndex], requestedCount);
     uint availableCount = 0u;
     if (start < (uint)_VisibleInstanceCapacity)
     {
