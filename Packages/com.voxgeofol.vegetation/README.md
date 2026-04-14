@@ -10,7 +10,7 @@
 
 ## Summary
 
-`com.voxgeofol.vegetation` is a Unity 6 URP package for opaque-only, branch-assembled vegetation with a GPU-resident tree-first runtime path. Authorings are frozen into a container-owned runtime registry, every visible non-far tree is accepted to at least `TreeL3` before optional branch expansion, and URP submits the compact accepted-content set through indirect main-light shadow, depth, and color passes.
+`com.voxgeofol.vegetation` is a Unity 6 URP package for opaque-only, branch-assembled vegetation with a GPU-resident tree-first runtime path.
 
 ## Highlights
 
@@ -41,7 +41,7 @@
 3. If different trees or branch prototypes resolve to the same slot key, they batch into the same indirect draw.
 4. If mesh, material, or material kind changes, a new draw slot is created.
 5. Instance count grows instance-buffer usage; draw-slot count is what grows draw calls.
-6. The renderer pays active submitted slots once in depth and once in color. Current shipped safety path synchronously filters submission to the non-zero emitted subset after bind.
+6. The renderer currently pays registered draw slots once in depth and once in color. Non-zero emitted slot counts remain telemetry, not the live submission filter.
 
 Examples:
 
@@ -129,7 +129,7 @@ Scope note:
 1. This is current runtime-review telemetry only.
 2. `nonZeroEmittedSlots`, emitted visible-instance totals, and current submitted-slot filtering now come from a synchronous CPU readback of `_SlotEmittedInstanceCounts`. This is a temporary correctness guard against D3D12 device-removal crashes while the final non-stalling submission path is still pending.
 3. Dense-scene crash review now also depends on the per-slot draw metadata from `VegetationIndirectRenderer`, because recent D3D12 device removals survived the all-zero submission fix and were isolated to a single submitted `Impostor`/`FarMesh` slot.
-4. Dense-forest validation still needs scene-level visual review; the runtime logs the counts, but it does not replace inspecting the one-container forest scenario from `DetailedDocs/urgentRedesign.md`.
+4. Dense-forest validation still needs scene-level visual review; the runtime logs counts, but it does not replace reviewing the one-container forest scenario against `DetailedDocs/VegetationRuntimeArchitecture.md`.
 
 ## Capacity And Containers
 
@@ -269,7 +269,7 @@ Per-frame worklists:
 9. `maxVisibleInstanceCapacity` is per-container, not global. Multiple containers do not share one packed visible-instance buffer.
 10. Splitting one large forest across multiple containers can avoid one-container overflow, but it does not create a global coordinator. Memory, buffers, and capacity all scale with the number of visible containers.
 11. The urgent runtime now reprioritizes inside one container with `TreeL3` floor plus nearest-first promotion, but there is still no global cross-container arbiter.
-12. Multi-container prioritization stays unresolved follow-up work; the dense-forest one-container design authority remains [../../DetailedDocs/urgentRedesign.md](../../DetailedDocs/urgentRedesign.md).
+12. Multi-container prioritization stays unresolved follow-up work; the one-container runtime authority remains [../../DetailedDocs/VegetationRuntimeArchitecture.md](../../DetailedDocs/VegetationRuntimeArchitecture.md).
 13. Closed `SubScene` runtime loading requires `SubSceneAuthoring` on the same GameObject as `VegetationRuntimeContainer`; the plain container alone is only the classic-scene lifecycle provider.
 14. Runtime shadow support is currently limited to the URP main-light directional shadow atlas, using cascade-specific resident frames derived from the camera-visible vegetation set. Default shipped behavior clamps visible non-far shadow casters to `TreeL3` and skips expanded branch shadow promotion unless `AllowExpandedTreePromotionInShadows` is explicitly enabled. Offscreen vegetation casters and additional-light shadow atlases are still follow-up work.
 
@@ -287,8 +287,8 @@ Per-frame worklists:
 - sample mesh very hight poly pine tree, see [ChristmasTree](Samples~/VegetationDemo/Raw/ChristmasTree.fbx) with separate trunk and branches mesh from the leaves mesh (pines)
 - sample high poly single Fern leaf, see [fern_foliage_dense](Samples~/VegetationDemo/Raw/fern_foliage_dense_fullgeo.obj)
 - sample branch for standard tree, see [branch_leaves](Samples~/VegetationDemo/Raw/branch_leaves_fullgeo.obj)
-3. Architecture authority: [UnityAssembledVegetation_FULL.md](https://github.com/studentutu/VoxGeoFoliage/blob/master/DetailedDocs/UnityAssembledVegetation_FULL.md)
-4. Urgent runtime scaling redesign: [../../DetailedDocs/urgentRedesign.md](../../DetailedDocs/urgentRedesign.md)
+3. Runtime architecture authority: [../../DetailedDocs/VegetationRuntimeArchitecture.md](../../DetailedDocs/VegetationRuntimeArchitecture.md)
+4. Current milestone status: [../../DetailedDocs/Milestone2.md](../../DetailedDocs/Milestone2.md)
 
 ## License
 

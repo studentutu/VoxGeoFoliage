@@ -12,7 +12,7 @@
 - [Important Limitations](#important-limitations)
 - Reference: [What is Foliage Assembly and voxel-based rendering?](#what-is-foliage-assembly-and-voxel-based-rendering)
 - Development: [Agentic Workflow](#agentic-workflow), [Repo Requirements](#repo-requirements), [Verification](#verification)
-- Cross-links: [Package README](Packages/com.voxgeofol.vegetation/README.md), [Architecture Authority](DetailedDocs/UnityAssembledVegetation_FULL.md)
+- Cross-links: [Package README](Packages/com.voxgeofol.vegetation/README.md), [Runtime Authority](DetailedDocs/VegetationRuntimeArchitecture.md)
 - [License](#license)
 - [Kudos](#kudos)
 
@@ -29,7 +29,7 @@ Inspired by Unreal Engine 5.7 foliage innovations (Assemblies, voxelized LOD, an
 ## Start Here
 
 1. Authoritative feature contract: [Packages/com.voxgeofol.vegetation/README.md](Packages/com.voxgeofol.vegetation/README.md)
-2. Architecture authority: [DetailedDocs/UnityAssembledVegetation_FULL.md](DetailedDocs/UnityAssembledVegetation_FULL.md)
+2. Runtime authority: [DetailedDocs/VegetationRuntimeArchitecture.md](DetailedDocs/VegetationRuntimeArchitecture.md)
 3. Embedded package(see [Install](#install)): [Packages/com.voxgeofol.vegetation](Packages/com.voxgeofol.vegetation)
 4. Playground scene: [Assets/Scenes/Playground.unity](Assets/Scenes/Playground.unity)
 5. Package sample content: [Packages/com.voxgeofol.vegetation/Samples~/VegetationDemo](Packages/com.voxgeofol.vegetation/Samples~/VegetationDemo)

@@ -40,11 +40,10 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - shader compatibility
 - Read:
   - [Package README](../Packages/com.voxgeofol.vegetation/README.md) - package consumer contract, current tree-first runtime terminology, and lifecycle summary from container input to URP indirect submission
-  - [UnityAssembledVegetation_FULL](../DetailedDocs/UnityAssembledVegetation_FULL.md) - architecture authority
-  - [AddSubSceneSupport](../DetailedDocs/AddSubSceneSupport.md) - runtime-only SubScene registration bridge authority
-  - [urgentRedesign](../DetailedDocs/urgentRedesign.md) - urgent runtime prioritization and dense-forest overflow redesign authority; production runtime now follows this tree-first path
-  - [Milestone2](../DetailedDocs/Milestone2.md) - current milestone authority for hierarchical wind, custom-material compatibility, and production improvements
-  - [Milestone1](../DetailedDocs/Milestone1.md) - finished MVP baseline and completion record
+  - [VegetationRuntimeArchitecture](../DetailedDocs/VegetationRuntimeArchitecture.md) - current-code runtime review and replacement runtime architecture authority
+  - [projectrules](projectrules.md) - current SubScene provider/runtime ownership rules until a dedicated SubScene doc exists
+  - [Milestone2](../DetailedDocs/Milestone2.md) - current milestone status and open work only
+  - [Milestone1](../DetailedDocs/Milestone1.md) - shipped baseline summary only
 
 ## CI and Tests
 
