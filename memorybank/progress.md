@@ -7,6 +7,7 @@ Purpose: current milestone, current blockers, next tasks. Nothing else.
 - Milestone: `Milestone 2 - Production Runtime Cleanup`
 - Scope authority: [Milestone2.md](../DetailedDocs/Milestone2.md)
 - Runtime authority: [VegetationRuntimeArchitecture.md](../DetailedDocs/VegetationRuntimeArchitecture.md)
+  now includes full ASCII bake, registration, color/depth, and shadow pipelines with payload ownership and resident-memory surfaces
 - Finished baseline: [Milestone1.md](../DetailedDocs/Milestone1.md)
 
 ## Current Blockers

@@ -2,9 +2,9 @@
 
 ## Quick Navigation
 
-- Basics: [Summary](#summary), [Highlights](#highlights), [Best-Fit Use Cases](#best-fit-use-cases), [Requirements](#requirements), [Setup](#setup)
-- Runtime: [Draw Calls And Draw Slots](#draw-calls-and-draw-slots), [Runtime Terminology](#runtime-terminology), [Grass-Like Vegetation Strategies](#grass-like-vegetation-strategies), [Key Settings](#key-settings), [Capacity And Containers](#capacity-and-containers), [Current Lifecycle](#current-lifecycle), [Runtime Pipeline](#runtime-pipeline), [Important Limitations](#important-limitations), [Supported Devices](#supported-devices)
 - [Included In This Repo](#included-in-this-repo)
+- Basics: [Summary](#summary), [Highlights](#highlights), [Best-Fit Use Cases](#best-fit-use-cases), [Requirements](#requirements), [How to use](#how-to-use), [Grass-Like Vegetation Strategies](#grass-like-vegetation-strategies), [Key Settings](#key-settings)
+- Runtime: [Runtime Terminology](#runtime-terminology), [Current Lifecycle](#current-lifecycle), [Draw Calls And Draw Slots](#draw-calls-and-draw-slots),  [Capacity And Containers](#capacity-and-containers), [Runtime Pipeline](#runtime-pipeline), [Important Limitations](#important-limitations), [Supported Devices](#supported-devices)
 - [License](#license)
 - [Kudos](#kudos)
 
@@ -27,38 +27,21 @@
 2. [ ] Support non-package only materials and shaders.
 3. [ ] Generation of canopy-shell (primary voxelization) based on the [GPUVoxelizer](Packages/com.voxgeofol.vegetation/Runtime/VoxelizerV2/Scripts/GPUVoxelizer.cs) from quad, alpha-masked branch material.
 
+## Included In This Repo
+
+1. Playground scene: [../../Assets/Scenes/Playground.unity](../../Assets/Scenes/Playground.unity)
+2. Package sample content: [Samples~/VegetationDemo](Samples~/VegetationDemo)
+- sample mesh very hight poly pine tree, see [ChristmasTree](Samples~/VegetationDemo/Raw/ChristmasTree.fbx) with separate trunk and branches mesh from the leaves mesh (pines)
+- sample high poly single Fern leaf, see [fern_foliage_dense](Samples~/VegetationDemo/Raw/fern_foliage_dense_fullgeo.obj)
+- sample branch for standard tree, see [branch_leaves](Samples~/VegetationDemo/Raw/branch_leaves_fullgeo.obj)
+3. Runtime architecture authority: [../../DetailedDocs/VegetationRuntimeArchitecture.md](../../DetailedDocs/VegetationRuntimeArchitecture.md)
+4. Current milestone status: [../../DetailedDocs/Milestone2.md](../../DetailedDocs/Milestone2.md)
 
 ## Best-Fit Use Cases
 
 1. Tree species/bushes/grass-flower clumps built from reusable branch modules.
 2. Multiple species that share meshes and materials to keep batching strong.
 3. Grass, flowers, or shrubs authored either as clumps or as many small instances, depending on culling and placement needs.
-
-## Draw Calls And Draw Slots
-
-1. A draw slot is one indirect render bucket with one shared instance range and one indirect-args record.
-2. Slot key = exact `mesh + material + material kind`.
-3. If different trees or branch prototypes resolve to the same slot key, they batch into the same indirect draw.
-4. If mesh, material, or material kind changes, a new draw slot is created.
-5. Instance count grows instance-buffer usage; draw-slot count is what grows draw calls.
-6. The renderer currently pays registered draw slots once in depth and once in color. Non-zero emitted slot counts remain telemetry, not the live submission filter.
-
-Examples:
-
-1. `1000` trees sharing the same trunk, foliage, and shell assets can still collapse into a small slot set.
-2. `100` trees with unique branch meshes or unique materials can produce more active slots and more draws, even with fewer total trees.
-3. Reusing the same branch prototype many times inside one blueprint does not automatically create more draws if the placements resolve to the same slot key.
-
-## Grass-Like Vegetation Strategies
-
-1. Clump strategy [Preferred]:
-   `1 VegetationTreeAuthoring -> 1 TreeBlueprintSO -> many BranchPlacement`
-   Lower scene-authoring count and lower tree-level runtime overhead, but coarser culling and coarser streaming granularity.
-2. Many-small-instances strategy:
-   `many VegetationTreeAuthoring -> 1 small TreeBlueprintSO each -> 1 BranchPlacement each`
-   Finer culling, finer streaming, and better procedural-placement flexibility, but more runtime tree instances and more tree-level classification work.
-3. Main rule:
-   Shared render assets are the primary draw-call lever in both strategies. If both strategies use the same meshes and materials, draw-call count can stay similar even though runtime-management cost differs.
 
 ## Requirements
 
@@ -70,7 +53,7 @@ Examples:
 6. Opaque URP SRP-compatible shaders only.
 7. Runtime vegetation shaders compatible with the package indirect-instance contract. The bundled package shaders now include main-light shadow attenuation plus a `ShadowCaster` pass.
 
-## Setup
+## How to use
 
 1. Import the package into a URP project and add `VegetationRendererFeature` to the active renderer.
 2. Create one or more `VegetationRuntimeContainer` roots.
@@ -84,6 +67,17 @@ Examples:
    Enable/Disabling `VegetationRuntimeContainer` will not change `SubSceneAuthoring`.
    `SubSceneAuthoring` and  unity `SubScene` will not be shown in scene view, so in order to view both - make subscene editable and use enabled `VegetationRuntimeContainer`. 
 8. Call `RefreshRuntimeRegistration()` after transform, hierarchy, blueprint, placement, or generated-mesh changes.
+
+### Grass-Like Vegetation Strategies
+
+1. Clump strategy [Preferred]:
+   `1 VegetationTreeAuthoring -> 1 TreeBlueprintSO -> many BranchPlacement`
+   Lower scene-authoring count and lower tree-level runtime overhead, but coarser culling and coarser streaming granularity.
+2. Many-small-instances strategy:
+   `many VegetationTreeAuthoring -> 1 small TreeBlueprintSO each -> 1 BranchPlacement each`
+   Finer culling, finer streaming, and better procedural-placement flexibility, but more runtime tree instances and more tree-level classification work.
+3. Main rule:
+   Shared render assets are the primary draw-call lever in both strategies. If both strategies use the same meshes and materials, draw-call count can stay similar even though runtime-management cost differs.
 
 ## Key Settings
 
@@ -113,23 +107,6 @@ Examples:
 3. Enable `VegetationFoliageFeatureSettings.EnableDiagnostics`.
 4. Enter Play Mode or render through SceneView/Game cameras with vegetation enabled.
 5. Read the Unity Console output from `AuthoringContainerRuntime`, `VegetationRenderPass`, and `VegetationIndirectRenderer`.
-
-Current shipped diagnostics include:
-
-1. Registration counts for `trees`, `TreeBlueprints[]`, `BlueprintBranchPlacements[]`, `BranchPrototypes[]`, `drawSlots`, and `cells`.
-2. Exact allocated GPU bytes for urgent-path branch-owned buffers:
-   `blueprintPlacementBufferBytes`, `prototypeBufferBytes`, `treeVisibilityBufferBytes`, `expandedBranchWorkItemBufferBytes`, `totalBranchTelemetryBufferBytes`, `visibleInstanceStrideBytes`, and `visibleInstanceCapacityBytes`.
-3. One-shot prepared-frame acceptance telemetry:
-   `visibleTrees`, `acceptedTreeL3`, `promotedL2`, `promotedL1`, `promotedL0`, `rejectedPromotions`, `expandedTrees`, `expandedBranchWorkItems`, `acceptedTierCostUsage`, `nonZeroEmittedSlots`, `emittedVisibleInstances`, and `emittedVisibleInstanceBytes`.
-4. Final render-prep diagnostics now surface the submitted non-zero slot set from `VegetationIndirectRenderer`, while prepared-frame telemetry reports the same non-zero emitted subset from the GPU pipeline.
-5. Per-slot render diagnostics now include mesh name, material kind, emitted instance count, index count, start index, base vertex, shader pass, and runtime shader name for the submitted subset.
-
-Scope note:
-
-1. This is current runtime-review telemetry only.
-2. `nonZeroEmittedSlots`, emitted visible-instance totals, and current submitted-slot filtering now come from a synchronous CPU readback of `_SlotEmittedInstanceCounts`. This is a temporary correctness guard against D3D12 device-removal crashes while the final non-stalling submission path is still pending.
-3. Dense-scene crash review now also depends on the per-slot draw metadata from `VegetationIndirectRenderer`, because recent D3D12 device removals survived the all-zero submission fix and were isolated to a single submitted `Impostor`/`FarMesh` slot.
-4. Dense-forest validation still needs scene-level visual review; the runtime logs counts, but it does not replace reviewing the one-container forest scenario against `DetailedDocs/VegetationRuntimeArchitecture.md`.
 
 ## Capacity And Containers
 
@@ -242,6 +219,21 @@ Per-frame worklists:
 3. `slotEmittedInstanceCountsBuffer` and `ActiveSlotIndices`
    `slotEmittedInstanceCountsBuffer` is both diagnostics telemetry and the current temporary submission filter for the non-zero emitted subset. `ActiveSlotIndices` now mirrors only the submitted non-zero emitted slots after bind.
 
+### Draw Calls And Draw Slots
+
+1. A draw slot is one indirect render bucket with one shared instance range and one indirect-args record.
+2. Slot key = exact `mesh + material + material kind`.
+3. If different trees or branch prototypes resolve to the same slot key, they batch into the same indirect draw.
+4. If mesh, material, or material kind changes, a new draw slot is created.
+5. Instance count grows instance-buffer usage; draw-slot count is what grows draw calls.
+6. The renderer currently pays registered draw slots once in depth and once in color. Non-zero emitted slot counts remain telemetry, not the live submission filter.
+
+Examples:
+
+1. `1000` trees sharing the same trunk, foliage, and shell assets can still collapse into a small slot set.
+2. `100` trees with unique branch meshes or unique materials can produce more active slots and more draws, even with fewer total trees.
+3. Reusing the same branch prototype many times inside one blueprint does not automatically create more draws if the placements resolve to the same slot key.
+
 ### What This Means Operationally
 
 1. `VegetationRuntimeContainer.maxVisibleInstanceCapacity` limits packed visible instances, not draw slots.
@@ -268,7 +260,7 @@ Per-frame worklists:
 8. Runtime diagnostics are renderer-wide through `VegetationFoliageFeatureSettings.EnableDiagnostics`.
 9. `maxVisibleInstanceCapacity` is per-container, not global. Multiple containers do not share one packed visible-instance buffer.
 10. Splitting one large forest across multiple containers can avoid one-container overflow, but it does not create a global coordinator. Memory, buffers, and capacity all scale with the number of visible containers.
-11. The urgent runtime now reprioritizes inside one container with `TreeL3` floor plus nearest-first promotion, but there is still no global cross-container arbiter.
+11. The urgent runtime should prioritize inside one container with `TreeL3` floor plus nearest-first promotion, but there is still no global cross-container arbiter.
 12. Multi-container prioritization stays unresolved follow-up work; the one-container runtime authority remains [../../DetailedDocs/VegetationRuntimeArchitecture.md](../../DetailedDocs/VegetationRuntimeArchitecture.md).
 13. Closed `SubScene` runtime loading requires `SubSceneAuthoring` on the same GameObject as `VegetationRuntimeContainer`; the plain container alone is only the classic-scene lifecycle provider.
 14. Runtime shadow support is currently limited to the URP main-light directional shadow atlas, using cascade-specific resident frames derived from the camera-visible vegetation set. Default shipped behavior clamps visible non-far shadow casters to `TreeL3` and skips expanded branch shadow promotion unless `AllowExpandedTreePromotionInShadows` is explicitly enabled. Offscreen vegetation casters and additional-light shadow atlases are still follow-up work.
@@ -279,16 +271,6 @@ Per-frame worklists:
 2. Console-class targets with the same feature support.
 3. Higher-end mobile and handheld targets when the graphics API and hardware support URP, compute shaders, and indirect draws.
 4. Not targeted: WebGL, graphics APIs without compute or indirect draws, and very low-end mobile hardware.
-
-## Included In This Repo
-
-1. Playground scene: [../../Assets/Scenes/Playground.unity](../../Assets/Scenes/Playground.unity)
-2. Package sample content: [Samples~/VegetationDemo](Samples~/VegetationDemo)
-- sample mesh very hight poly pine tree, see [ChristmasTree](Samples~/VegetationDemo/Raw/ChristmasTree.fbx) with separate trunk and branches mesh from the leaves mesh (pines)
-- sample high poly single Fern leaf, see [fern_foliage_dense](Samples~/VegetationDemo/Raw/fern_foliage_dense_fullgeo.obj)
-- sample branch for standard tree, see [branch_leaves](Samples~/VegetationDemo/Raw/branch_leaves_fullgeo.obj)
-3. Runtime architecture authority: [../../DetailedDocs/VegetationRuntimeArchitecture.md](../../DetailedDocs/VegetationRuntimeArchitecture.md)
-4. Current milestone status: [../../DetailedDocs/Milestone2.md](../../DetailedDocs/Milestone2.md)
 
 ## License
 

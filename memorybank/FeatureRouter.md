@@ -40,7 +40,7 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - shader compatibility
 - Read:
   - [Package README](../Packages/com.voxgeofol.vegetation/README.md) - package consumer contract, current tree-first runtime terminology, and lifecycle summary from container input to URP indirect submission
-  - [VegetationRuntimeArchitecture](../DetailedDocs/VegetationRuntimeArchitecture.md) - current-code runtime review and replacement runtime architecture authority
+  - [VegetationRuntimeArchitecture](../DetailedDocs/VegetationRuntimeArchitecture.md) - exact bake, registration, color/depth, and shadow ASCII pipelines with payload ownership, current-code runtime review, and replacement runtime architecture authority
   - [projectrules](projectrules.md) - current SubScene provider/runtime ownership rules until a dedicated SubScene doc exists
   - [Milestone2](../DetailedDocs/Milestone2.md) - current milestone status and open work only
   - [Milestone1](../DetailedDocs/Milestone1.md) - shipped baseline summary only
