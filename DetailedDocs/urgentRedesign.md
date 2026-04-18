@@ -1,4 +1,4 @@
-# Urgent Redesign - Archive Stub
+# Urgent Redesign - Implemented, but does not address multiple redundancies!!!!
 
 This file is no longer the authority.
 

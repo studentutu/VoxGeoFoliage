@@ -33,10 +33,11 @@ Everything else under `DetailedDocs/` is archive, redirect, or historical contex
 6. Opaque URP SRP-compatible shaders only.
 7. Runtime vegetation shaders compatible with the package indirect-instance contract. The bundled package shaders now include main-light shadow attenuation plus a `ShadowCaster` pass.
 
-
 ## 1. Current Bake Pipeline
 
 ### 1.1 Branch Prototype Bake
+
+Hard separation of authoring phase and runtime path. Runtime can freely use authoring phase data.
 
 ```text
 BranchPrototypeSO
@@ -86,6 +87,7 @@ Important current contract:
 - Runtime `BranchL2WoodMesh` is `shellL1WoodMesh`.
 - Runtime `BranchL3WoodMesh` is `shellL2WoodMesh`.
 - Runtime does not traverse `shellNodesL0/L1/L2`; those arrays are editor preview and inspection data now.
+- Effectively we don't need them (shellNodesL0[], shellNodesL1[], shellNodesL2[]) and we should use simplified single mesh per canopy level of detail.
 
 ### 1.2 Tree-Wide Bake
 

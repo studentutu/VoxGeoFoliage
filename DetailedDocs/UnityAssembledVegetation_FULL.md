@@ -12,4 +12,4 @@ Use these instead:
 Why this file was collapsed:
 - it mixed history, design targets, and shipped behavior
 - it was too large to review reliably
-- it stopped being a trustworthy source of truth
+- it stopped being a trustworthy source of truth after multiple adhoc redesigns
