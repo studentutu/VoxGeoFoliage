@@ -458,7 +458,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         activeContainerCount++;
                         try
                         {
-                            if (!container.PrepareFrameForCamera(camera, classifyShader, diagnosticsEnabled))
+                            VegetationIndirectRenderer.PreparedViewHandle? preparedView =
+                                container.PrepareViewForCamera(camera, classifyShader, diagnosticsEnabled);
+                            if (preparedView == null)
                             {
                                 continue;
                             }
@@ -470,7 +472,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                                 continue;
                             }
 
-                            container.IndirectRenderer.Render(commandBuffer, camera, passMode, diagnosticsEnabled);
+                            container.IndirectRenderer.Render(commandBuffer, camera, preparedView, passMode, diagnosticsEnabled);
                             renderedContainerCount++;
                         }
                         catch (Exception exception)
@@ -600,12 +602,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                                 try
                                 {
-                                    if (!container.PrepareFrameForFrustum(
+                                    VegetationIndirectRenderer.PreparedViewHandle? preparedView =
+                                        container.PrepareViewForFrustum(
                                             data.CameraData.worldSpaceCameraPos,
                                             shadowFrustumPlanes,
                                             data.ClassifyShader,
                                             data.DiagnosticsEnabled,
-                                            data.AllowExpandedTreePromotionInShadows))
+                                            data.AllowExpandedTreePromotionInShadows);
+                                    if (preparedView == null)
                                     {
                                         continue;
                                     }
@@ -625,6 +629,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                                     container.IndirectRenderer!.Render(
                                         nativeCommandBuffer,
                                         data.Camera,
+                                        preparedView,
                                         VegetationRenderPassMode.Shadow,
                                         data.DiagnosticsEnabled);
                                     if (!renderedContainerMask[containerIndex])
@@ -707,7 +712,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         activeContainerCount++;
                         try
                         {
-                            if (!container.PrepareFrameForCamera(camera, classifyShader, diagnosticsEnabled))
+                            VegetationIndirectRenderer.PreparedViewHandle? preparedView =
+                                container.PrepareViewForCamera(camera, classifyShader, diagnosticsEnabled);
+                            if (preparedView == null)
                             {
                                 continue;
                             }
@@ -719,7 +726,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                                 continue;
                             }
 
-                            container.IndirectRenderer.Render(commandBuffer, camera, passMode, diagnosticsEnabled);
+                            container.IndirectRenderer.Render(commandBuffer, camera, preparedView, passMode, diagnosticsEnabled);
                             renderedContainerCount++;
                         }
                         catch (Exception exception)

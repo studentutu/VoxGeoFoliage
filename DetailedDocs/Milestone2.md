@@ -27,10 +27,12 @@ Turn the shipped baseline into a production-usable package.
 
 ## Immediate Runtime Work
 
-1. Introduce explicit prepared-view handles.
-2. Stop dispatching branch count/emit against `maxVisibleInstanceCapacity`.
-3. Enforce baseline-fit failure instead of silently dropping visible non-far trees.
-4. Keep shadow cheap by default.
+- Completed: explicit prepared-view handles landed and camera/shadow no longer share one renderer-global bound frame.
+- Completed: runtime budgets are now split into visible instances, expanded branch work items, approximate work units, and registered draw-slot cap.
+- Completed: branch count/emit now dispatches from actual generated expanded-branch work via GPU-built indirect dispatch args.
+1. Enforce baseline-fit failure instead of silently dropping visible non-far trees.
+2. Replace registered-slot submission with the live active-slot surface.
+3. Validate the cheap-shadow defaults against the split-budget path.
 
 ## Authority
 

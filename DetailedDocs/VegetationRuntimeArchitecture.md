@@ -187,13 +187,13 @@ VegetationRuntimeContainer.registeredAuthorings[]
       renderLayer
       gridOrigin
       cellSize
-      maxVisibleInstanceCapacity
+      runtimeBudget
       authorings)
 -> AuthoringContainerRuntime.Activate()
 -> AuthoringContainerRuntime.RefreshRuntimeRegistration()
   side effects:
     ResetAuthoringRuntimeIndices()
-    registry = VegetationRuntimeRegistryBuilder.Build(authorings)
+    registry = VegetationRuntimeRegistryBuilder.Build(authorings, runtimeBudget.MaxRegisteredDrawSlots)
     indirectRenderer = new VegetationIndirectRenderer(registry, renderLayer)
     reset cameraGpuDecisionPipeline
     reset frustumGpuDecisionPipeline
@@ -340,13 +340,13 @@ Camera
 
 Important current contract:
 
-- Depth and color both call `PrepareFrameForCamera(camera, classifyShader, diagnosticsEnabled)`.
-- The second call for the same camera and render frame reuses the cached prepared result.
+- Depth and color both call `PrepareViewForCamera(camera, classifyShader, diagnosticsEnabled)`.
+- The second call for the same camera and render frame reuses the cached prepared-view handle.
 
 ### 3.2 Per-Container Prepare
 
 ```text
-AuthoringContainerRuntime.PrepareFrameForCamera(camera, classifyShader, diagnostics)
+AuthoringContainerRuntime.PrepareViewForCamera(camera, classifyShader, diagnostics)
   cache key:
     lastPreparedRenderFrame + lastPreparedCameraInstanceId
 -> EnsureRuntimeRegistration()
@@ -356,13 +356,15 @@ AuthoringContainerRuntime.PrepareFrameForCamera(camera, classifyShader, diagnost
 -> TryEnsureGpuDecisionPipeline(useExplicitFrustumPipeline = false)
   payload out:
     cameraGpuDecisionPipeline
--> PrepareGpuResidentFrame(
+-> PrepareGpuResidentView(
      observerWorldPosition = camera.transform.position,
      frustumPlanes,
      classifyShader,
      diagnosticsEnabled,
-     allowExpandedTreePromotion = true,
-     useExplicitFrustumPipeline = false)
+      allowExpandedTreePromotion = true,
+      useExplicitFrustumPipeline = false)
+  payload out:
+    VegetationIndirectRenderer.PreparedViewHandle
 ```
 
 ### 3.3 GPU Decision Chain
@@ -499,13 +501,14 @@ PrepareResidentFrame(...)
      residentInstanceBuffer,
      residentArgsBuffer,
      slotPackedStartsBuffer)
-  side effects:
-    lastBoundInstanceBuffer = prepared pipeline instance buffer
-    lastBoundSlotPackedStartsBuffer = prepared pipeline slot starts
-    gpuResidentArgsBuffer = prepared pipeline args
-    activeSlotIndices = all registered slots
-    every SlotResources binds shared buffers
--> VegetationIndirectRenderer.Render(passMode = Depth | Color)
+  payload out:
+    PreparedViewHandle {
+      instanceBuffer
+      argsBuffer
+      slotPackedStartsBuffer
+      activeSlotIndices = all registered slots
+    }
+-> VegetationIndirectRenderer.Render(preparedViewHandle, passMode = Depth | Color)
   for each active slot:
     resolve material + pass index
     DrawMeshInstancedIndirect(
@@ -521,7 +524,7 @@ Important current contract:
 
 - Submission iterates registered slots, not actual non-zero slots.
 - Zero-instance draws are tolerated.
-- The renderer has one mutable "currently bound prepared frame" surface.
+- The renderer renders explicit prepared-view handles instead of one mutable "currently bound prepared frame" surface.
 
 ## 4. Current Shadow Pipeline
 
@@ -548,7 +551,7 @@ VegetationRendererFeature.RecordShadowRenderGraph()
     payload out:
       shadowFrustumPlanes[6]
   -> for each container:
-    -> AuthoringContainerRuntime.PrepareFrameForFrustum(
+    -> AuthoringContainerRuntime.PrepareViewForFrustum(
          observerWorldPosition = cameraData.worldSpaceCameraPos,
          frustumPlanes = shadowFrustumPlanes,
          classifyShader,
@@ -559,9 +562,9 @@ VegetationRendererFeature.RecordShadowRenderGraph()
           frustumGpuDecisionPipeline
       -> same PrepareResidentFrame compute chain as camera path
       -> VegetationIndirectRenderer.BindGpuResidentFrame(...)
-         current issue:
-           overwrites renderer state shared with camera color/depth path
-    -> VegetationIndirectRenderer.Render(passMode = Shadow)
+         payload out:
+           PreparedViewHandle
+    -> VegetationIndirectRenderer.Render(preparedViewHandle, passMode = Shadow)
       for each active slot:
         resolve ShadowCaster pass
         DrawMeshInstancedIndirect(...)
@@ -570,8 +573,8 @@ VegetationRendererFeature.RecordShadowRenderGraph()
 Important current contract:
 
 - Shadow preparation owns a second full `VegetationGpuDecisionPipeline` per container once used.
-- Shadow and camera share one `VegetationIndirectRenderer`.
-- There is no explicit prepared-view handle separating color from shadow.
+- Shadow and camera still share one `VegetationIndirectRenderer`, but render calls no longer share one renderer-global mutable bound frame.
+- Camera, depth, and shadow now pass explicit prepared-view handles through submission.
 
 ## 5. Current Resident Memory Surfaces
 
@@ -623,24 +626,31 @@ worst current steady state
   -> 1 x shared mutable indirect renderer per container
 ```
 
-### 5.4 Current Alias Failure
+### 5.4 Shipped Budget Split
 
 ```text
-maxVisibleInstanceCapacity currently drives all of:
-  visible instance buffer size
-  expanded branch work-item capacity
-  accepted tier work budget
-  branch count dispatch size
-  branch emit dispatch size
+old alias:
+  maxVisibleInstanceCapacity drove:
+    visible instance buffer size
+    expanded branch work-item capacity
+    accepted tier work budget
+    branch count dispatch size
+    branch emit dispatch size
+
+current shipped split:
+  color/shadow visible-instance budgets drive resident instance memory
+  color/shadow expanded-work-item budgets drive branch queue capacity
+  color/shadow approx-work-unit budgets drive accepted-content cost
+  registered draw-slot cap bounds registry slot metadata
+  branch count/emit dispatch now uses GPU-built indirect dispatch args from actual generated work count
 ```
 
-That is not one budget. That is several unrelated units forced through one integer.
+The alias is gone. The remaining problem is duplicated per-view residency, not one integer pretending to mean five different things.
 
 ## 6. Current Runtime Weak Points
 
-- Camera and shadow prepare separate full GPU pipelines, but they still mutate one shared submission surface.
-- `TreeL3` is not a hard guaranteed non-far floor because baseline acceptance can fail silently under the aliased cost budget.
-- Branch count and emit dispatch by configured capacity, not actual generated work count.
+- Camera and shadow no longer mutate one shared submission surface, but they still pay for separate full GPU pipelines.
+- `TreeL3` is not a hard guaranteed non-far floor because baseline acceptance can still fail silently under the split work-unit budget.
 - Slot clamping is slot-order biased.
 - Submission still walks registered slots, not live active slots.
 - Memory scales with container count and with camera plus frustum pipeline duplication.
@@ -772,10 +782,16 @@ Reason:
 
 ## 9. Immediate Implementation Order
 
+Completed:
+
 1. Split persistent container state from prepared-view scratch state.
 2. Introduce explicit prepared-view handles.
 3. Remove renderer-global bound-frame ownership.
 4. Split budgets into instances, work items, work units, and slot cap.
 5. Dispatch branch count and emit from actual generated work count.
-6. Enforce baseline-fit failure for visible non-far color trees.
-7. Keep shadow cheap by default while the ownership split lands.
+
+Remaining:
+
+1. Enforce baseline-fit failure for visible non-far color trees.
+2. Replace registered-slot submission with the live active-slot surface.
+3. Keep shadow cheap by default while the pooled prepared-view ownership lands.

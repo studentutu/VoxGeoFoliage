@@ -19,6 +19,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private const int IndirectWorkCostIndexQuantum = 1024;
         private readonly Vector3 gridOrigin;
         private readonly Vector3 cellSize;
+        private readonly int maxRegisteredDrawSlots;
         private readonly List<VegetationDrawSlot> drawSlots = new List<VegetationDrawSlot>();
         private readonly Dictionary<LODProfileSO, int> lodProfileIndices = new Dictionary<LODProfileSO, int>();
         private readonly Dictionary<TreeBlueprintSO, int> blueprintIndices = new Dictionary<TreeBlueprintSO, int>();
@@ -30,10 +31,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly List<VegetationBranchPrototypeRuntime> branchPrototypes = new List<VegetationBranchPrototypeRuntime>();
         private readonly List<VegetationTreeInstanceRuntime> treeInstances = new List<VegetationTreeInstanceRuntime>();
 
-        public VegetationRuntimeRegistryBuilder(Vector3 gridOrigin, Vector3 cellSize)
+        public VegetationRuntimeRegistryBuilder(Vector3 gridOrigin, Vector3 cellSize, int maxRegisteredDrawSlots = int.MaxValue)
         {
             this.gridOrigin = gridOrigin;
             this.cellSize = cellSize;
+            this.maxRegisteredDrawSlots = Mathf.Max(1, maxRegisteredDrawSlots);
         }
 
         /// <summary>
@@ -356,6 +358,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             if (drawSlotIndices.TryGetValue(key, out int existingIndex))
             {
                 return existingIndex;
+            }
+
+            if (drawSlots.Count >= maxRegisteredDrawSlots)
+            {
+                throw new InvalidOperationException(
+                    $"Runtime registration exceeded the configured registered draw-slot cap ({maxRegisteredDrawSlots}) while adding '{debugLabel}'.");
             }
 
             int slotIndex = drawSlots.Count;

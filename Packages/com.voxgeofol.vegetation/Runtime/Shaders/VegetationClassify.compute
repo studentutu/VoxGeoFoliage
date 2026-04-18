@@ -3,6 +3,7 @@
 #pragma kernel ClassifyTrees
 #pragma kernel AcceptTreeTiers
 #pragma kernel GenerateExpandedBranchWorkItems
+#pragma kernel BuildExpandedBranchDispatchArgs
 #pragma kernel ResetSlotCounts
 #pragma kernel CountTrees
 #pragma kernel CountExpandedBranches
@@ -140,6 +141,7 @@ RWStructuredBuffer<uint> _CellVisibility;
 RWStructuredBuffer<TreeVisibilityGpu> _TreeVisibility;
 RWStructuredBuffer<BranchDecisionGpu> _ExpandedBranchWorkItems;
 RWStructuredBuffer<uint> _ExpandedBranchWorkItemCount;
+RWStructuredBuffer<uint> _ExpandedBranchDispatchArgs;
 RWStructuredBuffer<uint> _FrameStats;
 RWStructuredBuffer<uint> _PriorityRingTreeCounts;
 RWStructuredBuffer<uint> _PriorityRingOffsets;
@@ -161,6 +163,7 @@ int _PrototypeCount;
 int _DrawSlotCount;
 int _VisibleInstanceCapacity;
 int _ExpandedBranchWorkItemCapacity;
+int _ApproxWorkUnitCapacity;
 int _AllowExpandedTierPromotion;
 int _PriorityRingCount;
 
@@ -408,9 +411,9 @@ void BuildPriorityOrderedVisibleTreeList(out uint visibleTrees, out uint ordered
 
     orderedVisibleTreeCount = runningOffset;
 
-    for (int treeIndex = 0; treeIndex < _TreeCount; treeIndex++)
+    for (int orderedTreeIndex = 0; orderedTreeIndex < _TreeCount; orderedTreeIndex++)
     {
-        TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
+        TreeVisibilityGpu visibility = _TreeVisibility[orderedTreeIndex];
         if (visibility.visible == 0u)
         {
             continue;
@@ -422,7 +425,7 @@ void BuildPriorityOrderedVisibleTreeList(out uint visibleTrees, out uint ordered
         uint orderedIndex = _PriorityRingOffsets[ringIndex] + ringOffset;
         if (orderedIndex < (uint)_TreeCount)
         {
-            _PriorityOrderedVisibleTreeIndices[orderedIndex] = (uint)treeIndex;
+            _PriorityOrderedVisibleTreeIndices[orderedIndex] = (uint)orderedTreeIndex;
         }
     }
 }
@@ -445,7 +448,7 @@ void ApplyOrderedBaselineTreeL3(
         TreeGpu tree = _Trees[treeIndex];
         BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
         uint treeL3Cost = (uint)max(1, ResolveAcceptedTierCost(blueprint, TierTreeL3));
-        if (acceptedCostUsage + treeL3Cost <= (uint)_VisibleInstanceCapacity)
+        if (acceptedCostUsage + treeL3Cost <= (uint)_ApproxWorkUnitCapacity)
         {
             acceptedCostUsage += treeL3Cost;
             visibility.acceptedTier = TierTreeL3;
@@ -576,7 +579,7 @@ void ApplyOrderedPromotionStage(
         uint currentCost = (uint)max(0, visibility.acceptedTierCost);
         uint additionalCost = nextTierCost > currentCost ? nextTierCost - currentCost : 0u;
 
-        if (acceptedCostUsage + additionalCost <= (uint)_VisibleInstanceCapacity)
+        if (acceptedCostUsage + additionalCost <= (uint)_ApproxWorkUnitCapacity)
         {
             acceptedCostUsage += additionalCost;
             visibility.acceptedTier = targetTier;
@@ -614,7 +617,7 @@ void ApplyOrderedFarImpostors(
         TreeGpu tree = _Trees[treeIndex];
         BlueprintGpu blueprint = _Blueprints[tree.blueprintIndex];
         uint impostorCost = (uint)max(1, ResolveAcceptedTierCost(blueprint, TierImpostor));
-        if (acceptedCostUsage + impostorCost <= (uint)_VisibleInstanceCapacity)
+        if (acceptedCostUsage + impostorCost <= (uint)_ApproxWorkUnitCapacity)
         {
             acceptedCostUsage += impostorCost;
             visibility.acceptedTier = TierImpostor;
@@ -708,6 +711,21 @@ void GenerateExpandedBranchWorkItems(uint3 dispatchThreadId : SV_DispatchThreadI
 uint GetExpandedBranchWorkItemCount()
 {
     return min(_ExpandedBranchWorkItemCount[0], (uint)_ExpandedBranchWorkItemCapacity);
+}
+
+[numthreads(1, 1, 1)]
+void BuildExpandedBranchDispatchArgs(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    if (dispatchThreadId.x != 0u)
+    {
+        return;
+    }
+
+    uint workItemCount = GetExpandedBranchWorkItemCount();
+    uint threadGroupCount = max(1u, (workItemCount + 63u) / 64u);
+    _ExpandedBranchDispatchArgs[0] = threadGroupCount;
+    _ExpandedBranchDispatchArgs[1] = 1u;
+    _ExpandedBranchDispatchArgs[2] = 1u;
 }
 
 void CountExpandedBranch(uint workItemIndex)

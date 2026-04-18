@@ -64,7 +64,21 @@ public sealed class VegetationRuntimeFoundationTests
     }
 
     [Test]
-    public void IndirectRenderer_BindGpuResidentFrame_ExposesRegisteredSlotSnapshotsWithoutExactCounts()
+    public void RuntimeRegistryBuilder_ThrowsWhenRegisteredDrawSlotCapIsExceeded()
+    {
+        VegetationTreeAuthoring authoring = CreateAuthoring("CappedSlotsTree", new Vector3(0f, 0f, 10f));
+        Hash128 containerIdHash = Hash128.Compute("RuntimeRegistryBuilder_ThrowsWhenRegisteredDrawSlotCapIsExceeded");
+        VegetationTreeAuthoringRuntime runtimeAuthoring = CreateRuntimeAuthoring(authoring, containerIdHash, 0);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f), 1)
+                .Build(new[] { runtimeAuthoring }));
+
+        StringAssert.Contains("registered draw-slot cap", exception!.Message);
+    }
+
+    [Test]
+    public void IndirectRenderer_BindGpuResidentFrame_ExposesPreparedViewSnapshotsWithoutExactCounts()
     {
         VegetationTreeAuthoring authoring = CreateAuthoring("RuntimeTree", new Vector3(0f, 0f, 10f));
         VegetationTreeAuthoringRuntime runtimeAuthoring =
@@ -99,17 +113,18 @@ public sealed class VegetationRuntimeFoundationTests
                        sizeof(uint)))
             {
                 slotEmittedInstanceCountsBuffer.SetData(emittedCounts);
-                indirectRenderer.BindGpuResidentFrame(
+                VegetationIndirectRenderer.PreparedViewHandle? preparedView = indirectRenderer.BindGpuResidentFrame(
                     instanceBuffer,
                     argsBuffer,
                     slotPackedStartsBuffer,
                     slotEmittedInstanceCountsBuffer);
+                Assert.IsNotNull(preparedView);
 
                 List<VegetationIndirectDrawBatchSnapshot> snapshots = new List<VegetationIndirectDrawBatchSnapshot>();
-                indirectRenderer.GetDebugSnapshots(snapshots);
+                indirectRenderer.GetDebugSnapshots(preparedView!, snapshots);
 
-                int expectedActiveSlotCount = registry.DrawSlots.Count > 1 ? 2 : 1;
-                Assert.AreEqual(expectedActiveSlotCount, indirectRenderer.ActiveSlotIndices.Count);
+                int expectedActiveSlotCount = registry.DrawSlots.Count;
+                Assert.AreEqual(expectedActiveSlotCount, preparedView!.ActiveSlotIndices.Count);
                 Assert.AreEqual(expectedActiveSlotCount, snapshots.Count);
                 for (int i = 0; i < snapshots.Count; i++)
                 {
@@ -120,6 +135,52 @@ public sealed class VegetationRuntimeFoundationTests
                     AssertBoundsEqual(snapshot.WorldBounds, expectedBounds);
                 }
             }
+        }
+    }
+
+    [Test]
+    public void IndirectRenderer_BindGpuResidentFrame_ReturnsIndependentPreparedViewHandles()
+    {
+        VegetationTreeAuthoring authoring = CreateAuthoring("IndependentPreparedViewTree", new Vector3(0f, 0f, 10f));
+        VegetationTreeAuthoringRuntime runtimeAuthoring =
+            CreateRuntimeAuthoring(authoring, Hash128.Compute("IndirectRenderer_IndependentPreparedViews"), 0);
+        VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
+            .Build(new[] { runtimeAuthoring });
+
+        int indirectArgsUintCount = registry.DrawSlots.Count * (GraphicsBuffer.IndirectDrawIndexedArgs.size / sizeof(uint));
+
+        using (VegetationIndirectRenderer indirectRenderer = new VegetationIndirectRenderer(registry, 7))
+        using (GraphicsBuffer firstInstanceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 16, 16))
+        using (GraphicsBuffer secondInstanceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 16, 16))
+        using (GraphicsBuffer firstArgsBuffer = new GraphicsBuffer(
+                   GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.IndirectArguments,
+                   Mathf.Max(1, indirectArgsUintCount),
+                   sizeof(uint)))
+        using (GraphicsBuffer secondArgsBuffer = new GraphicsBuffer(
+                   GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.IndirectArguments,
+                   Mathf.Max(1, indirectArgsUintCount),
+                   sizeof(uint)))
+        using (ComputeBuffer firstSlotPackedStartsBuffer = new ComputeBuffer(Mathf.Max(1, registry.DrawSlots.Count), sizeof(uint)))
+        using (ComputeBuffer secondSlotPackedStartsBuffer = new ComputeBuffer(Mathf.Max(1, registry.DrawSlots.Count), sizeof(uint)))
+        {
+            VegetationIndirectRenderer.PreparedViewHandle? firstPreparedView = indirectRenderer.BindGpuResidentFrame(
+                firstInstanceBuffer,
+                firstArgsBuffer,
+                firstSlotPackedStartsBuffer);
+            VegetationIndirectRenderer.PreparedViewHandle? secondPreparedView = indirectRenderer.BindGpuResidentFrame(
+                secondInstanceBuffer,
+                secondArgsBuffer,
+                secondSlotPackedStartsBuffer);
+
+            Assert.IsNotNull(firstPreparedView);
+            Assert.IsNotNull(secondPreparedView);
+            Assert.AreNotSame(firstPreparedView, secondPreparedView);
+            Assert.AreSame(firstInstanceBuffer, firstPreparedView!.InstanceBuffer);
+            Assert.AreSame(firstArgsBuffer, firstPreparedView.ArgsBuffer);
+            Assert.AreSame(firstSlotPackedStartsBuffer, firstPreparedView.SlotPackedStartsBuffer);
+            Assert.AreSame(secondInstanceBuffer, secondPreparedView!.InstanceBuffer);
+            Assert.AreSame(secondArgsBuffer, secondPreparedView.ArgsBuffer);
+            Assert.AreSame(secondSlotPackedStartsBuffer, secondPreparedView.SlotPackedStartsBuffer);
         }
     }
 
@@ -298,7 +359,10 @@ public sealed class VegetationRuntimeFoundationTests
             0,
             Vector3.zero,
             new Vector3(64f, 64f, 64f),
-            32,
+            new VegetationRuntimeBudget(
+                new VegetationViewRuntimeBudget(32, 32, 32),
+                new VegetationViewRuntimeBudget(32, 32, 32),
+                128),
             runtimeTrees);
         createdDisposables.Add(runtimeOwner);
         return runtimeOwner;

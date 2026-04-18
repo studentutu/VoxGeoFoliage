@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 using VoxGeoFol.Features.Vegetation.Authoring;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
@@ -19,6 +20,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         // Don’t raise it blindly.
         // this is a chunk of data for a single container!
         private const int DefaultMaxVisibleInstanceCapacity = 131072;
+        private const int DefaultMaxExpandedBranchWorkItemCapacity = 131072;
+        private const int DefaultMaxApproxWorkUnitCapacity = 131072;
+        private const int DefaultMaxRegisteredDrawSlots = 4096;
 
         [Tooltip("World-space origin of the frozen spatial grid built during runtime registration.")]
         [SerializeField] private Vector3 gridOrigin = Vector3.zero;
@@ -31,9 +35,40 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private List<VegetationTreeAuthoring> registeredAuthorings = new List<VegetationTreeAuthoring>();
 
         [Min(1)]
-        [Tooltip("Hard cap for GPU-visible vegetation instances packed into the shared runtime buffer each frame. Overflow is clamped instead of reallocating scene-scale buffers. Shared instance payload is approximately 144 bytes per visible instance.")]
+        [Tooltip("Color/depth path hard cap for GPU-visible vegetation instances packed into the shared runtime buffer each frame. Overflow is clamped instead of reallocating scene-scale buffers. Shared instance payload is approximately 144 bytes per visible instance.")]
         [SerializeField]
-        private int maxVisibleInstanceCapacity = DefaultMaxVisibleInstanceCapacity;
+        [FormerlySerializedAs("maxVisibleInstanceCapacity")]
+        private int colorMaxVisibleInstanceCapacity = DefaultMaxVisibleInstanceCapacity;
+
+        [Min(1)]
+        [Tooltip("Color/depth path hard cap for generated expanded-branch work items. This bounds promoted-tree branch queue independently of visible instance memory.")]
+        [SerializeField]
+        private int colorMaxExpandedBranchWorkItemCapacity = DefaultMaxExpandedBranchWorkItemCapacity;
+
+        [Min(1)]
+        [Tooltip("Color/depth path approximate accepted-content work-unit budget. This caps tree-tier survival cost independently of visible instance memory.")]
+        [SerializeField]
+        private int colorMaxApproxWorkUnitCapacity = DefaultMaxApproxWorkUnitCapacity;
+
+        [Min(1)]
+        [Tooltip("Shadow path hard cap for GPU-visible vegetation instances packed into the shared runtime buffer each frame.")]
+        [SerializeField]
+        private int shadowMaxVisibleInstanceCapacity = DefaultMaxVisibleInstanceCapacity;
+
+        [Min(1)]
+        [Tooltip("Shadow path hard cap for generated expanded-branch work items.")]
+        [SerializeField]
+        private int shadowMaxExpandedBranchWorkItemCapacity = DefaultMaxExpandedBranchWorkItemCapacity;
+
+        [Min(1)]
+        [Tooltip("Shadow path approximate accepted-content work-unit budget.")]
+        [SerializeField]
+        private int shadowMaxApproxWorkUnitCapacity = DefaultMaxApproxWorkUnitCapacity;
+
+        [Min(1)]
+        [Tooltip("Hard cap for registered draw slots in this container. Registration fails explicitly instead of creating unbounded slot metadata.")]
+        [SerializeField]
+        private int maxRegisteredDrawSlots = DefaultMaxRegisteredDrawSlots;
 
         private readonly List<VegetationTreeAuthoringRuntime> runtimeAuthorings = new List<VegetationTreeAuthoringRuntime>();
         private AuthoringContainerRuntime? runtimeOwner;
@@ -44,7 +79,18 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         public IReadOnlyList<VegetationTreeAuthoring> RegisteredAuthorings => registeredAuthorings;
 
-        public int MaxVisibleInstanceCapacity => Mathf.Max(1, maxVisibleInstanceCapacity);
+        public int MaxVisibleInstanceCapacity => Mathf.Max(1, colorMaxVisibleInstanceCapacity);
+
+        public VegetationRuntimeBudget RuntimeBudget => new VegetationRuntimeBudget(
+            new VegetationViewRuntimeBudget(
+                colorMaxVisibleInstanceCapacity,
+                colorMaxExpandedBranchWorkItemCapacity,
+                colorMaxApproxWorkUnitCapacity),
+            new VegetationViewRuntimeBudget(
+                shadowMaxVisibleInstanceCapacity,
+                shadowMaxExpandedBranchWorkItemCapacity,
+                shadowMaxApproxWorkUnitCapacity),
+            maxRegisteredDrawSlots);
 
         public int RenderLayer => gameObject.layer;
 
@@ -178,7 +224,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 RenderLayer,
                 gridOrigin,
                 cellSize,
-                MaxVisibleInstanceCapacity,
+                RuntimeBudget,
                 authoringSnapshot);
             runtimeOwner = newRuntimeOwner;
             newRuntimeOwner.Activate();

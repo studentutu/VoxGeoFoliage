@@ -26,6 +26,7 @@ namespace VoxGeoFol.Features.Vegetation.SubScene
 
             List<VegetationTreeAuthoringRuntime> runtimeTrees = new List<VegetationTreeAuthoringRuntime>();
             container.BuildRuntimeTreeAuthorings(runtimeTrees);
+            VegetationRuntimeBudget runtimeBudget = container.RuntimeBudget;
 
             Entity entity = GetEntity(TransformUsageFlags.None);
             AddComponent(entity, new SubSceneVegetationContainerBaked
@@ -35,7 +36,13 @@ namespace VoxGeoFol.Features.Vegetation.SubScene
                 GridOrigin = container.GridOrigin,
                 CellSize = container.CellSize,
                 RenderLayer = container.RenderLayer,
-                MaxVisibleInstanceCapacity = container.MaxVisibleInstanceCapacity
+                ColorMaxVisibleInstances = runtimeBudget.ColorBudget.MaxVisibleInstances,
+                ColorMaxExpandedBranchWorkItems = runtimeBudget.ColorBudget.MaxExpandedBranchWorkItems,
+                ColorMaxApproxWorkUnits = runtimeBudget.ColorBudget.MaxApproxWorkUnits,
+                ShadowMaxVisibleInstances = runtimeBudget.ShadowBudget.MaxVisibleInstances,
+                ShadowMaxExpandedBranchWorkItems = runtimeBudget.ShadowBudget.MaxExpandedBranchWorkItems,
+                ShadowMaxApproxWorkUnits = runtimeBudget.ShadowBudget.MaxApproxWorkUnits,
+                MaxRegisteredDrawSlots = runtimeBudget.MaxRegisteredDrawSlots
             });
 
             DynamicBuffer<SubSceneVegetationTreeBaked> treeBuffer = AddBuffer<SubSceneVegetationTreeBaked>(entity);
