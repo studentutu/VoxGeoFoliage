@@ -27,4 +27,4 @@ Goal: split prepared-view ownership out of AuthoringContainerRuntime and stop sh
 4. Enforce baseline-fit failure for visible non-far color trees.
 5. Run dense-forest and shadow validation after the ownership split lands.
 
-Target Result: simplified memory footprint for runtime  path, true separation of draw calls for shadow path and depth/main color path and production ready support for a container with 10_000 trees.
+Target Result: simplified memory footprint for runtime  path, true separation of draw calls for shadow path and depth/main color path and production ready support for a container with 10_000 trees, that has near prioritization and actual hard budgeting.
