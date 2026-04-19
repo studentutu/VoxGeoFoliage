@@ -314,8 +314,9 @@ VegetationRuntimeRegistry
 Important current contract:
 
 - One registered draw slot is one exact `Mesh + Material + MaterialKind`.
-- Submission surface is registered slots, not live non-zero slots.
-- `VegetationIndirectRenderer` does not own its own GPU instance/args buffers. It binds whatever pipeline prepared last.
+- Submission surface is `PreparedViewHandle.ActiveSlotIndices`, not raw registry slot metadata.
+- Current shipped active-slot source is the latest completed async non-zero emitted-slot subset, with registered-slot fallback until the emitted-slot readback warms.
+- `VegetationIndirectRenderer` does not own its own GPU instance/args buffers. It binds explicit prepared-view buffers and does not let camera/shadow submission overwrite each other.
 
 ## 3. Current Camera Color/Depth Pipeline
 
@@ -373,7 +374,8 @@ AuthoringContainerRuntime.PrepareViewForCamera(camera, classifyShader, diagnosti
 VegetationGpuDecisionPipeline.PrepareResidentFrame(
   cameraWorldPosition,
   frustumPlanes,
-  allowExpandedTreePromotion)
+  allowExpandedTreePromotion,
+  captureTelemetry)
 -> UploadDynamicFrameData
   payload in constants:
     _CameraWorldPosition
@@ -386,13 +388,15 @@ VegetationGpuDecisionPipeline.PrepareResidentFrame(
     _PrototypeCount
     _DrawSlotCount
     _VisibleInstanceCapacity
-    _ExpandedBranchWorkItemCapacity = visibleInstanceCapacity   <-- current alias bug
+    _ExpandedBranchWorkItemCapacity
+    _ApproxWorkUnitCapacity
     _AllowExpandedTierPromotion
     _PriorityRingCount
 -> ResetFrameState
   payload out:
     ExpandedBranchWorkItemCount = 0
-    FrameStats[0..8] = 0
+    ExpandedBranchDispatchArgs = {0, 1, 1}
+    FrameStats[0..12] = 0
 -> ClassifyCells
   payload in:
     Cells[]
@@ -435,13 +439,15 @@ VegetationGpuDecisionPipeline.PrepareResidentFrame(
       expandedTrees
       expandedBranchWorkItems
       acceptedTierCostUsage
+      baselineTreeL3Failures
+      visibleInstanceCapHits
+      expandedBranchWorkItemCapHits
+      emittedVisibleInstances
     }
   actual current order:
-    1. visible non-far trees try baseline TreeL3
+    1. camera/color path pre-validates visible non-far `TreeL3` baseline fit and fault-disables the container explicitly if it cannot fit
     2. nearest-first promotion TreeL3 -> L2 -> L1 -> L0 if enabled
     3. far trees try Impostor last
-  actual current bug:
-    all cost checks use _VisibleInstanceCapacity
 -> ResetSlotCounts
   payload out:
     SlotRequestedInstanceCounts[]
@@ -462,7 +468,7 @@ VegetationGpuDecisionPipeline.PrepareResidentFrame(
     ExpandedBranchWorkItemCount
 -> CountExpandedBranches
   dispatch item count:
-    visibleInstanceCapacity                                    <-- current bug
+    actual generated expanded-branch work-item count
   payload out:
     SlotRequestedInstanceCounts[branch wood slot]++
     SlotRequestedInstanceCounts[branch canopy slot]++
@@ -478,7 +484,7 @@ VegetationGpuDecisionPipeline.PrepareResidentFrame(
     SlotEmittedInstanceCounts[]
 -> EmitExpandedBranches
   dispatch item count:
-    visibleInstanceCapacity                                    <-- current bug
+    actual generated expanded-branch work-item count
   payload out:
     VisibleInstances[]
     SlotEmittedInstanceCounts[]
@@ -491,22 +497,24 @@ VegetationGpuDecisionPipeline.PrepareResidentFrame(
       baseVertexLocation
       startInstanceLocation = 0
     }
+-> SchedulePreparedFrameReadbacks
+  payload out:
+    latest prepared-frame telemetry cache
+    latest active-slot index cache
 ```
 
 ### 3.4 Bind And Submit
 
 ```text
 PrepareResidentFrame(...)
--> VegetationIndirectRenderer.BindGpuResidentFrame(
-     residentInstanceBuffer,
-     residentArgsBuffer,
-     slotPackedStartsBuffer)
+-> VegetationIndirectRenderer.BindGpuResidentFrame(...)
   payload out:
     PreparedViewHandle {
       instanceBuffer
       argsBuffer
       slotPackedStartsBuffer
-      activeSlotIndices = all registered slots
+      activeSlotIndices = latest completed non-zero emitted slots
+      fallback = all registered slots until async emitted-slot readback warms
     }
 -> VegetationIndirectRenderer.Render(preparedViewHandle, passMode = Depth | Color)
   for each active slot:
@@ -522,8 +530,9 @@ PrepareResidentFrame(...)
 
 Important current contract:
 
-- Submission iterates registered slots, not actual non-zero slots.
-- Zero-instance draws are tolerated.
+- Submission iterates the prepared-view handle's active-slot indices, not the raw registered slot table.
+- Current shipped submission uses the latest completed async non-zero emitted-slot subset, with registered-slot fallback during async warm-up.
+- Zero-instance draws are only tolerated during registered-slot fallback.
 - The renderer renders explicit prepared-view handles instead of one mutable "currently bound prepared frame" surface.
 
 ## 4. Current Shadow Pipeline
@@ -597,9 +606,10 @@ placementBuffer[max(1, placementCount)]
 prototypeBuffer[max(1, prototypeCount)]
 treeBuffer[max(1, treeCount)]
 treeVisibilityBuffer[max(1, treeCount)]
-expandedBranchWorkItemBuffer[visibleInstanceCapacity]
+expandedBranchWorkItemBuffer[expandedBranchWorkItemCapacity]
 expandedBranchWorkItemCountBuffer[1]
-frameStatsBuffer[9]
+expandedBranchDispatchArgsBuffer[3]
+frameStatsBuffer[13]
 priorityRingTreeCountBuffer[priorityRingCount]
 priorityRingOffsetsBuffer[priorityRingCount]
 priorityOrderedVisibleTreeIndicesBuffer[max(1, treeCount)]
@@ -623,7 +633,7 @@ one active container
 
 worst current steady state
   -> 2 x full VegetationGpuDecisionPipeline GPU residency per container
-  -> 1 x shared mutable indirect renderer per container
+  -> 1 x shared indirect renderer per container with explicit prepared-view handles
 ```
 
 ### 5.4 Shipped Budget Split
@@ -650,10 +660,10 @@ The alias is gone. The remaining problem is duplicated per-view residency, not o
 ## 6. Current Runtime Weak Points
 
 - Camera and shadow no longer mutate one shared submission surface, but they still pay for separate full GPU pipelines.
-- `TreeL3` is not a hard guaranteed non-far floor because baseline acceptance can still fail silently under the split work-unit budget.
 - Slot clamping is slot-order biased.
-- Submission still walks registered slots, not live active slots.
+- Prepared-frame telemetry and active-slot submission are latest async readback snapshots, so the first prepared frames can fall back to registered slots and reported counts can lag the frame being rendered.
 - Memory scales with container count and with camera plus frustum pipeline duplication.
+- Shadow still defaults to the same budget shape as color unless explicitly overridden.
 
 ## 7. Required Target Design
 
@@ -789,9 +799,12 @@ Completed:
 3. Remove renderer-global bound-frame ownership.
 4. Split budgets into instances, work items, work units, and slot cap.
 5. Dispatch branch count and emit from actual generated work count.
+6. Enforce baseline-fit failure for visible non-far color trees.
+7. Add actual visible-instance count, actual generated branch-work count, and budget-cap-hit telemetry through async prepared-frame readbacks.
+8. Replace registered-slot submission with the live active-slot surface, using latest async emitted-slot readback with registered-slot fallback during warm-up.
 
 Remaining:
 
-1. Enforce baseline-fit failure for visible non-far color trees.
-2. Replace registered-slot submission with the live active-slot surface.
-3. Keep shadow cheap by default while the pooled prepared-view ownership lands.
+1. Keep shadow cheap by default and tune shadow budgets separately from color residency.
+2. Remove slot-order bias from visible-instance clamping.
+3. Collapse duplicated camera/frustum GPU residency into the pooled prepared-view ownership target.

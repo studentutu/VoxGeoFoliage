@@ -51,12 +51,15 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private int lastPreparationDiagnosticsCameraInstanceId = -1;
         private int lastPreparationDiagnosticsDrawSlotCount = -1;
         private bool lastPreparationDiagnosticsUploadedFrame;
+        private bool lastPreparationDiagnosticsUsedRegisteredSlotFallback;
         private int lastPreparationMissingStateCameraInstanceId = -1;
         private int lastPreparationWarningCameraInstanceId = -1;
         private int lastPreparationWarningDrawSlotCount = -1;
         private bool lastPreparationWarningUploadedFrame;
+        private bool lastPreparationWarningUsedRegisteredSlotFallback;
         private bool gpuPipelineTelemetryDiagnosticsDirty = true;
         private bool preparedFrameTelemetryDiagnosticsDirty = true;
+        private int lastPreparedFrameTelemetryFingerprint = int.MinValue;
         private bool isRegistered;
         private bool isDisposed;
         private bool renderRuntimeFaulted;
@@ -441,9 +444,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             lastPreparedFrustumView = null;
             lastPreparationDiagnosticsCameraInstanceId = -1;
             lastPreparationDiagnosticsDrawSlotCount = -1;
+            lastPreparationDiagnosticsUsedRegisteredSlotFallback = false;
             lastPreparationMissingStateCameraInstanceId = -1;
             lastPreparationWarningCameraInstanceId = -1;
             lastPreparationWarningDrawSlotCount = -1;
+            lastPreparationWarningUsedRegisteredSlotFallback = false;
             renderRuntimeCleanupPending = false;
         }
 
@@ -457,6 +462,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             using (PrepareGpuResidentFrameMarker.Auto())
             {
+                if (!useExplicitFrustumPipeline &&
+                    !TryValidateVisibleNonFarColorBaselineFit(cameraWorldPosition, frustumPlanes, out string? baselineFailureReason))
+                {
+                    MarkRenderRuntimeFault("prepare-baseline-fit", new InvalidOperationException(baselineFailureReason));
+                    return null;
+                }
+
                 if (!TryEnsureGpuDecisionPipeline(classifyShader, useExplicitFrustumPipeline, out VegetationGpuDecisionPipeline? pipeline) ||
                     pipeline == null)
                 {
@@ -464,11 +476,24 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
 
                 LogGpuPipelineTelemetry(diagnosticsEnabled, pipeline);
-                pipeline.PrepareResidentFrame(cameraWorldPosition, frustumPlanes, allowExpandedTreePromotion);
-                VegetationIndirectRenderer.PreparedViewHandle? preparedView = indirectRenderer!.BindGpuResidentFrame(
-                    pipeline.ResidentInstanceBuffer,
-                    pipeline.ResidentArgsBuffer,
-                    pipeline.ResidentSlotPackedStartsBuffer);
+                pipeline.PrepareResidentFrame(cameraWorldPosition, frustumPlanes, allowExpandedTreePromotion, diagnosticsEnabled);
+                VegetationIndirectRenderer.PreparedViewHandle? preparedView;
+                if (pipeline.TryGetLatestActiveSlotIndices(out IReadOnlyList<int> activeSlotIndices))
+                {
+                    preparedView = indirectRenderer!.BindGpuResidentFrame(
+                        pipeline.ResidentInstanceBuffer,
+                        pipeline.ResidentArgsBuffer,
+                        pipeline.ResidentSlotPackedStartsBuffer,
+                        activeSlotIndices);
+                }
+                else
+                {
+                    preparedView = indirectRenderer!.BindGpuResidentFrame(
+                        pipeline.ResidentInstanceBuffer,
+                        pipeline.ResidentArgsBuffer,
+                        pipeline.ResidentSlotPackedStartsBuffer);
+                }
+
                 LogPreparedFrameTelemetry(diagnosticsEnabled, pipeline);
                 return preparedView != null && preparedView.HasUploadedFrame
                     ? preparedView
@@ -557,6 +582,69 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             lastPreparedFrustumView = null;
             gpuPipelineTelemetryDiagnosticsDirty = true;
             preparedFrameTelemetryDiagnosticsDirty = true;
+            lastPreparedFrameTelemetryFingerprint = int.MinValue;
+        }
+
+        private bool TryValidateVisibleNonFarColorBaselineFit(
+            Vector3 observerWorldPosition,
+            Plane[] frustumPlanes,
+            out string failureReason)
+        {
+            failureReason = string.Empty;
+            if (registry == null)
+            {
+                return true;
+            }
+
+            int requiredBaselineCost = 0;
+            int visibleNonFarTreeCount = 0;
+            IReadOnlyList<VegetationTreeInstanceRuntime> trees = registry.TreeInstances;
+            IReadOnlyList<VegetationTreeBlueprintRuntime> blueprints = registry.TreeBlueprints;
+            IReadOnlyList<VegetationLodProfileRuntime> lodProfiles = registry.LodProfiles;
+            for (int treeIndex = 0; treeIndex < trees.Count; treeIndex++)
+            {
+                VegetationTreeInstanceRuntime tree = trees[treeIndex];
+                if (tree.BlueprintIndex < 0 || tree.BlueprintIndex >= blueprints.Count)
+                {
+                    continue;
+                }
+
+                VegetationTreeBlueprintRuntime blueprint = blueprints[tree.BlueprintIndex];
+                if (blueprint.LodProfileIndex < 0 || blueprint.LodProfileIndex >= lodProfiles.Count)
+                {
+                    continue;
+                }
+
+                if (!GeometryUtility.TestPlanesAABB(frustumPlanes, tree.WorldBounds))
+                {
+                    continue;
+                }
+
+                VegetationLodProfileRuntime lodProfile = lodProfiles[blueprint.LodProfileIndex];
+                float treeDistance = VegetationRuntimeMathUtility.ComputeSphereSurfaceDistance(
+                    observerWorldPosition,
+                    tree.SphereCenterWorld,
+                    tree.BoundingSphereRadius);
+                if (treeDistance >= lodProfile.AbsoluteCullDistance || treeDistance >= lodProfile.ImpostorDistance)
+                {
+                    continue;
+                }
+
+                visibleNonFarTreeCount++;
+                requiredBaselineCost += Math.Max(1, blueprint.TreeL3WorkCost);
+                if (requiredBaselineCost <= runtimeBudget.ColorBudget.MaxApproxWorkUnits)
+                {
+                    continue;
+                }
+
+                failureReason =
+                    $"Visible non-far TreeL3 baseline does not fit the color approx-work-unit budget. " +
+                    $"visibleNonFarTrees={visibleNonFarTreeCount} requiredTreeL3Cost={requiredBaselineCost} " +
+                    $"colorApproxWorkUnitCapacity={runtimeBudget.ColorBudget.MaxApproxWorkUnits}.";
+                return false;
+            }
+
+            return true;
         }
 
         private void ResetAuthoringRuntimeIndices()
@@ -673,7 +761,17 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private void LogPreparedFrameTelemetry(bool diagnosticsEnabled, VegetationGpuDecisionPipeline pipeline)
         {
-            if (!diagnosticsEnabled || !preparedFrameTelemetryDiagnosticsDirty || registry == null || indirectRenderer == null)
+            if (!diagnosticsEnabled || registry == null || indirectRenderer == null)
+            {
+                return;
+            }
+
+            bool hasPreparedFrameTelemetry = pipeline.TryGetLatestPreparedFrameTelemetry(out VegetationGpuDecisionPipeline.PreparedFrameTelemetry preparedFrameTelemetry);
+            int telemetryFingerprint = ComputePreparedFrameTelemetryFingerprint(
+                pipeline,
+                hasPreparedFrameTelemetry,
+                preparedFrameTelemetry);
+            if (!preparedFrameTelemetryDiagnosticsDirty && telemetryFingerprint == lastPreparedFrameTelemetryFingerprint)
             {
                 return;
             }
@@ -690,10 +788,62 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             builder.Append(" expandedBranchWorkItemCapacity=").Append(pipeline.ExpandedBranchWorkItemCapacity);
             builder.Append(" approxWorkUnitCapacity=").Append(pipeline.ApproxWorkUnitCapacity);
             builder.Append(" visibleInstanceCapacityBytes=").Append(pipeline.VisibleInstanceCapacityBytes);
-            builder.Append(" finalizedIndirectArgsReadback=disabled-hot-path");
+            builder.Append(" actualUsageTelemetry=").Append(hasPreparedFrameTelemetry ? "latest-async-readback" : "pending-async-readback");
+            if (hasPreparedFrameTelemetry)
+            {
+                builder.Append(" visibleTrees=").Append(preparedFrameTelemetry.VisibleTrees);
+                builder.Append(" acceptedTreeL3=").Append(preparedFrameTelemetry.AcceptedTreeL3);
+                builder.Append(" promotedL2=").Append(preparedFrameTelemetry.PromotedL2);
+                builder.Append(" promotedL1=").Append(preparedFrameTelemetry.PromotedL1);
+                builder.Append(" promotedL0=").Append(preparedFrameTelemetry.PromotedL0);
+                builder.Append(" rejectedPromotions=").Append(preparedFrameTelemetry.RejectedPromotions);
+                builder.Append(" baselineTreeL3Failures=").Append(preparedFrameTelemetry.BaselineTreeL3Failures);
+                builder.Append(" actualGeneratedBranchWorkItems=").Append(preparedFrameTelemetry.ExpandedBranchWorkItems);
+                builder.Append(" actualVisibleInstances=").Append(preparedFrameTelemetry.EmittedVisibleInstanceCount);
+                builder.Append(" nonZeroEmittedSlots=").Append(preparedFrameTelemetry.NonZeroEmittedSlots);
+                builder.Append(" acceptedTierCostUsage=").Append(preparedFrameTelemetry.AcceptedTierCostUsage);
+                builder.Append(" approxWorkUnitCapHit=").Append(preparedFrameTelemetry.ApproxWorkUnitCapHit ? 1 : 0);
+                builder.Append(" visibleInstanceCapHit=").Append(preparedFrameTelemetry.VisibleInstanceCapHit ? 1 : 0);
+                builder.Append(" expandedBranchWorkItemCapHit=").Append(preparedFrameTelemetry.ExpandedBranchWorkItemCapHit ? 1 : 0);
+            }
 
             Debug.Log(builder.ToString(), diagnosticsContext);
             preparedFrameTelemetryDiagnosticsDirty = false;
+            lastPreparedFrameTelemetryFingerprint = telemetryFingerprint;
+        }
+
+        private static int ComputePreparedFrameTelemetryFingerprint(
+            VegetationGpuDecisionPipeline pipeline,
+            bool hasPreparedFrameTelemetry,
+            VegetationGpuDecisionPipeline.PreparedFrameTelemetry preparedFrameTelemetry)
+        {
+            unchecked
+            {
+                int hash = pipeline.VisibleInstanceCapacity;
+                hash = (hash * 397) ^ pipeline.ExpandedBranchWorkItemCapacity;
+                hash = (hash * 397) ^ pipeline.ApproxWorkUnitCapacity;
+                hash = (hash * 397) ^ (hasPreparedFrameTelemetry ? 1 : 0);
+                if (!hasPreparedFrameTelemetry)
+                {
+                    return hash;
+                }
+
+                hash = (hash * 397) ^ preparedFrameTelemetry.VisibleTrees;
+                hash = (hash * 397) ^ preparedFrameTelemetry.AcceptedTreeL3;
+                hash = (hash * 397) ^ preparedFrameTelemetry.PromotedL2;
+                hash = (hash * 397) ^ preparedFrameTelemetry.PromotedL1;
+                hash = (hash * 397) ^ preparedFrameTelemetry.PromotedL0;
+                hash = (hash * 397) ^ preparedFrameTelemetry.RejectedPromotions;
+                hash = (hash * 397) ^ preparedFrameTelemetry.BaselineTreeL3Failures;
+                hash = (hash * 397) ^ preparedFrameTelemetry.ExpandedBranchWorkItems;
+                hash = (hash * 397) ^ preparedFrameTelemetry.NonZeroEmittedSlots;
+                hash = (hash * 397) ^ preparedFrameTelemetry.AcceptedTierCostUsage;
+                hash = (hash * 397) ^ preparedFrameTelemetry.EmittedVisibleInstanceCount.GetHashCode();
+                hash = (hash * 397) ^ (preparedFrameTelemetry.ApproxWorkUnitCapHit ? 1 : 0);
+                hash = (hash * 397) ^ (preparedFrameTelemetry.VisibleInstanceCapHit ? 1 : 0);
+                hash = (hash * 397) ^ (preparedFrameTelemetry.ExpandedBranchWorkItemCapHit ? 1 : 0);
+                return hash;
+            }
         }
 
         private void LogPreparationDiagnostics(
@@ -723,11 +873,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             lastPreparationMissingStateCameraInstanceId = -1;
             bool uploadedFrame = preparedView != null && preparedView.HasUploadedFrame;
             int drawSlotCount = preparedView?.ActiveSlotIndices.Count ?? 0;
+            bool usesRegisteredSlotFallback = preparedView?.UsesRegisteredSlotFallback ?? false;
             if (uploadedFrame && drawSlotCount > 0)
             {
                 if (cameraInstanceId == lastPreparationDiagnosticsCameraInstanceId &&
                     uploadedFrame == lastPreparationDiagnosticsUploadedFrame &&
-                    drawSlotCount == lastPreparationDiagnosticsDrawSlotCount)
+                    drawSlotCount == lastPreparationDiagnosticsDrawSlotCount &&
+                    usesRegisteredSlotFallback == lastPreparationDiagnosticsUsedRegisteredSlotFallback)
                 {
                     return;
                 }
@@ -735,23 +887,26 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 lastPreparationDiagnosticsCameraInstanceId = cameraInstanceId;
                 lastPreparationDiagnosticsUploadedFrame = uploadedFrame;
                 lastPreparationDiagnosticsDrawSlotCount = drawSlotCount;
+                lastPreparationDiagnosticsUsedRegisteredSlotFallback = usesRegisteredSlotFallback;
                 lastPreparationWarningCameraInstanceId = -1;
                 lastPreparationWarningDrawSlotCount = -1;
                 Debug.Log(
                     string.Format(
-                        "AuthoringContainerRuntime prepare container={0} provider={1} camera={2} uploaded={3} source=GpuResident drawSlots={4}",
+                        "AuthoringContainerRuntime prepare container={0} provider={1} camera={2} uploaded={3} source=GpuResident drawSlots={4} activeSlotSurface={5}",
                         debugName,
                         providerKind,
                         camera.name,
                         uploadedFrame,
-                        drawSlotCount),
+                        drawSlotCount,
+                        usesRegisteredSlotFallback ? "registered-slot-fallback" : "latest-async-emitted-slots"),
                     diagnosticsContext);
                 return;
             }
 
             if (cameraInstanceId == lastPreparationWarningCameraInstanceId &&
                 uploadedFrame == lastPreparationWarningUploadedFrame &&
-                drawSlotCount == lastPreparationWarningDrawSlotCount)
+                drawSlotCount == lastPreparationWarningDrawSlotCount &&
+                usesRegisteredSlotFallback == lastPreparationWarningUsedRegisteredSlotFallback)
             {
                 return;
             }
@@ -759,14 +914,16 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             lastPreparationWarningCameraInstanceId = cameraInstanceId;
             lastPreparationWarningUploadedFrame = uploadedFrame;
             lastPreparationWarningDrawSlotCount = drawSlotCount;
+            lastPreparationWarningUsedRegisteredSlotFallback = usesRegisteredSlotFallback;
             Debug.LogWarning(
                 string.Format(
-                    "AuthoringContainerRuntime prepare container={0} provider={1} camera={2} uploaded={3} source=GpuResident drawSlots={4} reason=no-bound-gpu-resident-draw-slots",
+                    "AuthoringContainerRuntime prepare container={0} provider={1} camera={2} uploaded={3} source=GpuResident drawSlots={4} activeSlotSurface={5} reason=no-bound-gpu-resident-draw-slots",
                     debugName,
                     providerKind,
                     camera.name,
                     uploadedFrame,
-                    drawSlotCount),
+                    drawSlotCount,
+                    usesRegisteredSlotFallback ? "registered-slot-fallback" : "latest-async-emitted-slots"),
                 diagnosticsContext);
         }
 

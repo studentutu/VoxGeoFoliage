@@ -12,16 +12,19 @@ Purpose: current milestone, current blockers, next tasks. Nothing else.
 
 ## Current Blockers
 
-- visible non-far color trees can still fail baseline acceptance silently
-- registered draw slots are still the live submission surface
+- shadow currently reuses the same default budget shape as color, so explicit-frustum/shadow preparation doubles fixed residency without proving it needs to
+- camera and explicit-frustum preparation still keep two full GPU pipelines per active container instead of the target pooled prepared-view residency
+- visible-instance clamping is still slot-order biased
+- active-slot submission and actual-usage telemetry are latest async readback snapshots, so first prepared frames can still fall back to registered slots and reported counts can lag the frame being rendered
 - dense-forest and shadow validation are still pending on the split-budget path
 
 ## Next Tasks
 
 Goal: finish the post-ownership-split runtime cleanup now that split budgets and actual-work dispatch match the prepared-view design.
 
-1. Enforce baseline-fit failure for visible non-far color trees.
-2. Replace registered-slot submission with the live active-slot surface.
-3. Run dense-forest and shadow validation on the split-budget path.
+1. Tune shadow budgets separately from color now that actual usage telemetry exists.
+2. Reduce duplicated camera/shadow GPU residency toward the pooled prepared-view ownership target.
+3. Remove slot-order bias from visible-instance clamping.
+4. Run dense-forest and shadow validation on the split-budget path, including async active-slot warm-up behavior.
 
 Target Result: simplified memory footprint for runtime  path, true separation of draw calls for shadow path and depth/main color path and production ready support for a container with 10_000 trees, that has near prioritization and actual hard budgeting.

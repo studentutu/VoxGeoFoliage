@@ -176,6 +176,10 @@ static const int FrameStatRejectedPromotions = 5;
 static const int FrameStatExpandedTrees = 6;
 static const int FrameStatExpandedBranchWorkItems = 7;
 static const int FrameStatAcceptedTierCostUsage = 8;
+static const int FrameStatBaselineTreeL3Failures = 9;
+static const int FrameStatVisibleInstanceCapHits = 10;
+static const int FrameStatExpandedBranchWorkItemCapHits = 11;
+static const int FrameStatEmittedVisibleInstances = 12;
 
 static const int TierCulled = -1;
 static const int TierL0 = 0;
@@ -361,6 +365,8 @@ void EmitInstance(uint slotIndex, VegetationInstanceData instanceData)
     }
 
     _VisibleInstances[packedIndex] = instanceData;
+    uint ignored;
+    InterlockedAdd(_FrameStats[FrameStatEmittedVisibleInstances], 1u, ignored);
 }
 
 int ClampPriorityRingIndex(int priorityRing)
@@ -434,6 +440,7 @@ void ApplyOrderedBaselineTreeL3(
     uint orderedVisibleTreeCount,
     inout uint acceptedCostUsage,
     inout uint acceptedTreeL3,
+    inout uint baselineTreeL3Failures,
     inout uint rejectedPromotions)
 {
     for (uint orderedIndex = 0u; orderedIndex < orderedVisibleTreeCount; orderedIndex++)
@@ -457,6 +464,7 @@ void ApplyOrderedBaselineTreeL3(
         }
         else
         {
+            baselineTreeL3Failures++;
             rejectedPromotions++;
         }
 
@@ -648,8 +656,9 @@ void AcceptTreeTiers(uint3 dispatchThreadId : SV_DispatchThreadID)
     uint promotedL0 = 0u;
     uint rejectedPromotions = 0u;
     uint acceptedCostUsage = 0u;
+    uint baselineTreeL3Failures = 0u;
     BuildPriorityOrderedVisibleTreeList(visibleTrees, orderedVisibleTreeCount);
-    ApplyOrderedBaselineTreeL3(orderedVisibleTreeCount, acceptedCostUsage, acceptedTreeL3, rejectedPromotions);
+    ApplyOrderedBaselineTreeL3(orderedVisibleTreeCount, acceptedCostUsage, acceptedTreeL3, baselineTreeL3Failures, rejectedPromotions);
 
     if (_AllowExpandedTierPromotion != 0)
     {
@@ -667,6 +676,7 @@ void AcceptTreeTiers(uint3 dispatchThreadId : SV_DispatchThreadID)
     _FrameStats[FrameStatPromotedL0] = promotedL0;
     _FrameStats[FrameStatRejectedPromotions] = rejectedPromotions;
     _FrameStats[FrameStatAcceptedTierCostUsage] = acceptedCostUsage;
+    _FrameStats[FrameStatBaselineTreeL3Failures] = baselineTreeL3Failures;
 }
 
 [numthreads(64, 1, 1)]
@@ -695,6 +705,7 @@ void GenerateExpandedBranchWorkItems(uint3 dispatchThreadId : SV_DispatchThreadI
         InterlockedAdd(_ExpandedBranchWorkItemCount[0], 1u, workItemIndex);
         if (workItemIndex >= (uint)_ExpandedBranchWorkItemCapacity)
         {
+            InterlockedAdd(_FrameStats[FrameStatExpandedBranchWorkItemCapHits], 1u, ignored);
             continue;
         }
 
@@ -861,6 +872,12 @@ void ClampRequestedSlotCounts(uint3 dispatchThreadId : SV_DispatchThreadID)
     {
         uint requestedCount = _SlotRequestedInstanceCounts[slotIndex];
         uint clampedCount = min(requestedCount, remainingCapacity);
+        if (clampedCount < requestedCount)
+        {
+            uint ignored;
+            InterlockedAdd(_FrameStats[FrameStatVisibleInstanceCapHits], 1u, ignored);
+        }
+
         _SlotRequestedInstanceCounts[slotIndex] = clampedCount;
         remainingCapacity -= clampedCount;
     }

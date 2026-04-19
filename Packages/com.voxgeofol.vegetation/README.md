@@ -119,9 +119,10 @@
    each container adds its own runtime registry, GPU pipeline state, indirect args, packed instance memory, and branch-work queues.
 7. There is currently no global cross-container budget coordinator and no global near-detail prioritization. If the camera sees many heavy containers at once, total memory and total visible-instance capacity are the sum of all container budgets.
 8. If one container runs out of its own work-unit or work-item budget, the urgent runtime degrades detail inside that container by staying at `TreeL3` and skipping optional branch-expanded content; raising the budget helps only that container.
-9. Current defaults are `131072` visible instances, `131072` expanded branch work items, `131072` approximate work units, and `4096` registered draw slots per path. Shared packed instance payload is approximately `144 bytes` per visible instance, so larger values increase GPU memory quickly.
-10. If near `L0/L1` detail disappears, first check whether one container owns too much visible content for its own budget before assuming the whole scene budget is too small.
-11. Visible packed instances are final draw-ready per-slot instances after tree-first acceptance and promoted-tree-only branch survival.
+9. If the visible non-far color `TreeL3` baseline itself cannot fit the color approximate work-unit budget, preparation faults that container explicitly instead of silently dropping visible trees.
+10. Current defaults are `131072` visible instances, `131072` expanded branch work items, `131072` approximate work units, and `4096` registered draw slots per path. Shared packed instance payload is approximately `144 bytes` per visible instance, so larger values increase GPU memory quickly.
+11. If near `L0/L1` detail disappears, first check whether one container owns too much visible content for its own budget before assuming the whole scene budget is too small.
+12. Visible packed instances are final draw-ready per-slot instances after tree-first acceptance and promoted-tree-only branch survival.
 
 ## Runtime Terminology
 
@@ -134,11 +135,11 @@
 | `Blueprint branch placement` | Shipped urgent path | `VegetationRuntimeRegistry.BlueprintBranchPlacements[]` | Reusable branch placement data stored once per blueprint and expanded on demand only for promoted trees. |
 | `Draw slot` | Shipped | `VegetationRuntimeRegistry.DrawSlots`, slot counters, `VegetationIndirectRenderer` | Exact `Mesh + Material + MaterialKind` batch identity. One slot owns one slot index, one indirect-args record, and one potential indirect submission per pass. |
 | `Registered draw slot` | Shipped | `VegetationRuntimeRegistry.DrawSlots` | One slot that exists in the runtime registry, whether or not the current frame emitted any instances into it. |
-| `Non-zero emitted slot` | Shipped telemetry | `_SlotEmittedInstanceCounts`, `AuthoringContainerRuntime preparedFrameTelemetry` | One draw slot whose emitted instance count is greater than zero for the prepared frame. This is the measured submission-worthy subset. |
+| `Non-zero emitted slot` | Shipped submission + telemetry | `_SlotEmittedInstanceCounts`, `AuthoringContainerRuntime preparedFrameTelemetry`, `PreparedViewHandle.ActiveSlotIndices` | One draw slot whose emitted instance count is greater than zero for the prepared frame. Latest completed async readback of this subset now drives the normal submission surface. |
 | `Visible instance` | Shipped | Packed into `residentInstanceBuffer`; bounded by the prepared-view visible-instance budget | Final draw-ready instance payload written by the compute path. Many visible instances can map to one draw slot. |
 | `Approx work-unit budget` | Shipped Milestone 2 cleanup | `VegetationGpuDecisionPipeline.AcceptTreeTiers` cost tracking | Quality/performance cap for accepted tree-tier cost, separate from visible-instance memory. |
 | `Registered draw-slot cap` | Shipped Milestone 2 cleanup | `VegetationRuntimeRegistryBuilder` | Hard cap on registry slot metadata so slot explosion fails explicitly instead of silently growing submission state. |
-| `Indirect submission` | Shipped urgent path | `VegetationIndirectRenderer.Render()` depth/color/shadow calls | One final `DrawMeshInstancedIndirect` call for one active submitted draw slot in one pass. Current shipped path walks the prepared-view handle's active slot list, which currently defaults to registered draw slots. |
+| `Indirect submission` | Shipped urgent path | `VegetationIndirectRenderer.Render()` depth/color/shadow calls | One final `DrawMeshInstancedIndirect` call for one active submitted draw slot in one pass. Current shipped path walks the prepared-view handle's active slot list, which normally comes from latest completed async emitted-slot readback and falls back to registered draw slots only while warming. |
 | `Branch split tier` | Shipped urgent path | `BranchPrototypeSO.branchL1/2/3CanopyMesh`, `BranchPrototypeSO.branchL1WoodMesh`, `shellL1WoodMesh`, `shellL2WoodMesh` | Separate baked canopy and wood meshes used for promoted branch-expanded `L1/L2/L3`; no BFS traversal is involved. |
 | `Accepted tree tier` | Shipped urgent path | `VegetationGpuDecisionPipeline`, `TreeVisibilityGpu.acceptedTier` | The one final representation chosen for one visible tree in the current frame: `Impostor`, `TreeL3`, `L2`, `L1`, or `L0`. |
 | `Compact expanded branch work item` | Shipped urgent path | `_ExpandedBranchWorkItems`, promoted-tree branch count/emit kernels | Per-frame branch placement work generated only for trees already promoted above `TreeL3`. |
@@ -187,13 +188,13 @@ Camera
 -> residentInstanceBuffer            packed visible instances
 -> residentArgsBuffer                indirect args per draw slot
 -> slotPackedStartsBuffer            packed range start per draw slot
--> slotEmittedInstanceCountsBuffer   diagnostics readback source for non-zero emitted slots
+-> slotEmittedInstanceCountsBuffer   async readback source for non-zero emitted slots
 -> VegetationIndirectRenderer.BindGpuResidentFrame()
 -> PreparedViewHandle
    -> instanceBuffer
    -> argsBuffer
    -> slotPackedStartsBuffer
-   -> activeSlotIndices             current shipped path: registered draw slots
+   -> activeSlotIndices             latest completed non-zero emitted slots, or registered-slot fallback during async warm-up
 -> URP Main-Light Shadow Pass: DrawMeshInstancedIndirect per active draw slot from prepared view handle
 -> URP Depth Pass: DrawMeshInstancedIndirect per active draw slot from prepared view handle
 -> URP Color Pass: DrawMeshInstancedIndirect per active draw slot from prepared view handle
@@ -222,7 +223,7 @@ Per-frame worklists:
 2. `residentInstanceBuffer` and `residentArgsBuffer`
    Frame-local accepted-content outputs used for indirect submission.
 3. `slotEmittedInstanceCountsBuffer` and `PreparedViewHandle.ActiveSlotIndices`
-   `slotEmittedInstanceCountsBuffer` remains diagnostics telemetry. Submission state now lives on the explicit prepared-view handle instead of one renderer-global mutable bound frame, but the active slot list still defaults to registered draw slots.
+   `slotEmittedInstanceCountsBuffer` is now both diagnostics input and async active-slot readback source. Submission state lives on the explicit prepared-view handle, and the active slot list normally comes from latest completed non-zero emitted-slot readback with registered-slot fallback only during warm-up.
 
 ### Draw Calls And Draw Slots
 
@@ -231,7 +232,7 @@ Per-frame worklists:
 3. If different trees or branch prototypes resolve to the same slot key, they batch into the same indirect draw.
 4. If mesh, material, or material kind changes, a new draw slot is created.
 5. Instance count grows instance-buffer usage; draw-slot count is what grows draw calls.
-6. The renderer currently pays registered draw slots once in depth and once in color because prepared-view handles still default their active slot list to registered draw slots. Non-zero emitted slot counts remain telemetry, not the live submission filter.
+6. The renderer now normally pays only the live non-zero emitted-slot subset because prepared-view handles carry latest completed async active-slot readback. Registered-slot submission still exists only as warm-up fallback before that async data arrives.
 
 Examples:
 
@@ -242,7 +243,7 @@ Examples:
 ### What This Means Operationally
 
 1. The prepared-view visible-instance budget limits packed visible instances, not draw slots.
-2. `MaxRegisteredDrawSlots` bounds how much slot metadata can exist for a container, but the current shipped renderer still submits the prepared-view handle's registered-slot list rather than the non-zero emitted subset.
+2. `MaxRegisteredDrawSlots` bounds how much slot metadata can exist for a container, while current shipped submission normally filters to the latest completed non-zero emitted-slot subset and only falls back to registered slots during async warm-up.
 3. Runtime memory no longer scales with pre-populated scene-wide branch ownership. Branch work exists only for trees that already promoted above `TreeL3`.
 4. Dense-forest survival is decided before slot packing: near-detail promotion uses the split approximate work-unit budget, and branch count/emit now dispatches from actual generated branch work instead of the configured queue cap.
 
@@ -257,7 +258,7 @@ Examples:
 
 1. Opaque-only runtime: no transparency, no alpha clip, no masked foliage.
 2. URP only (via new render graph API). Built-in pipeline, HDRP, and custom SRP integrations are outside the contract.
-3. No runtime CPU fallback, no CPU decode bridge, and no async-readback rendering path.
+3. No runtime CPU fallback, no CPU decode bridge, and no blocking or exact same-frame CPU-visible-instance readback path in production rendering.
 4. Exact CPU-side visible-instance lists are not exposed in production flow.
 5. `LODGroup` is not used; LOD comes from authored distance bands and GPU classification.
 6. Registration is frozen after enable. Changes require `RefreshRuntimeRegistration()`. Transform changes (position/rotation/scale) do not auto-sync (not even in editor). Either enable/disable the container (script) or force update via `RefreshRuntimeRegistration()`.
@@ -269,6 +270,7 @@ Examples:
 12. Multi-container prioritization stays unresolved follow-up work; the one-container runtime authority remains [../../DetailedDocs/VegetationRuntimeArchitecture.md](../../DetailedDocs/VegetationRuntimeArchitecture.md).
 13. Closed `SubScene` runtime loading requires `SubSceneAuthoring` on the same GameObject as `VegetationRuntimeContainer`; the plain container alone is only the classic-scene lifecycle provider.
 14. Runtime shadow support is currently limited to the URP main-light directional shadow atlas, using cascade-specific resident frames derived from the camera-visible vegetation set. Default shipped behavior clamps visible non-far shadow casters to `TreeL3` and skips expanded branch shadow promotion unless `AllowExpandedTreePromotionInShadows` is explicitly enabled. Offscreen vegetation casters and additional-light shadow atlases are still follow-up work.
+15. Actual visible-instance counts, generated branch-work counts, cap-hit flags, and active-slot subsets are latest completed async readback snapshots. They can lag the frame being rendered, and the first prepared frames can fall back to registered-slot submission before the async slot readback warms.
 
 ## Supported Devices
 

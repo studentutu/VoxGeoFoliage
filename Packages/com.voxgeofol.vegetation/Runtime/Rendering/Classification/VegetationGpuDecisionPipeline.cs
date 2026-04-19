@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using Unity.Collections;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -15,7 +16,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     /// </summary>
     public sealed class VegetationGpuDecisionPipeline : IDisposable
     {
-        private const int FrameStatCount = 9;
+        private const int FrameStatCount = 13;
         private const int FrameStatVisibleTrees = 0;
         private const int FrameStatAcceptedTreeL3 = 1;
         private const int FrameStatPromotedL2 = 2;
@@ -25,6 +26,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private const int FrameStatExpandedTrees = 6;
         private const int FrameStatExpandedBranchWorkItems = 7;
         private const int FrameStatAcceptedTierCostUsage = 8;
+        private const int FrameStatBaselineTreeL3Failures = 9;
+        private const int FrameStatVisibleInstanceCapHits = 10;
+        private const int FrameStatExpandedBranchWorkItemCapHits = 11;
+        private const int FrameStatEmittedVisibleInstances = 12;
         private static readonly ProfilerMarker PrepareResidentFrameMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.PrepareResidentFrame");
         private static readonly ProfilerMarker ResetFrameStateMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.ResetFrameState");
         private static readonly ProfilerMarker CountTreeInstancesMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.CountTreeInstances");
@@ -90,7 +95,17 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private GraphicsBuffer residentInstanceBuffer = null!;
         private GraphicsBuffer residentArgsBuffer = null!;
         private readonly Vector4[] frustumPlaneVectors = new Vector4[6];
+        private readonly uint[] latestPreparedFrameStats;
+        private readonly uint[] latestSlotEmittedCounts;
+        private int[] latestActiveSlotIndices;
         private bool residentFramePrepared;
+        private bool preparedFrameTelemetryReadbackPending;
+        private bool slotEmissionReadbackPending;
+        private bool hasLatestPreparedFrameStats;
+        private bool hasLatestActiveSlotIndices;
+        private int preparedFrameReadbackSequence;
+        private int pendingPreparedFrameTelemetryReadbackSequence = -1;
+        private int pendingSlotEmissionReadbackSequence = -1;
         private bool disposed;
 
         public readonly struct PreparedFrameTelemetry
@@ -105,8 +120,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 int expandedTrees,
                 int expandedBranchWorkItems,
                 int acceptedTierCostUsage,
+                int baselineTreeL3Failures,
                 int nonZeroEmittedSlots,
-                long emittedVisibleInstanceCount)
+                long emittedVisibleInstanceCount,
+                bool approxWorkUnitCapHit,
+                bool visibleInstanceCapHit,
+                bool expandedBranchWorkItemCapHit)
             {
                 VisibleTrees = visibleTrees;
                 AcceptedTreeL3 = acceptedTreeL3;
@@ -117,8 +136,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 ExpandedTrees = expandedTrees;
                 ExpandedBranchWorkItems = expandedBranchWorkItems;
                 AcceptedTierCostUsage = acceptedTierCostUsage;
+                BaselineTreeL3Failures = baselineTreeL3Failures;
                 NonZeroEmittedSlots = nonZeroEmittedSlots;
                 EmittedVisibleInstanceCount = emittedVisibleInstanceCount;
+                ApproxWorkUnitCapHit = approxWorkUnitCapHit;
+                VisibleInstanceCapHit = visibleInstanceCapHit;
+                ExpandedBranchWorkItemCapHit = expandedBranchWorkItemCapHit;
             }
 
             public int VisibleTrees { get; }
@@ -130,8 +153,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             public int ExpandedTrees { get; }
             public int ExpandedBranchWorkItems { get; }
             public int AcceptedTierCostUsage { get; }
+            public int BaselineTreeL3Failures { get; }
             public int NonZeroEmittedSlots { get; }
             public long EmittedVisibleInstanceCount { get; }
+            public bool ApproxWorkUnitCapHit { get; }
+            public bool VisibleInstanceCapHit { get; }
+            public bool ExpandedBranchWorkItemCapHit { get; }
         }
 
         public readonly struct PreparedFrameSlotTelemetry
@@ -334,6 +361,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             this.expandedBranchWorkItemCapacity = budget.MaxExpandedBranchWorkItems;
             this.approxWorkUnitCapacity = budget.MaxApproxWorkUnits;
             this.priorityRingCount = ComputePriorityRingCount(registry);
+            latestPreparedFrameStats = new uint[FrameStatCount];
+            latestSlotEmittedCounts = new uint[Mathf.Max(1, registry.DrawSlots.Count)];
+            latestActiveSlotIndices = Array.Empty<int>();
 
             try
             {
@@ -405,7 +435,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// <summary>
         /// [INTEGRATION] Executes the full GPU-resident classification and tree-first accepted-content emission path into indirect draw resources.
         /// </summary>
-        public void PrepareResidentFrame(Vector3 cameraWorldPosition, Plane[] frustumPlanes, bool allowExpandedTreePromotion)
+        public void PrepareResidentFrame(
+            Vector3 cameraWorldPosition,
+            Plane[] frustumPlanes,
+            bool allowExpandedTreePromotion,
+            bool captureTelemetry)
         {
             using (PrepareResidentFrameMarker.Auto())
             {
@@ -482,6 +516,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
 
                 residentFramePrepared = true;
+                SchedulePreparedFrameReadbacks(captureTelemetry);
             }
         }
 
@@ -501,7 +536,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         /// </summary>
         public PreparedFrameTelemetry ReadbackPreparedFrameTelemetry()
         {
-            return default;
+            return TryGetLatestPreparedFrameTelemetry(out PreparedFrameTelemetry telemetry)
+                ? telemetry
+                : default;
         }
 
         /// <summary>
@@ -515,6 +552,21 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             target.Clear();
+            if (!hasLatestActiveSlotIndices)
+            {
+                return;
+            }
+
+            for (int i = 0; i < latestActiveSlotIndices.Length; i++)
+            {
+                int slotIndex = latestActiveSlotIndices[i];
+                if (slotIndex < 0 || slotIndex >= latestSlotEmittedCounts.Length)
+                {
+                    continue;
+                }
+
+                target.Add(new PreparedFrameSlotTelemetry(slotIndex, latestSlotEmittedCounts[slotIndex]));
+            }
         }
 
         /// <summary>
@@ -528,6 +580,54 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             target.Clear();
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Returns the latest non-blocking prepared-frame telemetry snapshot captured from async GPU readback.
+        /// </summary>
+        public bool TryGetLatestPreparedFrameTelemetry(out PreparedFrameTelemetry telemetry)
+        {
+            if (!hasLatestPreparedFrameStats)
+            {
+                telemetry = default;
+                return false;
+            }
+
+            uint rejectedPromotions = latestPreparedFrameStats[FrameStatRejectedPromotions];
+            uint acceptedTierCostUsage = latestPreparedFrameStats[FrameStatAcceptedTierCostUsage];
+            uint baselineTreeL3Failures = latestPreparedFrameStats[FrameStatBaselineTreeL3Failures];
+            telemetry = new PreparedFrameTelemetry(
+                (int)latestPreparedFrameStats[FrameStatVisibleTrees],
+                (int)latestPreparedFrameStats[FrameStatAcceptedTreeL3],
+                (int)latestPreparedFrameStats[FrameStatPromotedL2],
+                (int)latestPreparedFrameStats[FrameStatPromotedL1],
+                (int)latestPreparedFrameStats[FrameStatPromotedL0],
+                (int)rejectedPromotions,
+                (int)latestPreparedFrameStats[FrameStatExpandedTrees],
+                (int)latestPreparedFrameStats[FrameStatExpandedBranchWorkItems],
+                (int)acceptedTierCostUsage,
+                (int)baselineTreeL3Failures,
+                CountLatestNonZeroEmittedSlots(),
+                latestPreparedFrameStats[FrameStatEmittedVisibleInstances],
+                baselineTreeL3Failures > 0u || (rejectedPromotions > 0u && acceptedTierCostUsage >= (uint)approxWorkUnitCapacity),
+                latestPreparedFrameStats[FrameStatVisibleInstanceCapHits] > 0u,
+                latestPreparedFrameStats[FrameStatExpandedBranchWorkItemCapHits] > 0u);
+            return true;
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Returns the latest non-blocking active-slot subset captured from async emitted-slot readback.
+        /// </summary>
+        public bool TryGetLatestActiveSlotIndices(out IReadOnlyList<int> activeSlotIndices)
+        {
+            if (!hasLatestActiveSlotIndices)
+            {
+                activeSlotIndices = Array.Empty<int>();
+                return false;
+            }
+
+            activeSlotIndices = latestActiveSlotIndices;
+            return true;
         }
 
         private void UploadStaticData()
@@ -705,6 +805,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             classifyShader.SetBuffer(countExpandedBranchesKernel, "_SlotRequestedInstanceCounts", slotRequestedInstanceCountBuffer);
 
             classifyShader.SetBuffer(clampRequestedSlotCountsKernel, "_SlotRequestedInstanceCounts", slotRequestedInstanceCountBuffer);
+            classifyShader.SetBuffer(clampRequestedSlotCountsKernel, "_FrameStats", frameStatsBuffer);
 
             classifyShader.SetBuffer(buildSlotStartsKernel, "_SlotRequestedInstanceCounts", slotRequestedInstanceCountBuffer);
             classifyShader.SetBuffer(buildSlotStartsKernel, "_SlotPackedStarts", slotPackedStartsBuffer);
@@ -716,6 +817,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             classifyShader.SetBuffer(emitTreesKernel, "_SlotPackedStarts", slotPackedStartsBuffer);
             classifyShader.SetBuffer(emitTreesKernel, "_SlotEmittedInstanceCounts", slotEmittedInstanceCountBuffer);
             classifyShader.SetBuffer(emitTreesKernel, "_VisibleInstances", residentInstanceBuffer);
+            classifyShader.SetBuffer(emitTreesKernel, "_FrameStats", frameStatsBuffer);
 
             classifyShader.SetBuffer(emitExpandedBranchesKernel, "_Trees", treeBuffer);
             classifyShader.SetBuffer(emitExpandedBranchesKernel, "_Placements", placementBuffer);
@@ -726,6 +828,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             classifyShader.SetBuffer(emitExpandedBranchesKernel, "_SlotPackedStarts", slotPackedStartsBuffer);
             classifyShader.SetBuffer(emitExpandedBranchesKernel, "_SlotEmittedInstanceCounts", slotEmittedInstanceCountBuffer);
             classifyShader.SetBuffer(emitExpandedBranchesKernel, "_VisibleInstances", residentInstanceBuffer);
+            classifyShader.SetBuffer(emitExpandedBranchesKernel, "_FrameStats", frameStatsBuffer);
 
             classifyShader.SetBuffer(finalizeIndirectArgsKernel, "_Slots", slotMetadataBuffer);
             classifyShader.SetBuffer(finalizeIndirectArgsKernel, "_SlotRequestedInstanceCounts", slotRequestedInstanceCountBuffer);
@@ -778,6 +881,101 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private static ComputeBuffer CreateStructuredBuffer<T>(int count) where T : struct
         {
             return new ComputeBuffer(count, Marshal.SizeOf<T>());
+        }
+
+        private void SchedulePreparedFrameReadbacks(bool captureTelemetry)
+        {
+            int readbackSequence = ++preparedFrameReadbackSequence;
+            if (captureTelemetry && !preparedFrameTelemetryReadbackPending)
+            {
+                preparedFrameTelemetryReadbackPending = true;
+                pendingPreparedFrameTelemetryReadbackSequence = readbackSequence;
+                AsyncGPUReadback.Request(frameStatsBuffer, OnPreparedFrameTelemetryReadbackCompleted);
+            }
+
+            if (!slotEmissionReadbackPending)
+            {
+                slotEmissionReadbackPending = true;
+                pendingSlotEmissionReadbackSequence = readbackSequence;
+                AsyncGPUReadback.Request(slotEmittedInstanceCountBuffer, OnSlotEmissionReadbackCompleted);
+            }
+        }
+
+        private void OnPreparedFrameTelemetryReadbackCompleted(AsyncGPUReadbackRequest request)
+        {
+            preparedFrameTelemetryReadbackPending = false;
+            if (disposed || request.hasError)
+            {
+                return;
+            }
+
+            NativeArray<uint> data = request.GetData<uint>();
+            int copyCount = Math.Min(data.Length, latestPreparedFrameStats.Length);
+            for (int i = 0; i < copyCount; i++)
+            {
+                latestPreparedFrameStats[i] = data[i];
+            }
+
+            for (int i = copyCount; i < latestPreparedFrameStats.Length; i++)
+            {
+                latestPreparedFrameStats[i] = 0u;
+            }
+
+            hasLatestPreparedFrameStats = pendingPreparedFrameTelemetryReadbackSequence >= 0;
+            pendingPreparedFrameTelemetryReadbackSequence = -1;
+        }
+
+        private void OnSlotEmissionReadbackCompleted(AsyncGPUReadbackRequest request)
+        {
+            slotEmissionReadbackPending = false;
+            if (disposed || request.hasError)
+            {
+                return;
+            }
+
+            NativeArray<uint> data = request.GetData<uint>();
+            int copyCount = Math.Min(data.Length, latestSlotEmittedCounts.Length);
+            int activeSlotCount = 0;
+            for (int i = 0; i < copyCount; i++)
+            {
+                uint emittedCount = data[i];
+                latestSlotEmittedCounts[i] = emittedCount;
+                if (emittedCount > 0u)
+                {
+                    activeSlotCount++;
+                }
+            }
+
+            for (int i = copyCount; i < latestSlotEmittedCounts.Length; i++)
+            {
+                latestSlotEmittedCounts[i] = 0u;
+            }
+
+            latestActiveSlotIndices = new int[activeSlotCount];
+            int writeIndex = 0;
+            for (int i = 0; i < copyCount; i++)
+            {
+                if (latestSlotEmittedCounts[i] == 0u)
+                {
+                    continue;
+                }
+
+                latestActiveSlotIndices[writeIndex] = i;
+                writeIndex++;
+            }
+
+            hasLatestActiveSlotIndices = pendingSlotEmissionReadbackSequence >= 0;
+            pendingSlotEmissionReadbackSequence = -1;
+        }
+
+        private int CountLatestNonZeroEmittedSlots()
+        {
+            if (!hasLatestActiveSlotIndices)
+            {
+                return 0;
+            }
+
+            return latestActiveSlotIndices.Length;
         }
 
         private static int ComputePriorityRingCount(VegetationRuntimeRegistry registry)

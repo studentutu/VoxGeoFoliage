@@ -185,6 +185,47 @@ public sealed class VegetationRuntimeFoundationTests
     }
 
     [Test]
+    public void IndirectRenderer_BindGpuResidentFrame_ExplicitActiveSlotList_FiltersPreparedViewSnapshots()
+    {
+        VegetationTreeAuthoring authoring = CreateAuthoring("ExplicitActiveSlotTree", new Vector3(0f, 0f, 10f));
+        VegetationTreeAuthoringRuntime runtimeAuthoring =
+            CreateRuntimeAuthoring(authoring, Hash128.Compute("IndirectRenderer_ExplicitActiveSlotList"), 0);
+        VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
+            .Build(new[] { runtimeAuthoring });
+
+        int indirectArgsUintCount = registry.DrawSlots.Count * (GraphicsBuffer.IndirectDrawIndexedArgs.size / sizeof(uint));
+        int[] expectedActiveSlots = registry.DrawSlots.Count > 1
+            ? new[] { 0, registry.DrawSlots.Count - 1 }
+            : new[] { 0 };
+
+        using (VegetationIndirectRenderer indirectRenderer = new VegetationIndirectRenderer(registry, 7))
+        using (GraphicsBuffer instanceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 16, 16))
+        using (GraphicsBuffer argsBuffer = new GraphicsBuffer(
+                   GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.IndirectArguments,
+                   Mathf.Max(1, indirectArgsUintCount),
+                   sizeof(uint)))
+        using (ComputeBuffer slotPackedStartsBuffer = new ComputeBuffer(Mathf.Max(1, registry.DrawSlots.Count), sizeof(uint)))
+        {
+            VegetationIndirectRenderer.PreparedViewHandle? preparedView = indirectRenderer.BindGpuResidentFrame(
+                instanceBuffer,
+                argsBuffer,
+                slotPackedStartsBuffer,
+                expectedActiveSlots);
+            Assert.IsNotNull(preparedView);
+            Assert.IsFalse(preparedView!.UsesRegisteredSlotFallback);
+            CollectionAssert.AreEqual(expectedActiveSlots, preparedView.ActiveSlotIndices);
+
+            List<VegetationIndirectDrawBatchSnapshot> snapshots = new List<VegetationIndirectDrawBatchSnapshot>();
+            indirectRenderer.GetDebugSnapshots(preparedView, snapshots);
+            Assert.AreEqual(expectedActiveSlots.Length, snapshots.Count);
+            for (int i = 0; i < snapshots.Count; i++)
+            {
+                Assert.AreEqual(expectedActiveSlots[i], snapshots[i].SlotIndex);
+            }
+        }
+    }
+
+    [Test]
     public void RuntimeMathUtility_TransformBounds_MatchesCornerSweepReference()
     {
         Bounds localBounds = new Bounds(new Vector3(0.4f, 1.2f, -0.6f), new Vector3(2.5f, 3.75f, 1.5f));
@@ -250,6 +291,43 @@ public sealed class VegetationRuntimeFoundationTests
 
         Assert.IsFalse(prepared);
         Assert.IsFalse(runtimeOwner.IsRenderRuntimeFaulted);
+    }
+
+    [Test]
+    public void AuthoringContainerRuntime_PrepareFrameForCamera_FaultsWhenVisibleNonFarBaselineDoesNotFitColorBudget()
+    {
+        VegetationTreeAuthoring firstAuthoring = CreateAuthoring("BaselineOverflowTree_A", new Vector3(0f, 0f, 10f));
+        VegetationTreeAuthoring secondAuthoring = CreateAuthoring("BaselineOverflowTree_B", new Vector3(2f, 0f, 12f));
+        Hash128 containerIdHash = Hash128.Compute("PrepareFrame_BaselineOverflow");
+        VegetationTreeAuthoringRuntime firstRuntimeAuthoring = CreateRuntimeAuthoring(firstAuthoring, containerIdHash, 0);
+        VegetationTreeAuthoringRuntime secondRuntimeAuthoring = CreateRuntimeAuthoring(secondAuthoring, containerIdHash, 1);
+        AuthoringContainerRuntime runtimeOwner = new AuthoringContainerRuntime(
+            containerIdHash.ToString(),
+            VegetationRuntimeProviderKind.ClassicScene,
+            "BaselineOverflowRuntime",
+            null,
+            0,
+            Vector3.zero,
+            new Vector3(64f, 64f, 64f),
+            new VegetationRuntimeBudget(
+                new VegetationViewRuntimeBudget(32, 32, 1),
+                new VegetationViewRuntimeBudget(32, 32, 32),
+                128),
+            new[] { firstRuntimeAuthoring, secondRuntimeAuthoring });
+        createdDisposables.Add(runtimeOwner);
+
+        GameObject cameraObject = new GameObject("BaselineOverflowCamera");
+        createdObjects.Add(cameraObject);
+        Camera camera = cameraObject.AddComponent<Camera>();
+        camera.transform.position = Vector3.zero;
+        camera.transform.rotation = Quaternion.identity;
+
+        Assert.IsTrue(runtimeOwner.Activate());
+
+        bool prepared = runtimeOwner.PrepareFrameForCamera(camera, null, false);
+
+        Assert.IsFalse(prepared);
+        Assert.IsTrue(runtimeOwner.IsRenderRuntimeFaulted);
     }
 
     private VegetationTreeAuthoring CreateAuthoring(string name, Vector3 worldPosition)

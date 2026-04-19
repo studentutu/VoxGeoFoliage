@@ -91,6 +91,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 activeSlotIndices = finalizedActiveSlotIndices == null
                     ? owner.allRegisteredSlotIndices
                     : owner.CopyValidActiveSlotIndices(finalizedActiveSlotIndices);
+                UsesRegisteredSlotFallback = finalizedActiveSlotIndices == null;
                 HasUploadedFrame = true;
             }
 
@@ -101,6 +102,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             public ComputeBuffer SlotPackedStartsBuffer { get; }
 
             public IReadOnlyList<int> ActiveSlotIndices => activeSlotIndices;
+
+            public bool UsesRegisteredSlotFallback { get; }
 
             public bool HasUploadedFrame { get; }
 
@@ -519,7 +522,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             string summary =
-                $"VegetationIndirectRenderer render camera={camera.name} pass={passMode} uploadedSlots={uploadedSlotCount} renderedSlots={renderedSlotCount} renderedInstances=unknown slots=[{builder}]";
+                $"VegetationIndirectRenderer render camera={camera.name} pass={passMode} uploadedSlots={uploadedSlotCount} renderedSlots={renderedSlotCount} activeSlotSurface={(preparedView.UsesRegisteredSlotFallback ? "registered-slot-fallback" : "latest-async-emitted-slots")} renderedInstances=unknown slots=[{builder}]";
 
             if (renderedSlotCount == 0)
             {
