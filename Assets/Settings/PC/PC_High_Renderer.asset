@@ -18,7 +18,7 @@ MonoBehaviour:
     ColorPassEvent: 300
     ShadowPassEvent: 100
     RenderMainLightShadows: 1
-    AllowExpandedTreePromotionInShadows: 0
+    AllowExpandedTreePromotionInShadows: 1
     RenderGameCameras: 1
     RenderSceneViewCameras: 1
     EnableDiagnostics: 0

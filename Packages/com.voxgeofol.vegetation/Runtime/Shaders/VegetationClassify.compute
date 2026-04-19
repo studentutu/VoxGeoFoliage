@@ -165,6 +165,7 @@ int _VisibleInstanceCapacity;
 int _ExpandedBranchWorkItemCapacity;
 int _ApproxWorkUnitCapacity;
 int _AllowExpandedTierPromotion;
+int _LimitExpandedPromotionToNearTiers;
 int _PriorityRingCount;
 
 static const int FrameStatVisibleTrees = 0;
@@ -662,8 +663,16 @@ void AcceptTreeTiers(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     if (_AllowExpandedTierPromotion != 0)
     {
-        ApplyOrderedPromotionStage(orderedVisibleTreeCount, TierTreeL3, TierL2, acceptedCostUsage, acceptedTreeL3, promotedL2, rejectedPromotions);
-        ApplyOrderedPromotionStage(orderedVisibleTreeCount, TierL2, TierL1, acceptedCostUsage, promotedL2, promotedL1, rejectedPromotions);
+        if (_LimitExpandedPromotionToNearTiers != 0)
+        {
+            ApplyOrderedPromotionStage(orderedVisibleTreeCount, TierTreeL3, TierL1, acceptedCostUsage, acceptedTreeL3, promotedL1, rejectedPromotions);
+        }
+        else
+        {
+            ApplyOrderedPromotionStage(orderedVisibleTreeCount, TierTreeL3, TierL2, acceptedCostUsage, acceptedTreeL3, promotedL2, rejectedPromotions);
+            ApplyOrderedPromotionStage(orderedVisibleTreeCount, TierL2, TierL1, acceptedCostUsage, promotedL2, promotedL1, rejectedPromotions);
+        }
+
         ApplyOrderedPromotionStage(orderedVisibleTreeCount, TierL1, TierL0, acceptedCostUsage, promotedL1, promotedL0, rejectedPromotions);
     }
 

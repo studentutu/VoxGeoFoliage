@@ -23,7 +23,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly int[] allRegisteredSlotIndices;
         private readonly VegetationCommandBufferIndirectDrawWrapper commandBufferDrawWrapper = new VegetationCommandBufferIndirectDrawWrapper();
         private readonly VegetationRasterCommandBufferIndirectDrawWrapper rasterCommandBufferDrawWrapper = new VegetationRasterCommandBufferIndirectDrawWrapper();
-        private readonly MaterialPropertyBlock drawPropertiesScratch = new MaterialPropertyBlock();
         private int lastDepthRenderCameraInstanceId = -1;
         private int lastDepthRenderUploadedSlotCount = -1;
         private int lastDepthRenderRenderedSlotCount = -1;
@@ -233,6 +232,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
 
                 GraphicsBuffer argsBuffer = preparedView.ArgsBuffer;
+                drawWrapper.SetGlobalBuffer(InstanceBufferId, preparedView.InstanceBuffer);
+                drawWrapper.SetGlobalBuffer(SlotPackedStartsId, preparedView.SlotPackedStartsBuffer);
                 int renderedSlotCount = 0;
                 for (int activeSlotOffset = 0; activeSlotOffset < preparedView.ActiveSlotIndices.Count; activeSlotOffset++)
                 {
@@ -248,18 +249,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         continue;
                     }
 
-                    drawPropertiesScratch.Clear();
-                    slot.PopulateDrawProperties(
-                        drawPropertiesScratch,
-                        preparedView.InstanceBuffer,
-                        preparedView.SlotPackedStartsBuffer);
+                    drawWrapper.SetGlobalInt(SlotIndexId, slot.DrawSlot.SlotIndex);
                     drawWrapper.DrawMeshInstancedIndirect(
                         slot.DrawSlot.Mesh,
                         material,
                         argsBuffer,
                         slot.ResolveArgsBufferOffset(),
                         shaderPass,
-                        drawPropertiesScratch);
+                        null);
                     renderedSlotCount++;
                 }
 
@@ -393,21 +390,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             public Bounds ConservativeWorldBounds { get; }
 
             public int SharedArgsBufferOffset { get; }
-
-            public void PopulateDrawProperties(
-                MaterialPropertyBlock drawProperties,
-                GraphicsBuffer sharedInstanceBuffer,
-                ComputeBuffer slotPackedStartsBuffer)
-            {
-                if (drawProperties == null)
-                {
-                    return;
-                }
-
-                drawProperties.SetInteger(SlotIndexId, DrawSlot.SlotIndex);
-                drawProperties.SetBuffer(InstanceBufferId, sharedInstanceBuffer);
-                drawProperties.SetBuffer(SlotPackedStartsId, slotPackedStartsBuffer);
-            }
 
             public bool TryResolveDrawSubmission(
                 VegetationRenderPassMode passMode,

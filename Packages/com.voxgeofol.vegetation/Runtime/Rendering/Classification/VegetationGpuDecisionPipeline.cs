@@ -439,6 +439,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             Vector3 cameraWorldPosition,
             Plane[] frustumPlanes,
             bool allowExpandedTreePromotion,
+            bool limitExpandedPromotionToNearTiers,
             bool captureTelemetry)
         {
             using (PrepareResidentFrameMarker.Auto())
@@ -458,7 +459,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                    return;
                 }
 
-                UploadDynamicFrameData(cameraWorldPosition, frustumPlanes, allowExpandedTreePromotion);
+                UploadDynamicFrameData(
+                    cameraWorldPosition,
+                    frustumPlanes,
+                    allowExpandedTreePromotion,
+                    limitExpandedPromotionToNearTiers);
 
                 using (ResetFrameStateMarker.Auto())
                 {
@@ -837,7 +842,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             classifyShader.SetBuffer(finalizeIndirectArgsKernel, "_IndirectArgs", residentArgsBuffer);
         }
 
-        private void UploadDynamicFrameData(Vector3 cameraWorldPosition, Plane[] frustumPlanes, bool allowExpandedTreePromotion)
+        private void UploadDynamicFrameData(
+            Vector3 cameraWorldPosition,
+            Plane[] frustumPlanes,
+            bool allowExpandedTreePromotion,
+            bool limitExpandedPromotionToNearTiers)
         {
             for (int i = 0; i < 6; i++)
             {
@@ -859,6 +868,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             classifyShader.SetInt("_ExpandedBranchWorkItemCapacity", expandedBranchWorkItemCapacity);
             classifyShader.SetInt("_ApproxWorkUnitCapacity", approxWorkUnitCapacity);
             classifyShader.SetInt("_AllowExpandedTierPromotion", allowExpandedTreePromotion ? 1 : 0);
+            classifyShader.SetInt("_LimitExpandedPromotionToNearTiers", limitExpandedPromotionToNearTiers ? 1 : 0);
             classifyShader.SetInt("_PriorityRingCount", priorityRingCount);
         }
 

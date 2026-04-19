@@ -476,7 +476,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
 
                 LogGpuPipelineTelemetry(diagnosticsEnabled, pipeline);
-                pipeline.PrepareResidentFrame(cameraWorldPosition, frustumPlanes, allowExpandedTreePromotion, diagnosticsEnabled);
+                pipeline.PrepareResidentFrame(
+                    cameraWorldPosition,
+                    frustumPlanes,
+                    allowExpandedTreePromotion,
+                    useExplicitFrustumPipeline && allowExpandedTreePromotion,
+                    diagnosticsEnabled);
                 VegetationIndirectRenderer.PreparedViewHandle? preparedView;
                 if (pipeline.TryGetLatestActiveSlotIndices(out IReadOnlyList<int> activeSlotIndices))
                 {

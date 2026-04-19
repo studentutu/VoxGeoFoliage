@@ -90,7 +90,7 @@
 4. `VegetationFoliageFeatureSettings.RenderMainLightShadows`
    Enables or disables vegetation submission into the URP main-light shadow atlas.
 5. `VegetationFoliageFeatureSettings.AllowExpandedTreePromotionInShadows`
-   When disabled, shadow preparation clamps visible non-far vegetation to the `TreeL3` floor and skips expanded branch shadow casters. This is the default because dense near-shadow foliage can otherwise cause pathological GPU cost and even device removal on D3D12.
+   When disabled, shadow preparation clamps visible non-far vegetation to the `TreeL3` floor and skips expanded branch shadow casters. When enabled, only trees in the authored `L1/L0` distance bands can expand in shadows; the `L2` band stays at `TreeL3`.
 5. `VegetationFoliageFeatureSettings.DepthPassEvent`
    URP event for vegetation depth submission. The first vegetation pass of the frame also prepares the GPU-resident buffers.
 6. `VegetationFoliageFeatureSettings.ColorPassEvent`
@@ -269,7 +269,7 @@ Examples:
 11. The urgent runtime should prioritize inside one container with `TreeL3` floor plus nearest-first promotion, but there is still no global cross-container arbiter.
 12. Multi-container prioritization stays unresolved follow-up work; the one-container runtime authority remains [../../DetailedDocs/VegetationRuntimeArchitecture.md](../../DetailedDocs/VegetationRuntimeArchitecture.md).
 13. Closed `SubScene` runtime loading requires `SubSceneAuthoring` on the same GameObject as `VegetationRuntimeContainer`; the plain container alone is only the classic-scene lifecycle provider.
-14. Runtime shadow support is currently limited to the URP main-light directional shadow atlas, using cascade-specific resident frames derived from the camera-visible vegetation set. Default shipped behavior clamps visible non-far shadow casters to `TreeL3` and skips expanded branch shadow promotion unless `AllowExpandedTreePromotionInShadows` is explicitly enabled. Offscreen vegetation casters and additional-light shadow atlases are still follow-up work.
+14. Runtime shadow support is currently limited to the URP main-light directional shadow atlas, using cascade-specific resident frames derived from the camera-visible vegetation set. Default shipped behavior clamps visible non-far shadow casters to `TreeL3` and skips expanded branch shadow promotion unless `AllowExpandedTreePromotionInShadows` is explicitly enabled. When that setting is enabled, only `L1/L0` bands can expand in shadows; the `L2` band still stays at `TreeL3`. Offscreen vegetation casters and additional-light shadow atlases are still follow-up work.
 15. Actual visible-instance counts, generated branch-work counts, cap-hit flags, and active-slot subsets are latest completed async readback snapshots. They can lag the frame being rendered, and the first prepared frames can fall back to registered-slot submission before the async slot readback warms.
 
 ## Supported Devices

@@ -768,11 +768,11 @@ default shadow policy
   branch promotion -> off
 
 first optional upgrade
-  allow L2 in shadows
+  allow only L1/L0 in shadows
 
 do not default to
-  L1 in shadows
-  L0 in shadows
+  L2 in shadows
+  full color-equivalent promotion in shadows
 ```
 
 Reason:

@@ -10,12 +10,18 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     /// </summary>
     internal interface IVegetationIndirectDrawWrapper
     {
+        void SetGlobalBuffer(int propertyId, GraphicsBuffer buffer);
+
+        void SetGlobalBuffer(int propertyId, ComputeBuffer buffer);
+
+        void SetGlobalInt(int propertyId, int value);
+
         void DrawMeshInstancedIndirect(
             Mesh mesh,
             Material material,
             GraphicsBuffer argsBuffer,
             int argsOffset,
             int shaderPass,
-            MaterialPropertyBlock propertyBlock);
+            MaterialPropertyBlock? propertyBlock);
     }
 }
