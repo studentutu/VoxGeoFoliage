@@ -1,5 +1,7 @@
 #pragma kernel ResetFrameState
 #pragma kernel ClassifyCells
+#pragma kernel BuildVisibleTreeList
+#pragma kernel BuildVisibleTreeDispatchArgs
 #pragma kernel ClassifyTrees
 #pragma kernel AcceptTreeTiers
 #pragma kernel GenerateExpandedBranchWorkItems
@@ -37,6 +39,12 @@ struct CellGpu
     float padding0;
     float3 extents;
     float padding1;
+};
+
+struct CellTreeRangeGpu
+{
+    uint startIndex;
+    uint count;
 };
 
 struct LodProfileGpu
@@ -134,6 +142,8 @@ struct SlotGpu
 };
 
 StructuredBuffer<CellGpu> _Cells;
+StructuredBuffer<CellTreeRangeGpu> _CellTreeRanges;
+StructuredBuffer<uint> _CellTreeIndices;
 StructuredBuffer<LodProfileGpu> _LodProfiles;
 StructuredBuffer<BlueprintGpu> _Blueprints;
 StructuredBuffer<PlacementGpu> _Placements;
@@ -142,6 +152,9 @@ StructuredBuffer<TreeGpu> _Trees;
 StructuredBuffer<SlotGpu> _Slots;
 
 RWStructuredBuffer<uint> _CellVisibility;
+RWStructuredBuffer<uint> _VisibleTreeIndices;
+RWStructuredBuffer<uint> _VisibleTreeCount;
+RWStructuredBuffer<uint> _VisibleTreeDispatchArgs;
 RWStructuredBuffer<TreeVisibilityGpu> _TreeVisibility;
 RWStructuredBuffer<BranchDecisionGpu> _ExpandedBranchWorkItems;
 RWStructuredBuffer<uint> _ExpandedBranchWorkItemCount;
@@ -150,6 +163,7 @@ RWStructuredBuffer<uint> _FrameStats;
 RWStructuredBuffer<uint> _PriorityRingTreeCounts;
 RWStructuredBuffer<uint> _PriorityRingOffsets;
 RWStructuredBuffer<uint> _PriorityOrderedVisibleTreeIndices;
+RWStructuredBuffer<uint> _PriorityOrderedVisibleTreeCount;
 RWStructuredBuffer<uint> _SlotRequestedInstanceCounts;
 RWStructuredBuffer<uint> _SlotEmittedInstanceCounts;
 RWStructuredBuffer<uint> _SlotPackedStarts;
@@ -420,14 +434,31 @@ void ResetPriorityRingBuffers()
     }
 }
 
+uint GetVisibleTreeTraversalCount()
+{
+    return min(_VisibleTreeCount[0], (uint)_TreeCount);
+}
+
+uint GetPriorityOrderedVisibleTreeTraversalCount()
+{
+    return min(_PriorityOrderedVisibleTreeCount[0], (uint)_TreeCount);
+}
+
 void BuildPriorityOrderedVisibleTreeList(out uint visibleTrees, out uint orderedVisibleTreeCount)
 {
     visibleTrees = 0u;
     orderedVisibleTreeCount = 0u;
     ResetPriorityRingBuffers();
 
-    for (int treeIndex = 0; treeIndex < _TreeCount; treeIndex++)
+    uint visibleTreeCandidateCount = GetVisibleTreeTraversalCount();
+    for (uint orderedVisibleSourceIndex = 0u; orderedVisibleSourceIndex < visibleTreeCandidateCount; orderedVisibleSourceIndex++)
     {
+        uint treeIndex = _VisibleTreeIndices[orderedVisibleSourceIndex];
+        if (treeIndex >= (uint)_TreeCount)
+        {
+            continue;
+        }
+
         TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
         visibility.acceptedTier = TierCulled;
         visibility.acceptedTierCost = 0;
@@ -454,9 +485,15 @@ void BuildPriorityOrderedVisibleTreeList(out uint visibleTrees, out uint ordered
 
     orderedVisibleTreeCount = runningOffset;
 
-    for (int orderedTreeIndex = 0; orderedTreeIndex < _TreeCount; orderedTreeIndex++)
+    for (uint visibleTreeIndex = 0u; visibleTreeIndex < visibleTreeCandidateCount; visibleTreeIndex++)
     {
-        TreeVisibilityGpu visibility = _TreeVisibility[orderedTreeIndex];
+        uint treeIndex = _VisibleTreeIndices[visibleTreeIndex];
+        if (treeIndex >= (uint)_TreeCount)
+        {
+            continue;
+        }
+
+        TreeVisibilityGpu visibility = _TreeVisibility[treeIndex];
         if (visibility.visible == 0u)
         {
             continue;
@@ -468,7 +505,7 @@ void BuildPriorityOrderedVisibleTreeList(out uint visibleTrees, out uint ordered
         uint orderedIndex = _PriorityRingOffsets[ringIndex] + ringOffset;
         if (orderedIndex < (uint)_TreeCount)
         {
-            _PriorityOrderedVisibleTreeIndices[orderedIndex] = (uint)orderedTreeIndex;
+            _PriorityOrderedVisibleTreeIndices[orderedIndex] = treeIndex;
         }
     }
 }
@@ -515,6 +552,8 @@ void ResetFrameState(uint3 dispatchThreadId : SV_DispatchThreadID)
     if (dispatchThreadId.x == 0u)
     {
         _ExpandedBranchWorkItemCount[0] = 0u;
+        _VisibleTreeCount[0] = 0u;
+        _PriorityOrderedVisibleTreeCount[0] = 0u;
     }
 
     if (dispatchThreadId.x < (uint)FrameStatCount)
@@ -537,9 +576,66 @@ void ClassifyCells(uint3 dispatchThreadId : SV_DispatchThreadID)
 }
 
 [numthreads(64, 1, 1)]
+void BuildVisibleTreeList(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint cellIndex = dispatchThreadId.x;
+    if (cellIndex >= (uint)_CellCount || _CellVisibility[cellIndex] == 0u)
+    {
+        return;
+    }
+
+    CellTreeRangeGpu treeRange = _CellTreeRanges[cellIndex];
+    for (uint treeOffset = 0u; treeOffset < treeRange.count; treeOffset++)
+    {
+        uint flatTreeIndex = treeRange.startIndex + treeOffset;
+        if (flatTreeIndex >= (uint)_TreeCount)
+        {
+            break;
+        }
+
+        uint treeIndex = _CellTreeIndices[flatTreeIndex];
+        if (treeIndex >= (uint)_TreeCount)
+        {
+            continue;
+        }
+
+        uint visibleTreeIndex;
+        InterlockedAdd(_VisibleTreeCount[0], 1u, visibleTreeIndex);
+        if (visibleTreeIndex >= (uint)_TreeCount)
+        {
+            continue;
+        }
+
+        _VisibleTreeIndices[visibleTreeIndex] = treeIndex;
+    }
+}
+
+[numthreads(1, 1, 1)]
+void BuildVisibleTreeDispatchArgs(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    if (dispatchThreadId.x != 0u)
+    {
+        return;
+    }
+
+    uint visibleTreeCount = GetVisibleTreeTraversalCount();
+    _VisibleTreeCount[0] = visibleTreeCount;
+    uint threadGroupCount = max(1u, (visibleTreeCount + 63u) / 64u);
+    _VisibleTreeDispatchArgs[0] = threadGroupCount;
+    _VisibleTreeDispatchArgs[1] = 1u;
+    _VisibleTreeDispatchArgs[2] = 1u;
+}
+
+[numthreads(64, 1, 1)]
 void ClassifyTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    uint treeIndex = dispatchThreadId.x;
+    uint visibleTreeIndex = dispatchThreadId.x;
+    if (visibleTreeIndex >= GetVisibleTreeTraversalCount())
+    {
+        return;
+    }
+
+    uint treeIndex = _VisibleTreeIndices[visibleTreeIndex];
     if (treeIndex >= (uint)_TreeCount)
     {
         return;
@@ -713,6 +809,7 @@ void AcceptTreeTiers(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     ApplyOrderedFarImpostors(orderedVisibleTreeCount, acceptedCostUsage, rejectedPromotions);
+    _PriorityOrderedVisibleTreeCount[0] = min(orderedVisibleTreeCount, (uint)_TreeCount);
 
     _FrameStats[FrameStatVisibleTrees] = visibleTrees;
     _FrameStats[FrameStatAcceptedTreeL3] = acceptedTreeL3;
@@ -732,7 +829,13 @@ void GenerateExpandedBranchWorkItems(uint3 dispatchThreadId : SV_DispatchThreadI
         return;
     }
 
-    uint treeIndex = dispatchThreadId.x;
+    uint orderedTreeIndex = dispatchThreadId.x;
+    if (orderedTreeIndex >= GetPriorityOrderedVisibleTreeTraversalCount())
+    {
+        return;
+    }
+
+    uint treeIndex = _PriorityOrderedVisibleTreeIndices[orderedTreeIndex];
     if (treeIndex >= (uint)_TreeCount)
     {
         return;
@@ -891,7 +994,13 @@ void ResetSlotCounts(uint3 dispatchThreadId : SV_DispatchThreadID)
 [numthreads(64, 1, 1)]
 void CountTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    uint treeIndex = dispatchThreadId.x;
+    uint orderedTreeIndex = dispatchThreadId.x;
+    if (orderedTreeIndex >= GetPriorityOrderedVisibleTreeTraversalCount())
+    {
+        return;
+    }
+
+    uint treeIndex = _PriorityOrderedVisibleTreeIndices[orderedTreeIndex];
     if (treeIndex >= (uint)_TreeCount)
     {
         return;
@@ -973,7 +1082,13 @@ void BuildSlotStarts(uint3 dispatchThreadId : SV_DispatchThreadID)
 [numthreads(64, 1, 1)]
 void EmitTrees(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    uint treeIndex = dispatchThreadId.x;
+    uint orderedTreeIndex = dispatchThreadId.x;
+    if (orderedTreeIndex >= GetPriorityOrderedVisibleTreeTraversalCount())
+    {
+        return;
+    }
+
+    uint treeIndex = _PriorityOrderedVisibleTreeIndices[orderedTreeIndex];
     if (treeIndex >= (uint)_TreeCount)
     {
         return;

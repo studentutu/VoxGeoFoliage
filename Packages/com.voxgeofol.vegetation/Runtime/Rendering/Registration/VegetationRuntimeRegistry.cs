@@ -21,6 +21,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             VegetationBlueprintBranchPlacementRuntime[] blueprintBranchPlacements,
             VegetationBranchPrototypeRuntime[] branchPrototypes,
             VegetationTreeInstanceRuntime[] treeInstances,
+            int[] cellTreeIndexStarts,
+            int[] cellTreeIndexCounts,
+            int[] cellTreeIndices,
             VegetationSpatialGrid spatialGrid)
         {
             this.drawSlots = drawSlots;
@@ -30,6 +33,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             this.blueprintBranchPlacements = blueprintBranchPlacements;
             this.branchPrototypes = branchPrototypes;
             this.treeInstances = treeInstances;
+            this.cellTreeIndexStarts = cellTreeIndexStarts;
+            this.cellTreeIndexCounts = cellTreeIndexCounts;
+            this.cellTreeIndices = cellTreeIndices;
             SpatialGrid = spatialGrid;
         }
 
@@ -40,6 +46,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly VegetationBlueprintBranchPlacementRuntime[] blueprintBranchPlacements;
         private readonly VegetationBranchPrototypeRuntime[] branchPrototypes;
         private readonly VegetationTreeInstanceRuntime[] treeInstances;
+        private readonly int[] cellTreeIndexStarts;
+        private readonly int[] cellTreeIndexCounts;
+        private readonly int[] cellTreeIndices;
 
         public IReadOnlyList<VegetationDrawSlot> DrawSlots => drawSlots;
 
@@ -54,6 +63,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public IReadOnlyList<VegetationBranchPrototypeRuntime> BranchPrototypes => branchPrototypes;
 
         public IReadOnlyList<VegetationTreeInstanceRuntime> TreeInstances => treeInstances;
+
+        public IReadOnlyList<int> CellTreeIndexStarts => cellTreeIndexStarts;
+
+        public IReadOnlyList<int> CellTreeIndexCounts => cellTreeIndexCounts;
+
+        public IReadOnlyList<int> CellTreeIndices => cellTreeIndices;
 
         public VegetationSpatialGrid SpatialGrid { get; }
     }

@@ -3639,9 +3639,9 @@ MonoBehaviour:
   colorMaxExpandedBranchWorkItemCapacity: 131072
   colorMaxApproxWorkUnitCapacity: 131072
   shadowMaxVisibleInstanceCapacity: 131072
-  shadowMaxExpandedBranchWorkItemCapacity: 131072
-  shadowMaxApproxWorkUnitCapacity: 131072
-  maxRegisteredDrawSlots: 4096
+  shadowMaxExpandedBranchWorkItemCapacity: 32768
+  shadowMaxApproxWorkUnitCapacity: 32768
+  maxRegisteredDrawSlots: 2048
 --- !u!1001 &1142704448
 PrefabInstance:
   m_ObjectHideFlags: 0

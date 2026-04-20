@@ -40,6 +40,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private static readonly ProfilerMarker EmitBranchInstancesMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.EmitBranchInstances");
         private static readonly ProfilerMarker FinalizeIndirectArgsMarker = new ProfilerMarker("VoxGeoFol.VegetationGpuDecisionPipeline.FinalizeIndirectArgs");
         private static readonly int CellGpuStrideBytes = Marshal.SizeOf<CellGpu>();
+        private static readonly int CellTreeRangeGpuStrideBytes = Marshal.SizeOf<CellTreeRangeGpu>();
         private static readonly int LodProfileGpuStrideBytes = Marshal.SizeOf<LodProfileGpu>();
         private static readonly int BlueprintGpuStrideBytes = Marshal.SizeOf<BlueprintGpu>();
         private static readonly int PlacementGpuStrideBytes = Marshal.SizeOf<PlacementGpu>();
@@ -57,6 +58,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly VegetationRuntimeRegistry registry;
         private readonly int resetFrameStateKernel;
         private readonly int classifyCellsKernel;
+        private readonly int buildVisibleTreeListKernel;
+        private readonly int buildVisibleTreeDispatchArgsKernel;
         private readonly int classifyTreesKernel;
         private readonly int acceptTreeTiersKernel;
         private readonly int generateExpandedBranchWorkItemsKernel;
@@ -74,11 +77,16 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly int approxWorkUnitCapacity;
         private readonly int priorityRingCount;
         private ComputeBuffer cellBuffer = null!;
+        private ComputeBuffer cellTreeRangeBuffer = null!;
+        private ComputeBuffer cellTreeIndexBuffer = null!;
         private ComputeBuffer lodBuffer = null!;
         private ComputeBuffer blueprintBuffer = null!;
         private ComputeBuffer placementBuffer = null!;
         private ComputeBuffer prototypeBuffer = null!;
         private ComputeBuffer treeBuffer = null!;
+        private ComputeBuffer visibleTreeIndexBuffer = null!;
+        private ComputeBuffer visibleTreeCountBuffer = null!;
+        private ComputeBuffer visibleTreeDispatchArgsBuffer = null!;
         private ComputeBuffer treeVisibilityBuffer = null!;
         private ComputeBuffer expandedBranchWorkItemBuffer = null!;
         private ComputeBuffer expandedBranchWorkItemCountBuffer = null!;
@@ -87,6 +95,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private ComputeBuffer priorityRingTreeCountBuffer = null!;
         private ComputeBuffer priorityRingOffsetsBuffer = null!;
         private ComputeBuffer priorityOrderedVisibleTreeIndicesBuffer = null!;
+        private ComputeBuffer priorityOrderedVisibleTreeCountBuffer = null!;
         private ComputeBuffer slotMetadataBuffer = null!;
         private ComputeBuffer slotRequestedInstanceCountBuffer = null!;
         private ComputeBuffer slotEmittedInstanceCountBuffer = null!;
@@ -235,6 +244,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         public long CellBufferBytes => checked((long)AllocatedCellBufferElementCount * CellGpuStrideBytes);
 
+        public int AllocatedCellTreeRangeBufferElementCount => Mathf.Max(1, registry.CellTreeIndexStarts.Count);
+
+        public long CellTreeRangeBufferBytes => checked((long)AllocatedCellTreeRangeBufferElementCount * CellTreeRangeGpuStrideBytes);
+
+        public int AllocatedCellTreeIndexBufferElementCount => Mathf.Max(1, registry.CellTreeIndices.Count);
+
+        public long CellTreeIndexBufferBytes => checked((long)AllocatedCellTreeIndexBufferElementCount * UIntStrideBytes);
+
         public int LodProfileCount => registry.LodProfiles.Count;
 
         public int AllocatedLodProfileBufferElementCount => Mathf.Max(1, LodProfileCount);
@@ -263,6 +280,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         public long TreeBufferBytes => checked((long)AllocatedTreeBufferElementCount * TreeGpuStrideBytes);
 
+        public int VisibleTreeIndexCapacity => Mathf.Max(1, registry.TreeInstances.Count);
+
+        public long VisibleTreeIndexBufferBytes => checked((long)VisibleTreeIndexCapacity * UIntStrideBytes);
+
+        public long VisibleTreeCountBufferBytes => UIntStrideBytes;
+
+        public long VisibleTreeDispatchArgsBufferBytes => checked((long)DispatchArgumentCount * UIntStrideBytes);
+
         public int AllocatedTreeVisibilityBufferElementCount => Mathf.Max(1, registry.TreeInstances.Count);
 
         public long TreeVisibilityBufferBytes => checked((long)AllocatedTreeVisibilityBufferElementCount * TreeVisibilityGpuStrideBytes);
@@ -276,6 +301,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public int PriorityOrderedVisibleTreeIndexCapacity => Mathf.Max(1, registry.TreeInstances.Count);
 
         public long PriorityOrderedVisibleTreeIndexBufferBytes => checked((long)PriorityOrderedVisibleTreeIndexCapacity * UIntStrideBytes);
+
+        public long PriorityOrderedVisibleTreeCountBufferBytes => UIntStrideBytes;
 
         public int ExpandedBranchWorkItemCapacity => expandedBranchWorkItemCapacity;
 
@@ -319,15 +346,21 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         public long TotalComputeBufferBytes => checked(
             CellBufferBytes +
+            CellTreeRangeBufferBytes +
+            CellTreeIndexBufferBytes +
             LodProfileBufferBytes +
             BlueprintBufferBytes +
             BlueprintPlacementBufferBytes +
             PrototypeBufferBytes +
             TreeBufferBytes +
+            VisibleTreeIndexBufferBytes +
+            VisibleTreeCountBufferBytes +
+            VisibleTreeDispatchArgsBufferBytes +
             TreeVisibilityBufferBytes +
             PriorityRingTreeCountBufferBytes +
             PriorityRingOffsetsBufferBytes +
             PriorityOrderedVisibleTreeIndexBufferBytes +
+            PriorityOrderedVisibleTreeCountBufferBytes +
             ExpandedBranchWorkItemBufferBytes +
             ExpandedBranchWorkItemCountBufferBytes +
             ExpandedBranchDispatchArgsBufferBytes +
@@ -369,6 +402,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             {
                 resetFrameStateKernel = classifyShader.FindKernel("ResetFrameState");
                 classifyCellsKernel = classifyShader.FindKernel("ClassifyCells");
+                buildVisibleTreeListKernel = classifyShader.FindKernel("BuildVisibleTreeList");
+                buildVisibleTreeDispatchArgsKernel = classifyShader.FindKernel("BuildVisibleTreeDispatchArgs");
                 classifyTreesKernel = classifyShader.FindKernel("ClassifyTrees");
                 acceptTreeTiersKernel = classifyShader.FindKernel("AcceptTreeTiers");
                 generateExpandedBranchWorkItemsKernel = classifyShader.FindKernel("GenerateExpandedBranchWorkItems");
@@ -392,11 +427,19 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             try
             {
                 cellBuffer = CreateStructuredBuffer<CellGpu>(Mathf.Max(1, registry.SpatialGrid.Cells.Count));
+                cellTreeRangeBuffer = CreateStructuredBuffer<CellTreeRangeGpu>(Mathf.Max(1, registry.CellTreeIndexStarts.Count));
+                cellTreeIndexBuffer = CreateStructuredBuffer<uint>(Mathf.Max(1, registry.CellTreeIndices.Count));
                 lodBuffer = CreateStructuredBuffer<LodProfileGpu>(Mathf.Max(1, registry.LodProfiles.Count));
                 blueprintBuffer = CreateStructuredBuffer<BlueprintGpu>(Mathf.Max(1, registry.TreeBlueprints.Count));
                 placementBuffer = CreateStructuredBuffer<PlacementGpu>(Mathf.Max(1, registry.BlueprintBranchPlacements.Count));
                 prototypeBuffer = CreateStructuredBuffer<PrototypeGpu>(Mathf.Max(1, registry.BranchPrototypes.Count));
                 treeBuffer = CreateStructuredBuffer<TreeGpu>(Mathf.Max(1, registry.TreeInstances.Count));
+                visibleTreeIndexBuffer = CreateStructuredBuffer<uint>(Mathf.Max(1, registry.TreeInstances.Count));
+                visibleTreeCountBuffer = CreateStructuredBuffer<uint>(1);
+                visibleTreeDispatchArgsBuffer = new ComputeBuffer(
+                    DispatchArgumentCount,
+                    UIntStrideBytes,
+                    ComputeBufferType.IndirectArguments);
                 treeVisibilityBuffer = CreateStructuredBuffer<TreeVisibilityGpu>(Mathf.Max(1, registry.TreeInstances.Count));
                 expandedBranchWorkItemBuffer = CreateStructuredBuffer<VegetationBranchDecisionRecord>(this.expandedBranchWorkItemCapacity);
                 expandedBranchWorkItemCountBuffer = CreateStructuredBuffer<uint>(1);
@@ -408,6 +451,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 priorityRingTreeCountBuffer = CreateStructuredBuffer<uint>(this.priorityRingCount);
                 priorityRingOffsetsBuffer = CreateStructuredBuffer<uint>(this.priorityRingCount);
                 priorityOrderedVisibleTreeIndicesBuffer = CreateStructuredBuffer<uint>(Mathf.Max(1, registry.TreeInstances.Count));
+                priorityOrderedVisibleTreeCountBuffer = CreateStructuredBuffer<uint>(1);
                 slotMetadataBuffer = CreateStructuredBuffer<SlotGpu>(Mathf.Max(1, registry.DrawSlots.Count));
                 slotRequestedInstanceCountBuffer = CreateStructuredBuffer<uint>(Mathf.Max(1, registry.DrawSlots.Count));
                 slotEmittedInstanceCountBuffer = CreateStructuredBuffer<uint>(Mathf.Max(1, registry.DrawSlots.Count));
@@ -473,20 +517,22 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
 
                 DispatchKernel(classifyCellsKernel, registry.SpatialGrid.Cells.Count);
-                DispatchKernel(classifyTreesKernel, registry.TreeInstances.Count);
+                DispatchKernel(buildVisibleTreeListKernel, registry.SpatialGrid.Cells.Count);
+                DispatchKernel(buildVisibleTreeDispatchArgsKernel, 1);
+                DispatchKernelIndirect(classifyTreesKernel, visibleTreeDispatchArgsBuffer);
                 DispatchKernel(acceptTreeTiersKernel, 1);
 
                 DispatchKernel(resetSlotCountsKernel, registry.DrawSlots.Count);
 
                 using (CountTreeInstancesMarker.Auto())
                 {
-                    DispatchKernel(countTreesKernel, registry.TreeInstances.Count);
+                    DispatchKernelIndirect(countTreesKernel, visibleTreeDispatchArgsBuffer);
                 }
 
                 bool dispatchExpandedBranches = allowExpandedTreePromotion && !shadowProxyOnly;
                 if (dispatchExpandedBranches)
                 {
-                    DispatchKernel(generateExpandedBranchWorkItemsKernel, registry.TreeInstances.Count);
+                    DispatchKernelIndirect(generateExpandedBranchWorkItemsKernel, visibleTreeDispatchArgsBuffer);
                     DispatchKernel(buildExpandedBranchDispatchArgsKernel, 1);
 
                     using (CountBranchInstancesMarker.Auto())
@@ -507,7 +553,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                 using (EmitTreeInstancesMarker.Auto())
                 {
-                    DispatchKernel(emitTreesKernel, registry.TreeInstances.Count);
+                    DispatchKernelIndirect(emitTreesKernel, visibleTreeDispatchArgsBuffer);
                 }
 
                 if (dispatchExpandedBranches)
@@ -653,6 +699,26 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             cellBuffer.SetData(cells);
 
+            CellTreeRangeGpu[] cellTreeRanges = new CellTreeRangeGpu[Mathf.Max(1, registry.CellTreeIndexStarts.Count)];
+            for (int i = 0; i < registry.CellTreeIndexStarts.Count; i++)
+            {
+                cellTreeRanges[i] = new CellTreeRangeGpu
+                {
+                    StartIndex = (uint)registry.CellTreeIndexStarts[i],
+                    Count = (uint)registry.CellTreeIndexCounts[i]
+                };
+            }
+
+            cellTreeRangeBuffer.SetData(cellTreeRanges);
+
+            uint[] cellTreeIndices = new uint[Mathf.Max(1, registry.CellTreeIndices.Count)];
+            for (int i = 0; i < registry.CellTreeIndices.Count; i++)
+            {
+                cellTreeIndices[i] = (uint)registry.CellTreeIndices[i];
+            }
+
+            cellTreeIndexBuffer.SetData(cellTreeIndices);
+
             LodProfileGpu[] lodProfiles = new LodProfileGpu[Mathf.Max(1, registry.LodProfiles.Count)];
             for (int i = 0; i < registry.LodProfiles.Count; i++)
             {
@@ -771,28 +837,46 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             classifyShader.SetBuffer(resetFrameStateKernel, "_ExpandedBranchWorkItems", expandedBranchWorkItemBuffer);
             classifyShader.SetBuffer(resetFrameStateKernel, "_ExpandedBranchWorkItemCount", expandedBranchWorkItemCountBuffer);
+            classifyShader.SetBuffer(resetFrameStateKernel, "_VisibleTreeCount", visibleTreeCountBuffer);
+            classifyShader.SetBuffer(resetFrameStateKernel, "_PriorityOrderedVisibleTreeCount", priorityOrderedVisibleTreeCountBuffer);
             classifyShader.SetBuffer(resetFrameStateKernel, "_FrameStats", frameStatsBuffer);
 
             classifyShader.SetBuffer(classifyCellsKernel, "_Cells", cellBuffer);
             classifyShader.SetBuffer(classifyCellsKernel, "_CellVisibility", cellVisibilityBuffer);
 
+            classifyShader.SetBuffer(buildVisibleTreeListKernel, "_CellVisibility", cellVisibilityBuffer);
+            classifyShader.SetBuffer(buildVisibleTreeListKernel, "_CellTreeRanges", cellTreeRangeBuffer);
+            classifyShader.SetBuffer(buildVisibleTreeListKernel, "_CellTreeIndices", cellTreeIndexBuffer);
+            classifyShader.SetBuffer(buildVisibleTreeListKernel, "_VisibleTreeIndices", visibleTreeIndexBuffer);
+            classifyShader.SetBuffer(buildVisibleTreeListKernel, "_VisibleTreeCount", visibleTreeCountBuffer);
+
+            classifyShader.SetBuffer(buildVisibleTreeDispatchArgsKernel, "_VisibleTreeCount", visibleTreeCountBuffer);
+            classifyShader.SetBuffer(buildVisibleTreeDispatchArgsKernel, "_VisibleTreeDispatchArgs", visibleTreeDispatchArgsBuffer);
+
             classifyShader.SetBuffer(classifyTreesKernel, "_Trees", treeBuffer);
             classifyShader.SetBuffer(classifyTreesKernel, "_Blueprints", blueprintBuffer);
             classifyShader.SetBuffer(classifyTreesKernel, "_LodProfiles", lodBuffer);
             classifyShader.SetBuffer(classifyTreesKernel, "_CellVisibility", cellVisibilityBuffer);
+            classifyShader.SetBuffer(classifyTreesKernel, "_VisibleTreeIndices", visibleTreeIndexBuffer);
+            classifyShader.SetBuffer(classifyTreesKernel, "_VisibleTreeCount", visibleTreeCountBuffer);
             classifyShader.SetBuffer(classifyTreesKernel, "_TreeVisibility", treeVisibilityBuffer);
 
             classifyShader.SetBuffer(acceptTreeTiersKernel, "_Trees", treeBuffer);
             classifyShader.SetBuffer(acceptTreeTiersKernel, "_Blueprints", blueprintBuffer);
+            classifyShader.SetBuffer(acceptTreeTiersKernel, "_VisibleTreeIndices", visibleTreeIndexBuffer);
+            classifyShader.SetBuffer(acceptTreeTiersKernel, "_VisibleTreeCount", visibleTreeCountBuffer);
             classifyShader.SetBuffer(acceptTreeTiersKernel, "_TreeVisibility", treeVisibilityBuffer);
             classifyShader.SetBuffer(acceptTreeTiersKernel, "_FrameStats", frameStatsBuffer);
             classifyShader.SetBuffer(acceptTreeTiersKernel, "_PriorityRingTreeCounts", priorityRingTreeCountBuffer);
             classifyShader.SetBuffer(acceptTreeTiersKernel, "_PriorityRingOffsets", priorityRingOffsetsBuffer);
             classifyShader.SetBuffer(acceptTreeTiersKernel, "_PriorityOrderedVisibleTreeIndices", priorityOrderedVisibleTreeIndicesBuffer);
+            classifyShader.SetBuffer(acceptTreeTiersKernel, "_PriorityOrderedVisibleTreeCount", priorityOrderedVisibleTreeCountBuffer);
 
             classifyShader.SetBuffer(generateExpandedBranchWorkItemsKernel, "_Trees", treeBuffer);
             classifyShader.SetBuffer(generateExpandedBranchWorkItemsKernel, "_Blueprints", blueprintBuffer);
             classifyShader.SetBuffer(generateExpandedBranchWorkItemsKernel, "_TreeVisibility", treeVisibilityBuffer);
+            classifyShader.SetBuffer(generateExpandedBranchWorkItemsKernel, "_PriorityOrderedVisibleTreeIndices", priorityOrderedVisibleTreeIndicesBuffer);
+            classifyShader.SetBuffer(generateExpandedBranchWorkItemsKernel, "_PriorityOrderedVisibleTreeCount", priorityOrderedVisibleTreeCountBuffer);
             classifyShader.SetBuffer(generateExpandedBranchWorkItemsKernel, "_ExpandedBranchWorkItems", expandedBranchWorkItemBuffer);
             classifyShader.SetBuffer(generateExpandedBranchWorkItemsKernel, "_ExpandedBranchWorkItemCount", expandedBranchWorkItemCountBuffer);
             classifyShader.SetBuffer(generateExpandedBranchWorkItemsKernel, "_FrameStats", frameStatsBuffer);
@@ -807,6 +891,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             classifyShader.SetBuffer(countTreesKernel, "_Trees", treeBuffer);
             classifyShader.SetBuffer(countTreesKernel, "_Blueprints", blueprintBuffer);
             classifyShader.SetBuffer(countTreesKernel, "_TreeVisibility", treeVisibilityBuffer);
+            classifyShader.SetBuffer(countTreesKernel, "_PriorityOrderedVisibleTreeIndices", priorityOrderedVisibleTreeIndicesBuffer);
+            classifyShader.SetBuffer(countTreesKernel, "_PriorityOrderedVisibleTreeCount", priorityOrderedVisibleTreeCountBuffer);
             classifyShader.SetBuffer(countTreesKernel, "_SlotRequestedInstanceCounts", slotRequestedInstanceCountBuffer);
 
             classifyShader.SetBuffer(countExpandedBranchesKernel, "_Trees", treeBuffer);
@@ -825,6 +911,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             classifyShader.SetBuffer(emitTreesKernel, "_Trees", treeBuffer);
             classifyShader.SetBuffer(emitTreesKernel, "_Blueprints", blueprintBuffer);
             classifyShader.SetBuffer(emitTreesKernel, "_TreeVisibility", treeVisibilityBuffer);
+            classifyShader.SetBuffer(emitTreesKernel, "_PriorityOrderedVisibleTreeIndices", priorityOrderedVisibleTreeIndicesBuffer);
+            classifyShader.SetBuffer(emitTreesKernel, "_PriorityOrderedVisibleTreeCount", priorityOrderedVisibleTreeCountBuffer);
             classifyShader.SetBuffer(emitTreesKernel, "_SlotRequestedInstanceCounts", slotRequestedInstanceCountBuffer);
             classifyShader.SetBuffer(emitTreesKernel, "_SlotPackedStarts", slotPackedStartsBuffer);
             classifyShader.SetBuffer(emitTreesKernel, "_SlotEmittedInstanceCounts", slotEmittedInstanceCountBuffer);
@@ -910,6 +998,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 preparedFrameTelemetryReadbackPending = true;
                 pendingPreparedFrameTelemetryReadbackSequence = readbackSequence;
                 AsyncGPUReadback.Request(frameStatsBuffer, OnPreparedFrameTelemetryReadbackCompleted);
+            }
+
+            if (!captureTelemetry)
+            {
+                hasLatestActiveSlotIndices = false;
+                latestActiveSlotIndices = Array.Empty<int>();
+                pendingSlotEmissionReadbackSequence = -1;
+                return;
             }
 
             if (!slotEmissionReadbackPending)
@@ -1018,11 +1114,16 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private void ReleaseResources()
         {
             ReleaseComputeBuffer(ref cellBuffer);
+            ReleaseComputeBuffer(ref cellTreeRangeBuffer);
+            ReleaseComputeBuffer(ref cellTreeIndexBuffer);
             ReleaseComputeBuffer(ref lodBuffer);
             ReleaseComputeBuffer(ref blueprintBuffer);
             ReleaseComputeBuffer(ref placementBuffer);
             ReleaseComputeBuffer(ref prototypeBuffer);
             ReleaseComputeBuffer(ref treeBuffer);
+            ReleaseComputeBuffer(ref visibleTreeIndexBuffer);
+            ReleaseComputeBuffer(ref visibleTreeCountBuffer);
+            ReleaseComputeBuffer(ref visibleTreeDispatchArgsBuffer);
             ReleaseComputeBuffer(ref treeVisibilityBuffer);
             ReleaseComputeBuffer(ref expandedBranchWorkItemBuffer);
             ReleaseComputeBuffer(ref expandedBranchWorkItemCountBuffer);
@@ -1031,6 +1132,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             ReleaseComputeBuffer(ref priorityRingTreeCountBuffer);
             ReleaseComputeBuffer(ref priorityRingOffsetsBuffer);
             ReleaseComputeBuffer(ref priorityOrderedVisibleTreeIndicesBuffer);
+            ReleaseComputeBuffer(ref priorityOrderedVisibleTreeCountBuffer);
             ReleaseComputeBuffer(ref slotMetadataBuffer);
             ReleaseComputeBuffer(ref slotRequestedInstanceCountBuffer);
             ReleaseComputeBuffer(ref slotEmittedInstanceCountBuffer);
@@ -1078,6 +1180,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             public float Padding0;
             public Vector3 Extents;
             public float Padding1;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct CellTreeRangeGpu
+        {
+            public uint StartIndex;
+            public uint Count;
         }
 
         [StructLayout(LayoutKind.Sequential)]

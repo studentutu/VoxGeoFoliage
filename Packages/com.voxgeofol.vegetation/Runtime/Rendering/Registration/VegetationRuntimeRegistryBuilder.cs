@@ -87,6 +87,26 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             VegetationSpatialGrid spatialGrid = VegetationSpatialGrid.Build(gridOrigin, cellSize, treeInstances);
+            int[] cellTreeIndexStarts = new int[spatialGrid.Cells.Count];
+            int[] cellTreeIndexCounts = new int[spatialGrid.Cells.Count];
+            List<int> cellTreeIndices = new List<int>(treeInstances.Count);
+            for (int cellIndex = 0; cellIndex < spatialGrid.Cells.Count; cellIndex++)
+            {
+                IReadOnlyList<int> registeredTreeIndices = spatialGrid.Cells[cellIndex].TreeIndices;
+                cellTreeIndexStarts[cellIndex] = cellTreeIndices.Count;
+                cellTreeIndexCounts[cellIndex] = registeredTreeIndices.Count;
+                for (int treeOffset = 0; treeOffset < registeredTreeIndices.Count; treeOffset++)
+                {
+                    cellTreeIndices.Add(registeredTreeIndices[treeOffset]);
+                }
+            }
+
+            if (cellTreeIndices.Count != treeInstances.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Spatial-grid tree flattening expected exactly one registered cell entry per tree, but collected {cellTreeIndices.Count} entries for {treeInstances.Count} trees.");
+            }
+
             return new VegetationRuntimeRegistry(
                 drawSlots.ToArray(),
                 BuildDrawSlotConservativeBounds(),
@@ -95,6 +115,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 blueprintBranchPlacements.ToArray(),
                 branchPrototypes.ToArray(),
                 treeInstances.ToArray(),
+                cellTreeIndexStarts,
+                cellTreeIndexCounts,
+                cellTreeIndices.ToArray(),
                 spatialGrid);
         }
 
