@@ -15,6 +15,8 @@ MonoBehaviour:
   trunkMesh: {fileID: -2432090755550338912, guid: def0f6c754abc974786d4b5963fbacdc, type: 3}
   trunkL3Mesh: {fileID: 4300000, guid: f84cd49b1f99a65478ec66fc71ec281c, type: 2}
   treeL3Mesh: {fileID: 4300000, guid: 573c4620eadf20e43bc27e08ac23a293, type: 2}
+  shadowProxyMeshL0: {fileID: 4300000, guid: 79b25fee31892c74cab89cdb58e4cc6b, type: 2}
+  shadowProxyMeshL1: {fileID: 4300000, guid: 6fd4c426a8c39484ca64b8abd337eaf9, type: 2}
   trunkMaterial: {fileID: 2100000, guid: 72a7df46ac0cce54a91695e1898ab6bb, type: 2}
   branches:
   - prototype: {fileID: 11400000, guid: a36e7a0131fe24144b1e8d32e4a1f219, type: 2}
@@ -231,6 +233,11 @@ MonoBehaviour:
   lodProfile: {fileID: 11400000, guid: 4107cf5d573903340aab43e949eebccd, type: 2}
   ImposterBakeSettings:
     voxelResolution: 15
+    skipReduction: 0
+    skipSimplifyFallback: 0
+  shadowProxyBakeSettings:
+    voxelResolutionL0: 26
+    voxelResolutionL1: 18
     skipReduction: 0
     skipSimplifyFallback: 0
   treeBounds:

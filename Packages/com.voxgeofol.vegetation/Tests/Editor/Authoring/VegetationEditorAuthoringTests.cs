@@ -350,6 +350,52 @@ public sealed class VegetationEditorAuthoringTests
 
     [Test]
     [Ignore("Takes too long, developer already verified in editor manually")]
+    public void BakeShadowProxy_FromEditorUtility_AssignsGeneratedMeshesToBlueprintFields()
+    {
+        EnsureTestFolders();
+
+        Mesh woodMesh = CreateMeshAsset(
+            "shadow_proxy_wood.asset",
+            new[]
+            {
+                new Vector3(-0.1f, -0.4f, -0.1f),
+                new Vector3(0.1f, 0.4f, -0.1f),
+                new Vector3(-0.1f, -0.4f, 0.1f)
+            });
+        Mesh foliageMesh = CreateClosedCubeMeshAsset("shadow_proxy_foliage.asset", new Vector3(1.2f, 1f, 1.2f));
+        Mesh trunkMesh = CreateClosedCubeMeshAsset("shadow_proxy_trunk.asset", new Vector3(0.5f, 2f, 0.5f));
+        Mesh treeL3Mesh = CreateClosedCubeMeshAsset("shadow_proxy_tree_l3.asset", new Vector3(1.8f, 2.2f, 1.8f));
+
+        BranchPrototypeSO prototype = CreateAsset<BranchPrototypeSO>("ShadowProxyPrototype.asset");
+        SetPrivateField(prototype, "woodMesh", woodMesh);
+        SetPrivateField(prototype, "foliageMesh", foliageMesh);
+
+        BranchPlacement placement = CreateBranchPlacement(
+            prototype,
+            new Vector3(0f, 1f, 0f),
+            Quaternion.identity,
+            1f);
+
+        TreeBlueprintSO blueprint = CreateAsset<TreeBlueprintSO>("ShadowProxyBlueprint.asset");
+        SetPrivateField(blueprint, "trunkMesh", trunkMesh);
+        SetPrivateField(blueprint, "treeL3Mesh", treeL3Mesh);
+        SetPrivateField(blueprint, "branches", new[] { placement });
+        SetPrivateField(blueprint, "treeBounds", new Bounds(new Vector3(0f, 1f, 0f), new Vector3(4f, 4f, 4f)));
+        SetPrivateField(blueprint, "shadowProxyBakeSettings", CreateFastShadowProxyBakeSettings());
+
+        GameObject authoringObject = CreateTransientGameObject("Authoring");
+        VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
+        SetPrivateField(authoring, "blueprint", blueprint);
+
+        VegetationTreeAuthoringEditorUtility.BakeShadowProxyL1(authoring);
+        VegetationTreeAuthoringEditorUtility.BakeShadowProxyL0(authoring);
+
+        AssertGeneratedMeshStored(blueprint.ShadowProxyMeshL1);
+        AssertGeneratedMeshStored(blueprint.ShadowProxyMeshL0);
+    }
+
+    [Test]
+    [Ignore("Takes too long, developer already verified in editor manually")]
     public void PersistGeneratedMesh_RebuildsStableFlatNormals()
     {
         EnsureTestFolders();
@@ -572,6 +618,14 @@ public sealed class VegetationEditorAuthoringTests
     private ImpostorBakeSettings CreateFastImpostorBakeSettings()
     {
         ImpostorBakeSettings settings = new ImpostorBakeSettings();
+        SetPrivateField(settings, "skipReduction", true);
+        SetPrivateField(settings, "skipSimplifyFallback", true);
+        return settings;
+    }
+
+    private ShadowProxyBakeSettings CreateFastShadowProxyBakeSettings()
+    {
+        ShadowProxyBakeSettings settings = new ShadowProxyBakeSettings();
         SetPrivateField(settings, "skipReduction", true);
         SetPrivateField(settings, "skipSimplifyFallback", true);
         return settings;

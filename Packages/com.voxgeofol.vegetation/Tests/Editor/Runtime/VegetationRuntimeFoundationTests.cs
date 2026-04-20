@@ -78,6 +78,23 @@ public sealed class VegetationRuntimeFoundationTests
     }
 
     [Test]
+    public void RuntimeRegistryBuilder_ShadowProxySlotsFallbackToTreeL3_WhenBlueprintDoesNotAssignThem()
+    {
+        VegetationTreeAuthoring authoring = CreateAuthoring("ShadowProxyFallbackTree", new Vector3(0f, 0f, 10f));
+        Hash128 containerIdHash = Hash128.Compute("RuntimeRegistryBuilder_ShadowProxyFallback");
+        VegetationTreeAuthoringRuntime runtimeAuthoring = CreateRuntimeAuthoring(authoring, containerIdHash, 0);
+
+        VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
+            .Build(new[] { runtimeAuthoring });
+
+        VegetationTreeBlueprintRuntime blueprint = registry.TreeBlueprints[0];
+        Assert.AreEqual(blueprint.TreeL3DrawSlot, blueprint.ShadowProxyDrawSlotL0);
+        Assert.AreEqual(blueprint.TreeL3DrawSlot, blueprint.ShadowProxyDrawSlotL1);
+        Assert.AreEqual(blueprint.TreeL3WorkCost, blueprint.ShadowProxyWorkCostL0);
+        Assert.AreEqual(blueprint.TreeL3WorkCost, blueprint.ShadowProxyWorkCostL1);
+    }
+
+    [Test]
     public void IndirectRenderer_BindGpuResidentFrame_ExposesPreparedViewSnapshotsWithoutExactCounts()
     {
         VegetationTreeAuthoring authoring = CreateAuthoring("RuntimeTree", new Vector3(0f, 0f, 10f));

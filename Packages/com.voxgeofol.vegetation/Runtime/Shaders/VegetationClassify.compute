@@ -57,8 +57,12 @@ struct BlueprintGpu
     int trunkL3DrawSlot;
     int treeL3DrawSlot;
     int impostorDrawSlot;
+    int shadowProxyDrawSlotL0;
+    int shadowProxyDrawSlotL1;
     int treeL3WorkCost;
     int impostorWorkCost;
+    int shadowProxyWorkCostL0;
+    int shadowProxyWorkCostL1;
     int expandedTierCostL2;
     int expandedTierCostL1;
     int expandedTierCostL0;
@@ -166,8 +170,10 @@ int _ExpandedBranchWorkItemCapacity;
 int _ApproxWorkUnitCapacity;
 int _AllowExpandedTierPromotion;
 int _LimitExpandedPromotionToNearTiers;
+int _ShadowProxyOnly;
 int _PriorityRingCount;
 
+static const int FrameStatCount = 13;
 static const int FrameStatVisibleTrees = 0;
 static const int FrameStatAcceptedTreeL3 = 1;
 static const int FrameStatPromotedL2 = 2;
@@ -273,6 +279,21 @@ int ResolveExpandedCanopyDrawSlot(PrototypeGpu prototype, int acceptedTier)
 
 int ResolveAcceptedTreeDrawSlot(BlueprintGpu blueprint, int acceptedTier)
 {
+    if (_ShadowProxyOnly != 0)
+    {
+        if (acceptedTier == TierL0)
+        {
+            return blueprint.shadowProxyDrawSlotL0;
+        }
+
+        if (acceptedTier == TierL1)
+        {
+            return blueprint.shadowProxyDrawSlotL1;
+        }
+
+        return blueprint.treeL3DrawSlot;
+    }
+
     if (acceptedTier == TierImpostor)
     {
         return blueprint.impostorDrawSlot;
@@ -293,6 +314,21 @@ int ResolveAcceptedTreeDrawSlot(BlueprintGpu blueprint, int acceptedTier)
 
 int ResolveAcceptedTierCost(BlueprintGpu blueprint, int acceptedTier)
 {
+    if (_ShadowProxyOnly != 0)
+    {
+        if (acceptedTier == TierL0)
+        {
+            return blueprint.shadowProxyWorkCostL0;
+        }
+
+        if (acceptedTier == TierL1)
+        {
+            return blueprint.shadowProxyWorkCostL1;
+        }
+
+        return blueprint.treeL3WorkCost;
+    }
+
     if (acceptedTier == TierL0)
     {
         return blueprint.expandedTierCostL0;
@@ -481,7 +517,7 @@ void ResetFrameState(uint3 dispatchThreadId : SV_DispatchThreadID)
         _ExpandedBranchWorkItemCount[0] = 0u;
     }
 
-    if (dispatchThreadId.x < 9u)
+    if (dispatchThreadId.x < (uint)FrameStatCount)
     {
         _FrameStats[dispatchThreadId.x] = 0u;
     }
@@ -691,6 +727,11 @@ void AcceptTreeTiers(uint3 dispatchThreadId : SV_DispatchThreadID)
 [numthreads(64, 1, 1)]
 void GenerateExpandedBranchWorkItems(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
+    if (_ShadowProxyOnly != 0)
+    {
+        return;
+    }
+
     uint treeIndex = dispatchThreadId.x;
     if (treeIndex >= (uint)_TreeCount)
     {
@@ -750,6 +791,11 @@ void BuildExpandedBranchDispatchArgs(uint3 dispatchThreadId : SV_DispatchThreadI
 
 void CountExpandedBranch(uint workItemIndex)
 {
+    if (_ShadowProxyOnly != 0)
+    {
+        return;
+    }
+
     if (workItemIndex >= GetExpandedBranchWorkItemCount())
     {
         return;
@@ -785,6 +831,11 @@ void CountExpandedBranch(uint workItemIndex)
 
 void EmitExpandedBranch(uint workItemIndex)
 {
+    if (_ShadowProxyOnly != 0)
+    {
+        return;
+    }
+
     if (workItemIndex >= GetExpandedBranchWorkItemCount())
     {
         return;

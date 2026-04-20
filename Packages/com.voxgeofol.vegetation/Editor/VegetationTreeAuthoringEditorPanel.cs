@@ -271,6 +271,19 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     {
                         TryRun("Regenerate Tree L3", () => VegetationTreeAuthoringEditorUtility.BakeTreeL3(authoring));
                     }
+                }
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("Regenerate Shadow Proxy L1"))
+                    {
+                        TryRun("Regenerate Shadow Proxy L1", () => VegetationTreeAuthoringEditorUtility.BakeShadowProxyL1(authoring));
+                    }
+
+                    if (GUILayout.Button("Regenerate Shadow Proxy L0"))
+                    {
+                        TryRun("Regenerate Shadow Proxy L0", () => VegetationTreeAuthoringEditorUtility.BakeShadowProxyL0(authoring));
+                    }
 
                     if (GUILayout.Button("Regenerate Impostor"))
                     {

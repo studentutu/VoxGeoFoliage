@@ -33,7 +33,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         [Tooltip("When enabled, the feature appends vegetation shadow casters into the main-light shadow atlas. Current contract: main-light directional shadows only, using cascade-specific resident frames derived from the camera-visible vegetation set.")]
         public bool RenderMainLightShadows = true;
 
-        [Tooltip("When disabled, shadow preparation clamps visible non-far vegetation to the TreeL3 floor and skips expanded branch shadow casters. When enabled, only trees inside the authored L1/L0 distance bands can promote in shadows; trees in the L2 band stay at TreeL3.")]
+        [Tooltip("When disabled, shadow preparation clamps visible vegetation to the TreeL3 shadow floor. When enabled, only trees inside the authored L1/L0 distance bands can promote to tree-level shadowProxyMeshL1/L0 casters; trees in the L2 band and farther stay at TreeL3.")]
         public bool AllowExpandedTreePromotionInShadows;
 
         [Tooltip("When enabled, vegetation renders for Game cameras.")]

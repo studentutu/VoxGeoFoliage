@@ -440,7 +440,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             Plane[] frustumPlanes,
             bool allowExpandedTreePromotion,
             bool limitExpandedPromotionToNearTiers,
-            bool captureTelemetry)
+            bool captureTelemetry,
+            bool shadowProxyOnly)
         {
             using (PrepareResidentFrameMarker.Auto())
             {
@@ -463,7 +464,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     cameraWorldPosition,
                     frustumPlanes,
                     allowExpandedTreePromotion,
-                    limitExpandedPromotionToNearTiers);
+                    limitExpandedPromotionToNearTiers,
+                    shadowProxyOnly);
 
                 using (ResetFrameStateMarker.Auto())
                 {
@@ -481,7 +483,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     DispatchKernel(countTreesKernel, registry.TreeInstances.Count);
                 }
 
-                if (allowExpandedTreePromotion)
+                bool dispatchExpandedBranches = allowExpandedTreePromotion && !shadowProxyOnly;
+                if (dispatchExpandedBranches)
                 {
                     DispatchKernel(generateExpandedBranchWorkItemsKernel, registry.TreeInstances.Count);
                     DispatchKernel(buildExpandedBranchDispatchArgsKernel, 1);
@@ -507,7 +510,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     DispatchKernel(emitTreesKernel, registry.TreeInstances.Count);
                 }
 
-                if (allowExpandedTreePromotion)
+                if (dispatchExpandedBranches)
                 {
                     using (EmitBranchInstancesMarker.Auto())
                     {
@@ -679,8 +682,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     TrunkL3DrawSlot = source.TrunkL3DrawSlot,
                     TreeL3DrawSlot = source.TreeL3DrawSlot,
                     ImpostorDrawSlot = source.ImpostorDrawSlot,
+                    ShadowProxyDrawSlotL0 = source.ShadowProxyDrawSlotL0,
+                    ShadowProxyDrawSlotL1 = source.ShadowProxyDrawSlotL1,
                     TreeL3WorkCost = source.TreeL3WorkCost,
                     ImpostorWorkCost = source.ImpostorWorkCost,
+                    ShadowProxyWorkCostL0 = source.ShadowProxyWorkCostL0,
+                    ShadowProxyWorkCostL1 = source.ShadowProxyWorkCostL1,
                     ExpandedTierCostL2 = source.ExpandedTierCostL2,
                     ExpandedTierCostL1 = source.ExpandedTierCostL1,
                     ExpandedTierCostL0 = source.ExpandedTierCostL0
@@ -846,7 +853,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             Vector3 cameraWorldPosition,
             Plane[] frustumPlanes,
             bool allowExpandedTreePromotion,
-            bool limitExpandedPromotionToNearTiers)
+            bool limitExpandedPromotionToNearTiers,
+            bool shadowProxyOnly)
         {
             for (int i = 0; i < 6; i++)
             {
@@ -869,6 +877,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             classifyShader.SetInt("_ApproxWorkUnitCapacity", approxWorkUnitCapacity);
             classifyShader.SetInt("_AllowExpandedTierPromotion", allowExpandedTreePromotion ? 1 : 0);
             classifyShader.SetInt("_LimitExpandedPromotionToNearTiers", limitExpandedPromotionToNearTiers ? 1 : 0);
+            classifyShader.SetInt("_ShadowProxyOnly", shadowProxyOnly ? 1 : 0);
             classifyShader.SetInt("_PriorityRingCount", priorityRingCount);
         }
 
@@ -1091,8 +1100,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             public int TrunkL3DrawSlot;
             public int TreeL3DrawSlot;
             public int ImpostorDrawSlot;
+            public int ShadowProxyDrawSlotL0;
+            public int ShadowProxyDrawSlotL1;
             public int TreeL3WorkCost;
             public int ImpostorWorkCost;
+            public int ShadowProxyWorkCostL0;
+            public int ShadowProxyWorkCostL1;
             public int ExpandedTierCostL2;
             public int ExpandedTierCostL1;
             public int ExpandedTierCostL0;

@@ -66,6 +66,7 @@ public static class VegetationAuthoringValidator
         ValidateTreeBounds(blueprint, result);
         ValidateTrunkL3Bounds(blueprint, result);
         ValidateTreeL3Bounds(blueprint, result);
+        ValidateShadowProxies(blueprint, result);
 
         return result;
     }
@@ -377,7 +378,6 @@ public static class VegetationAuthoringValidator
     {
         Mesh? treeL3Mesh = blueprint.TreeL3Mesh;
         Mesh? trunkMesh = blueprint.TrunkMesh;
-        BranchPlacement[] placements = blueprint.Branches;
         if (treeL3Mesh == null || !treeL3Mesh.isReadable || trunkMesh == null || !trunkMesh.isReadable)
         {
             return;
@@ -388,26 +388,52 @@ public static class VegetationAuthoringValidator
             result.AddError("treeL3Mesh bounds must stay inside treeBounds.");
         }
 
-        int sourceTriangleCount = GetTriangleCount(trunkMesh);
-        for (int i = 0; i < placements.Length; i++)
-        {
-            BranchPrototypeSO? prototype = placements[i]?.Prototype;
-            if (prototype?.WoodMesh == null ||
-                prototype.FoliageMesh == null ||
-                !prototype.WoodMesh.isReadable ||
-                !prototype.FoliageMesh.isReadable)
-            {
-                continue;
-            }
-
-            sourceTriangleCount += GetTriangleCount(prototype.WoodMesh);
-            sourceTriangleCount += GetTriangleCount(prototype.FoliageMesh);
-        }
+        int sourceTriangleCount = ComputeAssembledSourceTreeTriangleCount(blueprint);
 
         if (GetTriangleCount(treeL3Mesh) >= sourceTriangleCount)
         {
             result.AddError("treeL3Mesh triangle count must be strictly lower than the assembled source tree triangle count.");
         }
+    }
+
+    private static void ValidateShadowProxies(TreeBlueprintSO blueprint, VegetationValidationResult result)
+    {
+        Mesh? treeL3Mesh = blueprint.TreeL3Mesh;
+        if (treeL3Mesh == null || !treeL3Mesh.isReadable)
+        {
+            return;
+        }
+
+        int sourceTriangleCount = ComputeAssembledSourceTreeTriangleCount(blueprint);
+        if (sourceTriangleCount <= 0)
+        {
+            return;
+        }
+
+        int treeL3Triangles = GetTriangleCount(treeL3Mesh);
+        ValidateShadowProxyMesh(
+            blueprint,
+            blueprint.ShadowProxyMeshL1,
+            "shadowProxyMeshL1",
+            "treeL3Mesh",
+            treeL3Triangles,
+            sourceTriangleCount,
+            result);
+
+        int l1ReferenceTriangles = blueprint.ShadowProxyMeshL1 != null && blueprint.ShadowProxyMeshL1.isReadable
+            ? GetTriangleCount(blueprint.ShadowProxyMeshL1)
+            : treeL3Triangles;
+        string l1ReferenceField = blueprint.ShadowProxyMeshL1 != null && blueprint.ShadowProxyMeshL1.isReadable
+            ? "shadowProxyMeshL1"
+            : "treeL3Mesh";
+        ValidateShadowProxyMesh(
+            blueprint,
+            blueprint.ShadowProxyMeshL0,
+            "shadowProxyMeshL0",
+            l1ReferenceField,
+            l1ReferenceTriangles,
+            sourceTriangleCount,
+            result);
     }
 
     private static void ValidateRequiredReadableMesh(Mesh? mesh, string fieldName, VegetationValidationResult result)
@@ -429,6 +455,43 @@ public static class VegetationAuthoringValidator
         if (mesh != null && !mesh.isReadable)
         {
             result.AddError($"{fieldName} must be readable.");
+        }
+    }
+
+    private static void ValidateShadowProxyMesh(
+        TreeBlueprintSO blueprint,
+        Mesh? mesh,
+        string fieldName,
+        string lowerDetailFieldName,
+        int lowerDetailTriangleCount,
+        int sourceTriangleCount,
+        VegetationValidationResult result)
+    {
+        if (mesh == null)
+        {
+            return;
+        }
+
+        ValidateOptionalReadableMesh(mesh, fieldName, result);
+        if (!mesh.isReadable)
+        {
+            return;
+        }
+
+        if (!ContainsBounds(blueprint.TreeBounds, mesh.bounds))
+        {
+            result.AddError($"{fieldName} bounds must stay inside treeBounds.");
+        }
+
+        int triangleCount = GetTriangleCount(mesh);
+        if (triangleCount >= sourceTriangleCount)
+        {
+            result.AddError($"{fieldName} triangle count must be strictly lower than the assembled source tree triangle count.");
+        }
+
+        if (triangleCount <= lowerDetailTriangleCount)
+        {
+            result.AddError($"{fieldName} triangle count must stay above {lowerDetailFieldName} triangle count.");
         }
     }
 
@@ -508,6 +571,34 @@ public static class VegetationAuthoringValidator
     private static int GetTriangleCount(Mesh mesh)
     {
         return mesh.triangles.Length / 3;
+    }
+
+    private static int ComputeAssembledSourceTreeTriangleCount(TreeBlueprintSO blueprint)
+    {
+        Mesh? trunkMesh = blueprint.TrunkMesh;
+        if (trunkMesh == null || !trunkMesh.isReadable)
+        {
+            return 0;
+        }
+
+        int sourceTriangleCount = GetTriangleCount(trunkMesh);
+        BranchPlacement[] placements = blueprint.Branches;
+        for (int i = 0; i < placements.Length; i++)
+        {
+            BranchPrototypeSO? prototype = placements[i]?.Prototype;
+            if (prototype?.WoodMesh == null ||
+                prototype.FoliageMesh == null ||
+                !prototype.WoodMesh.isReadable ||
+                !prototype.FoliageMesh.isReadable)
+            {
+                continue;
+            }
+
+            sourceTriangleCount += GetTriangleCount(prototype.WoodMesh);
+            sourceTriangleCount += GetTriangleCount(prototype.FoliageMesh);
+        }
+
+        return sourceTriangleCount;
     }
 
     private static int CountBits(byte value)

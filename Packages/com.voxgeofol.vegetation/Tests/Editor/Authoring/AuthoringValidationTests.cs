@@ -194,6 +194,30 @@ public sealed class AuthoringValidationTests
     }
 
     [Test]
+    public void TreeBlueprint_ShadowProxyL1BoundsStayInsideTreeBounds()
+    {
+        TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
+        SetPrivateField(blueprint, "shadowProxyMeshL1", CreateMesh("OversizedShadowProxyL1", 7, new Bounds(Vector3.zero, new Vector3(14f, 12f, 14f))));
+
+        VegetationValidationResult result = blueprint.Validate();
+
+        AssertHasError(result, "shadowProxyMeshL1 bounds must stay inside treeBounds.");
+    }
+
+    [Test]
+    public void TreeBlueprint_ShadowProxyTriangleOrder_StaysAboveLowerDetailTiers()
+    {
+        TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
+        SetPrivateField(blueprint, "shadowProxyMeshL1", CreateMesh("ShadowProxyL1", 6, new Bounds(new Vector3(1f, 1f, 0f), new Vector3(5.5f, 5.5f, 5.5f))));
+        SetPrivateField(blueprint, "shadowProxyMeshL0", CreateMesh("ShadowProxyL0", 6, new Bounds(new Vector3(1f, 1f, 0f), new Vector3(5.8f, 5.8f, 5.8f))));
+
+        VegetationValidationResult result = blueprint.Validate();
+
+        AssertHasError(result, "shadowProxyMeshL1 triangle count must stay above treeL3Mesh triangle count.");
+        AssertHasError(result, "shadowProxyMeshL0 triangle count must stay above shadowProxyMeshL1 triangle count.");
+    }
+
+    [Test]
     public void TreeBlueprint_ImpostorTriangleBudget_Under200()
     {
         TreeBlueprintSO blueprint = CreateValidTreeBlueprint();

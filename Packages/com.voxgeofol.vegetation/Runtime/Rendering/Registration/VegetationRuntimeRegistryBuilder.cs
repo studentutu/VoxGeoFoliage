@@ -123,6 +123,16 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                 AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, blueprint.ImpostorDrawSlot, treeInstance.ImpostorWorldBounds);
                 AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, blueprint.TreeL3DrawSlot, treeInstance.TreeL3WorldBounds);
+                AccumulateSlot(
+                    drawSlotConservativeWorldBounds,
+                    hasBounds,
+                    blueprint.ShadowProxyDrawSlotL0,
+                    TransformDrawSlotBounds(blueprint.ShadowProxyDrawSlotL0, treeInstance.LocalToWorld));
+                AccumulateSlot(
+                    drawSlotConservativeWorldBounds,
+                    hasBounds,
+                    blueprint.ShadowProxyDrawSlotL1,
+                    TransformDrawSlotBounds(blueprint.ShadowProxyDrawSlotL1, treeInstance.LocalToWorld));
                 AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, blueprint.TrunkFullDrawSlot, treeInstance.TrunkFullWorldBounds);
                 AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, blueprint.TrunkL3DrawSlot, treeInstance.TrunkL3WorldBounds);
 
@@ -248,6 +258,16 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             int trunkL3DrawSlot = RegisterDrawSlot(trunkL3Mesh, trunkMaterial, VegetationRenderMaterialKind.Trunk, $"{blueprint.name}:TrunkL3");
             int treeL3DrawSlot = RegisterDrawSlot(treeL3Mesh, impostorMaterial, VegetationRenderMaterialKind.FarMesh, $"{blueprint.name}:TreeL3");
             int impostorDrawSlot = RegisterDrawSlot(impostorMesh, impostorMaterial, VegetationRenderMaterialKind.FarMesh, $"{blueprint.name}:Impostor");
+            int shadowProxyDrawSlotL0 = RegisterDrawSlot(
+                blueprint.ShadowProxyMeshL0 ?? treeL3Mesh,
+                impostorMaterial,
+                VegetationRenderMaterialKind.FarMesh,
+                $"{blueprint.name}:ShadowProxyL0");
+            int shadowProxyDrawSlotL1 = RegisterDrawSlot(
+                blueprint.ShadowProxyMeshL1 ?? treeL3Mesh,
+                impostorMaterial,
+                VegetationRenderMaterialKind.FarMesh,
+                $"{blueprint.name}:ShadowProxyL1");
             int expandedTierCostL2 = ComputeDrawSlotWorkCost(trunkL3DrawSlot);
             int expandedTierCostL1 = ComputeDrawSlotWorkCost(trunkFullDrawSlot);
             int expandedTierCostL0 = ComputeDrawSlotWorkCost(trunkFullDrawSlot);
@@ -271,8 +291,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 TrunkL3DrawSlot = trunkL3DrawSlot,
                 TreeL3DrawSlot = treeL3DrawSlot,
                 ImpostorDrawSlot = impostorDrawSlot,
+                ShadowProxyDrawSlotL0 = shadowProxyDrawSlotL0,
+                ShadowProxyDrawSlotL1 = shadowProxyDrawSlotL1,
                 TreeL3WorkCost = ComputeDrawSlotWorkCost(treeL3DrawSlot),
                 ImpostorWorkCost = ComputeDrawSlotWorkCost(impostorDrawSlot),
+                ShadowProxyWorkCostL0 = ComputeDrawSlotWorkCost(shadowProxyDrawSlotL0),
+                ShadowProxyWorkCostL1 = ComputeDrawSlotWorkCost(shadowProxyDrawSlotL1),
                 ExpandedTierCostL2 = expandedTierCostL2,
                 ExpandedTierCostL1 = expandedTierCostL1,
                 ExpandedTierCostL0 = expandedTierCostL0
