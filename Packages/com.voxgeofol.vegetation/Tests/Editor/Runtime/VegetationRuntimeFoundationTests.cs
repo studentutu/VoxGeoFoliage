@@ -336,18 +336,12 @@ public sealed class VegetationRuntimeFoundationTests
         prototype.name = $"{name}_Prototype";
         Mesh woodMesh = CreateCubeMesh($"{name}_Wood", new Vector3(0.3f, 0.8f, 0.3f));
         Mesh foliageMesh = CreateCubeMesh($"{name}_Foliage", new Vector3(1.6f, 1.2f, 1.6f));
-        Mesh shellL0Root = CreateCubeMesh($"{name}_ShellL0Root", new Vector3(1.2f, 1.0f, 1.2f));
-        Mesh shellL0Leaf = CreateCubeMesh($"{name}_ShellL0Leaf", new Vector3(0.6f, 0.6f, 0.6f));
-        Mesh shellL1Root = CreateCubeMesh($"{name}_ShellL1Root", new Vector3(0.9f, 0.8f, 0.9f));
-        Mesh shellL1Leaf = CreateCubeMesh($"{name}_ShellL1Leaf", new Vector3(0.45f, 0.45f, 0.45f));
-        Mesh shellL2Root = CreateCubeMesh($"{name}_ShellL2Root", new Vector3(0.7f, 0.6f, 0.7f));
-        Mesh shellL2Leaf = CreateCubeMesh($"{name}_ShellL2Leaf", new Vector3(0.35f, 0.35f, 0.35f));
         Mesh branchL1CanopyMesh = CreateCubeMesh($"{name}_CanopyL1", new Vector3(1.4f, 1.1f, 1.4f));
         Mesh branchL2CanopyMesh = CreateCubeMesh($"{name}_CanopyL2", new Vector3(1.0f, 0.8f, 1.0f));
         Mesh branchL3CanopyMesh = CreateCubeMesh($"{name}_CanopyL3", new Vector3(0.75f, 0.6f, 0.75f));
         Mesh branchL1WoodMesh = CreateCubeMesh($"{name}_WoodL1", new Vector3(0.28f, 0.65f, 0.28f));
-        Mesh shellL1WoodMesh = CreateCubeMesh($"{name}_WoodL2", new Vector3(0.25f, 0.5f, 0.25f));
-        Mesh shellL2WoodMesh = CreateCubeMesh($"{name}_WoodL3", new Vector3(0.2f, 0.4f, 0.2f));
+        Mesh branchL2WoodMesh = CreateCubeMesh($"{name}_WoodL2", new Vector3(0.25f, 0.5f, 0.25f));
+        Mesh branchL3WoodMesh = CreateCubeMesh($"{name}_WoodL3", new Vector3(0.2f, 0.4f, 0.2f));
         Material woodMaterial = CreateOpaqueMaterial($"{name}_WoodMat");
         Material foliageMaterial = CreateOpaqueMaterial($"{name}_FoliageMat");
         Material shellMaterial = CreateOpaqueMaterial($"{name}_ShellMat");
@@ -361,13 +355,10 @@ public sealed class VegetationRuntimeFoundationTests
         SetPrivateField(prototype, "branchL2CanopyMesh", branchL2CanopyMesh);
         SetPrivateField(prototype, "branchL3CanopyMesh", branchL3CanopyMesh);
         SetPrivateField(prototype, "branchL1WoodMesh", branchL1WoodMesh);
-        SetPrivateField(prototype, "shellL1WoodMesh", shellL1WoodMesh);
-        SetPrivateField(prototype, "shellL2WoodMesh", shellL2WoodMesh);
+        SetPrivateField(prototype, "branchL2WoodMesh", branchL2WoodMesh);
+        SetPrivateField(prototype, "branchL3WoodMesh", branchL3WoodMesh);
         SetPrivateField(prototype, "leafColorTint", Color.green);
         SetPrivateField(prototype, "localBounds", new Bounds(new Vector3(0f, 0.6f, 0f), new Vector3(2f, 2f, 2f)));
-        SetPrivateField(prototype, "shellNodesL0", CreateShellHierarchy(shellL0Root, shellL0Leaf, 0));
-        SetPrivateField(prototype, "shellNodesL1", CreateShellHierarchy(shellL1Root, shellL1Leaf, 1));
-        SetPrivateField(prototype, "shellNodesL2", CreateShellHierarchy(shellL2Root, shellL2Leaf, 2));
 
         TreeBlueprintSO blueprint = CreateScriptableObject<TreeBlueprintSO>();
         blueprint.name = $"{name}_Blueprint";
@@ -444,40 +435,6 @@ public sealed class VegetationRuntimeFoundationTests
             runtimeTrees);
         createdDisposables.Add(runtimeOwner);
         return runtimeOwner;
-    }
-
-    private BranchShellNode[] CreateShellHierarchy(Mesh rootMesh, Mesh leafMesh, int shellLevel)
-    {
-        Bounds rootBounds = new Bounds(new Vector3(0f, 0.5f, 0f), new Vector3(1.4f, 1.4f, 1.4f));
-        Bounds childBounds = new Bounds(new Vector3(0.35f, 0.85f, 0.35f), new Vector3(0.7f, 0.7f, 0.7f));
-        return new[]
-        {
-            CreateShellNode(rootBounds, 0, 1, 1, rootMesh, shellLevel),
-            CreateShellNode(childBounds, 1, -1, 0, leafMesh, shellLevel)
-        };
-    }
-
-    private BranchShellNode CreateShellNode(Bounds bounds, int depth, int firstChildIndex, byte childMask, Mesh mesh, int shellLevel)
-    {
-        Mesh? shellL0Mesh = null;
-        Mesh? shellL1Mesh = null;
-        Mesh? shellL2Mesh = null;
-        switch (shellLevel)
-        {
-            case 0:
-                shellL0Mesh = mesh;
-                break;
-            case 1:
-                shellL1Mesh = mesh;
-                break;
-            case 2:
-                shellL2Mesh = mesh;
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(shellLevel), shellLevel, "Shell level must be 0, 1, or 2.");
-        }
-
-        return new BranchShellNode(bounds, depth, firstChildIndex, childMask, shellL0Mesh, shellL1Mesh, shellL2Mesh);
     }
 
     private Mesh CreateCubeMesh(string name, Vector3 size)

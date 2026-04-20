@@ -102,9 +102,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     DrawTriangleLabel("L3", summary.L3Triangles);
                     DrawTriangleLabel("TreeL3", summary.TreeL3Triangles);
                     DrawTriangleLabel("Impostor", summary.ImpostorTriangles);
-                    DrawTriangleLabel("ShellL1 Only", summary.ShellL1OnlyTriangles);
-                    DrawTriangleLabel("ShellL2 Only", summary.ShellL2OnlyTriangles);
-                    DrawTriangleLabel("ShellL3 Only", summary.ShellL3OnlyTriangles);
                 }
                 catch (Exception exception)
                 {
@@ -260,9 +257,9 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    if (GUILayout.Button("Regenerate Shells"))
+                    if (GUILayout.Button("Regenerate Canopy LODs"))
                     {
-                        TryRun("Regenerate Shells", () => VegetationTreeAuthoringEditorUtility.BakeCanopyShells(authoring));
+                        TryRun("Regenerate Canopy LODs", () => VegetationTreeAuthoringEditorUtility.BakeCanopyShells(authoring));
                     }
 
                     if (GUILayout.Button("Regenerate Trunk L3"))

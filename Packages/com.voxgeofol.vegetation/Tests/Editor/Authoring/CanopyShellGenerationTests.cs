@@ -31,7 +31,6 @@ public sealed class CanopyShellGenerationTests
 
     [Test]
     [Ignore("Takes too long, developer already verified in editor manually")]
-
     public void BuildHierarchy_SeparatedClusters_CreateHierarchyNodes()
     {
         Mesh hierarchyMesh = CreateSeparatedClusterMesh("HierarchyFoliage");
@@ -46,72 +45,68 @@ public sealed class CanopyShellGenerationTests
 
     [Test]
     [Ignore("Takes too long, developer already verified in editor manually")]
-
-    public void BakeCanopyShells_PersistedHierarchiesStayValidAndCompact()
+    public void BakeCanopyShells_PersistsRuntimeSplitTierMeshes()
     {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("TopologyFoliage"));
+        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("RuntimeTierFoliage"));
 
         CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
-        TrackGeneratedShells(prototype);
+        TrackGeneratedMeshes(prototype);
 
-        Assert.Greater(prototype.ShellNodesL0.Length, 0);
-        Assert.Greater(prototype.ShellNodesL1.Length, 0);
-        Assert.Greater(prototype.ShellNodesL2.Length, 0);
-        Assert.LessOrEqual(prototype.ShellNodesL1.Length, prototype.ShellNodesL0.Length);
-        Assert.LessOrEqual(prototype.ShellNodesL2.Length, prototype.ShellNodesL1.Length);
-
-        AssertHierarchyValid(prototype.ShellNodesL0, 0);
-        AssertHierarchyValid(prototype.ShellNodesL1, 1);
-        AssertHierarchyValid(prototype.ShellNodesL2, 2);
+        Assert.NotNull(prototype.BranchL1CanopyMesh);
+        Assert.NotNull(prototype.BranchL2CanopyMesh);
+        Assert.NotNull(prototype.BranchL3CanopyMesh);
+        Assert.NotNull(prototype.BranchL1WoodMesh);
+        Assert.NotNull(prototype.BranchL2WoodMesh);
+        Assert.NotNull(prototype.BranchL3WoodMesh);
     }
 
     [Test]
     [Ignore("Takes too long, developer already verified in editor manually")]
-
-    public void BakeCanopyShells_TierMeshesDifferAndStayWithinSourceBounds()
+    public void BakeCanopyShells_TierMeshesStayWithinSourceBoundsAndDoNotGrow()
     {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("DifferentTierFoliage"));
+        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("BoundsAndBudgetFoliage"));
 
         CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
-        TrackGeneratedShells(prototype);
+        TrackGeneratedMeshes(prototype);
 
-        Assert.AreNotEqual(0, prototype.ShellNodesL0.Length);
-        Assert.AreNotEqual(0, prototype.ShellNodesL1.Length);
-        Assert.AreNotEqual(0, prototype.ShellNodesL2.Length);
+        Mesh sourceFoliageMesh = prototype.FoliageMesh!;
+        Mesh sourceWoodMesh = prototype.WoodMesh!;
+        Mesh branchL1CanopyMesh = prototype.BranchL1CanopyMesh!;
+        Mesh branchL2CanopyMesh = prototype.BranchL2CanopyMesh!;
+        Mesh branchL3CanopyMesh = prototype.BranchL3CanopyMesh!;
+        Mesh branchL1WoodMesh = prototype.BranchL1WoodMesh!;
+        Mesh branchL2WoodMesh = prototype.BranchL2WoodMesh!;
+        Mesh branchL3WoodMesh = prototype.BranchL3WoodMesh!;
 
-        int l0Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL0, 0);
-        int l1Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL1, 1);
-        int l2Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL2, 2);
-        Assert.Greater(l0Triangles, l1Triangles);
-        Assert.GreaterOrEqual(l1Triangles, l2Triangles);
+        Assert.GreaterOrEqual(GetTriangleCount(sourceFoliageMesh), GetTriangleCount(branchL1CanopyMesh));
+        Assert.GreaterOrEqual(GetTriangleCount(branchL1CanopyMesh), GetTriangleCount(branchL2CanopyMesh));
+        Assert.GreaterOrEqual(GetTriangleCount(branchL2CanopyMesh), GetTriangleCount(branchL3CanopyMesh));
 
-        Bounds foliageBounds = prototype.FoliageMesh!.bounds;
-        Bounds woodBounds = prototype.WoodMesh!.bounds;
-        AssertHierarchyBoundsInside(prototype.ShellNodesL0, 0, foliageBounds);
-        AssertHierarchyBoundsInside(prototype.ShellNodesL1, 1, foliageBounds);
-        AssertHierarchyBoundsInside(prototype.ShellNodesL2, 2, foliageBounds);
-        Assert.IsTrue(ContainsBounds(woodBounds, prototype.ShellL1WoodMesh!.bounds));
-        Assert.IsTrue(ContainsBounds(woodBounds, prototype.ShellL2WoodMesh!.bounds));
+        Assert.GreaterOrEqual(GetTriangleCount(sourceWoodMesh), GetTriangleCount(branchL1WoodMesh));
+        Assert.GreaterOrEqual(GetTriangleCount(branchL1WoodMesh), GetTriangleCount(branchL2WoodMesh));
+        Assert.GreaterOrEqual(GetTriangleCount(branchL2WoodMesh), GetTriangleCount(branchL3WoodMesh));
+
+        Assert.IsTrue(ContainsBounds(sourceFoliageMesh.bounds, branchL1CanopyMesh.bounds));
+        Assert.IsTrue(ContainsBounds(sourceFoliageMesh.bounds, branchL2CanopyMesh.bounds));
+        Assert.IsTrue(ContainsBounds(sourceFoliageMesh.bounds, branchL3CanopyMesh.bounds));
+        Assert.IsTrue(ContainsBounds(sourceWoodMesh.bounds, branchL1WoodMesh.bounds));
+        Assert.IsTrue(ContainsBounds(sourceWoodMesh.bounds, branchL2WoodMesh.bounds));
+        Assert.IsTrue(ContainsBounds(sourceWoodMesh.bounds, branchL3WoodMesh.bounds));
     }
 
     [Test]
     [Ignore("Takes too long, developer already verified in editor manually")]
-
-    public void BakeCanopyShells_PersistedHierarchiesPreserveAscendingOctantBitOrder()
+    public void BakeCanopyShells_UsesSourceWoodAsBranchL1Wood()
     {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("OrderedTierFoliage"));
+        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("BranchL1WoodFoliage"));
 
         CanopyShellGenerator.BakeCanopyShells(prototype, CreateShellBakeSettings());
-        TrackGeneratedShells(prototype);
 
-        AssertHierarchyOctantOrder(prototype.ShellNodesL0);
-        AssertHierarchyOctantOrder(prototype.ShellNodesL1);
-        AssertHierarchyOctantOrder(prototype.ShellNodesL2);
+        Assert.AreSame(prototype.WoodMesh, prototype.BranchL1WoodMesh);
     }
 
     [Test]
     [Ignore("Takes too long, developer already verified in editor manually")]
-
     public void ImpostorGenerate_FromOriginalTreeMeshes_CreatesReadableCoarseMesh()
     {
         BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("ImpostorBoundsFoliage"));
@@ -131,71 +126,6 @@ public sealed class CanopyShellGenerationTests
         Mesh combinedSource = CreateCombinedTreeSourceMesh(blueprint);
         TrackObject(combinedSource);
         Assert.IsTrue(ContainsBounds(combinedSource.bounds, impostorBounds));
-    }
-
-    private void AssertHierarchyValid(BranchShellNode[] nodes, int shellLevel)
-    {
-        for (int i = 0; i < nodes.Length; i++)
-        {
-            BranchShellNode node = nodes[i];
-            if (node.ChildMask == 0)
-            {
-                Assert.Less(node.FirstChildIndex, 0);
-            }
-            else
-            {
-                int childCount = CountBits(node.ChildMask);
-                Assert.GreaterOrEqual(node.FirstChildIndex, 0);
-                Assert.Less(node.FirstChildIndex + childCount - 1, nodes.Length);
-
-                for (int childOffset = 0; childOffset < childCount; childOffset++)
-                {
-                    BranchShellNode child = nodes[node.FirstChildIndex + childOffset];
-                    Assert.AreEqual(node.Depth + 1, child.Depth);
-                    Assert.IsTrue(ContainsBounds(node.LocalBounds, child.LocalBounds));
-                }
-            }
-
-            Mesh? shellMesh = BranchShellNodeUtility.GetShellMesh(node, shellLevel);
-            Assert.NotNull(shellMesh);
-            Assert.IsTrue(ContainsBounds(node.LocalBounds, shellMesh!.bounds));
-        }
-    }
-
-    private void AssertHierarchyOctantOrder(BranchShellNode[] nodes)
-    {
-        for (int i = 0; i < nodes.Length; i++)
-        {
-            BranchShellNode node = nodes[i];
-            if (node.ChildMask == 0)
-            {
-                continue;
-            }
-
-            int childOffset = 0;
-            for (int octant = 0; octant < 8; octant++)
-            {
-                if ((node.ChildMask & (1 << octant)) == 0)
-                {
-                    continue;
-                }
-
-                BranchShellNode child = nodes[node.FirstChildIndex + childOffset];
-                Assert.AreEqual(octant, GetChildOctant(node.LocalBounds, child.LocalBounds));
-                childOffset++;
-            }
-        }
-    }
-
-    private void AssertHierarchyBoundsInside(BranchShellNode[] nodes, int shellLevel, Bounds expectedBounds)
-    {
-        for (int i = 0; i < nodes.Length; i++)
-        {
-            Mesh? shellMesh = BranchShellNodeUtility.GetShellMesh(nodes[i], shellLevel);
-            Assert.NotNull(shellMesh);
-            Assert.IsTrue(ContainsBounds(expectedBounds, shellMesh!.bounds));
-            Assert.IsTrue(ContainsBounds(expectedBounds, nodes[i].LocalBounds));
-        }
     }
 
     private BranchPrototypeSO CreatePrototypeForShellBake(Mesh foliageMesh)
@@ -260,25 +190,14 @@ public sealed class CanopyShellGenerationTests
         }
     }
 
-    private void TrackGeneratedShells(BranchPrototypeSO prototype)
+    private void TrackGeneratedMeshes(BranchPrototypeSO prototype)
     {
-        for (int i = 0; i < prototype.ShellNodesL0.Length; i++)
-        {
-            TrackObject(prototype.ShellNodesL0[i].ShellL0Mesh);
-        }
-
-        for (int i = 0; i < prototype.ShellNodesL1.Length; i++)
-        {
-            TrackObject(prototype.ShellNodesL1[i].ShellL1Mesh);
-        }
-
-        for (int i = 0; i < prototype.ShellNodesL2.Length; i++)
-        {
-            TrackObject(prototype.ShellNodesL2[i].ShellL2Mesh);
-        }
-
-        TrackObject(prototype.ShellL1WoodMesh);
-        TrackObject(prototype.ShellL2WoodMesh);
+        TrackObject(prototype.BranchL1CanopyMesh);
+        TrackObject(prototype.BranchL2CanopyMesh);
+        TrackObject(prototype.BranchL3CanopyMesh);
+        TrackObject(prototype.BranchL1WoodMesh);
+        TrackObject(prototype.BranchL2WoodMesh);
+        TrackObject(prototype.BranchL3WoodMesh);
     }
 
     private void TrackGeneratedImpostor(TreeBlueprintSO blueprint)
@@ -500,38 +419,6 @@ public sealed class CanopyShellGenerationTests
         SetPrivateField(placement, "localRotation", rotation);
         SetPrivateField(placement, "scale", scale);
         return placement;
-    }
-
-    private static int CountBits(byte value)
-    {
-        int count = 0;
-        while (value != 0)
-        {
-            count += value & 1;
-            value >>= 1;
-        }
-
-        return count;
-    }
-
-    private static int GetChildOctant(Bounds parentBounds, Bounds childBounds)
-    {
-        const float epsilon = 0.0001f;
-        Vector3 parentCenter = parentBounds.center;
-        int octant = 0;
-
-        octant |= GetAxisBit(parentCenter.x, childBounds.min.x, childBounds.max.x, 1, epsilon);
-        octant |= GetAxisBit(parentCenter.y, childBounds.min.y, childBounds.max.y, 2, epsilon);
-        octant |= GetAxisBit(parentCenter.z, childBounds.min.z, childBounds.max.z, 4, epsilon);
-        return octant;
-    }
-
-    private static int GetAxisBit(float axisCenter, float childMin, float childMax, int axisBit, float epsilon)
-    {
-        bool isLowerHalf = childMax <= axisCenter + epsilon;
-        bool isUpperHalf = childMin >= axisCenter - epsilon;
-        Assert.AreNotEqual(isLowerHalf, isUpperHalf);
-        return isUpperHalf ? axisBit : 0;
     }
 
     private static bool ContainsBounds(Bounds container, Bounds candidate)

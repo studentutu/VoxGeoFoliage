@@ -45,7 +45,7 @@ BranchPrototypeSO
     foliageMesh
     woodMesh
     shellBakeSettings
-    shell triangle budgets
+    canopy triangle budgets
     generatedCanopyShellsRelativeFolder
 -> CanopyShellGenerator.BakeCanopyShells()
   temp payload:
@@ -71,12 +71,9 @@ BranchPrototypeSO
       branchL3CanopyMesh
 -> GeneratedMeshAssetUtility.PersistGeneratedMesh(...)
   payload out on BranchPrototypeSO:
-    shellNodesL0[]
-    shellNodesL1[]
-    shellNodesL2[]
     branchL1WoodMesh = source woodMesh
-    shellL1WoodMesh  = persisted reduced wood
-    shellL2WoodMesh  = persisted reduced wood
+    branchL2WoodMesh = persisted reduced wood
+    branchL3WoodMesh = persisted reduced wood
     branchL1CanopyMesh
     branchL2CanopyMesh
     branchL3CanopyMesh
@@ -84,10 +81,10 @@ BranchPrototypeSO
 
 Important current contract:
 
-- Runtime `BranchL2WoodMesh` is `shellL1WoodMesh`.
-- Runtime `BranchL3WoodMesh` is `shellL2WoodMesh`.
-- Runtime does not traverse `shellNodesL0/L1/L2`; those arrays are editor preview and inspection data now.
-- Effectively we don't need them (shellNodesL0[], shellNodesL1[], shellNodesL2[]) and we should use simplified single mesh per canopy level of detail.
+- Temporary voxel hierarchies exist only inside `CanopyShellGenerator` while selecting the best `L1/L2/L3` canopy meshes.
+- `BranchPrototypeSO` persists only the runtime split-tier mesh chain: `branchL1/2/3CanopyMesh` and `branchL1/2/3WoodMesh`.
+- Runtime and editor preview do not traverse per-node canopy shell hierarchies anymore.
+- The sample assets were also reduced to the same single-mesh-per-tier contract instead of shipping hundreds of stale shell-node meshes.
 
 ### 1.2 Tree-Wide Bake
 

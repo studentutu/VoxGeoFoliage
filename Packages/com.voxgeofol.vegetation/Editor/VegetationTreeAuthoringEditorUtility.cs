@@ -17,11 +17,11 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         private const string RegisteredAuthoringsPropertyName = "registeredAuthorings";
 
         /// <summary>
-        /// [INTEGRATION] Bakes shell L0/L1/L2 for every unique branch prototype referenced by one authoring component.
+        /// [INTEGRATION] Bakes the single-mesh canopy L1/L2/L3 chain for every unique branch prototype referenced by one authoring component.
         /// </summary>
         public static void BakeCanopyShells(VegetationTreeAuthoring authoring)
         {
-            // Range: requires a valid blueprint with readable source branch meshes. Condition: each unique prototype is baked once through the editor-only shell pipeline. Output: referenced prototypes receive refreshed shell and simplified wood meshes.
+            // Range: requires a valid blueprint with readable source branch meshes. Condition: each unique prototype is baked once through the editor-only canopy simplification pipeline. Output: referenced prototypes receive refreshed canopy and simplified wood tier meshes.
             if (authoring == null)
             {
                 throw new ArgumentNullException(nameof(authoring));
@@ -151,10 +151,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             int l3Triangles = GetTriangleCount(blueprint.TrunkL3Mesh);
             int treeL3Triangles = GetTriangleCount(blueprint.TreeL3Mesh);
             int impostorTriangles = GetTriangleCount(blueprint.ImpostorMesh);
-            int shellL1OnlyTriangles = 0;
-            int shellL2OnlyTriangles = 0;
-            int shellL3OnlyTriangles = 0;
-
             for (int i = 0; i < placements.Length; i++)
             {
                 BranchPrototypeSO prototype = placements[i].Prototype ??
@@ -171,12 +167,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
 
                 l3Triangles += GetTriangleCount(prototype.BranchL3WoodMesh);
                 l3Triangles += GetTriangleCount(prototype.BranchL3CanopyMesh);
-
-                shellL1OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL0, 0);
-
-                shellL2OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL1, 1);
-
-                shellL3OnlyTriangles += BranchShellNodeUtility.GetTriangleCountForLeafFrontier(prototype.ShellNodesL2, 2);
             }
 
             return new VegetationAuthoringSummary(
@@ -187,10 +177,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 l2Triangles,
                 l3Triangles,
                 treeL3Triangles,
-                impostorTriangles,
-                shellL1OnlyTriangles,
-                shellL2OnlyTriangles,
-                shellL3OnlyTriangles);
+                impostorTriangles);
         }
 
         /// <summary>

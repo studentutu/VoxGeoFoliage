@@ -66,15 +66,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 case VegetationPreviewTier.Impostor:
                     CreateImpostorPreview(previewRoot.transform, blueprint);
                     break;
-                case VegetationPreviewTier.ShellL1Only:
-                    CreateShellOnlyPreview(previewRoot.transform, placements, 0);
-                    break;
-                case VegetationPreviewTier.ShellL2Only:
-                    CreateShellOnlyPreview(previewRoot.transform, placements, 1);
-                    break;
-                case VegetationPreviewTier.ShellL3Only:
-                    CreateShellOnlyPreview(previewRoot.transform, placements, 2);
-                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(previewTier), previewTier, "Unsupported vegetation preview tier.");
             }
@@ -201,36 +192,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
         }
 
-        private static void CreateShellOnlyPreview(
-            Transform parent,
-            BranchPlacement[] placements,
-            int shellLevel)
-        {
-            for (int i = 0; i < placements.Length; i++)
-            {
-                BranchPlacement placement = placements[i] ?? throw new InvalidOperationException($"branches[{i}] is missing.");
-                BranchPrototypeSO prototype = placement.Prototype ??
-                                              throw new InvalidOperationException($"branches[{i}] is missing prototype.");
-                Material shellMaterial = prototype.ShellMaterial ??
-                                         throw new InvalidOperationException($"{prototype.name} is missing shellMaterial.");
-
-                GameObject branchObject = CreatePreviewGameObject($"{prototype.name}_ShellL{shellLevel}_{i:D2}", parent);
-                ApplyPlacement(branchObject.transform, placement);
-
-                List<BranchShellNode> leafNodes = GetRequiredLeafNodes(prototype, shellLevel);
-                for (int leafIndex = 0; leafIndex < leafNodes.Count; leafIndex++)
-                {
-                    Mesh shellMesh = BranchShellNodeUtility.GetShellMesh(leafNodes[leafIndex], shellLevel) ??
-                                     throw new InvalidOperationException($"{prototype.name} leaf node {leafIndex} is missing shellL{shellLevel}Mesh.");
-                    CreateMeshChild(
-                        branchObject.transform,
-                        $"ShellL{shellLevel}_{leafIndex:D2}",
-                        shellMesh,
-                        shellMaterial);
-                }
-            }
-        }
-
         private static void CreateTrunkPreview(Transform parent, TreeBlueprintSO blueprint)
         {
             Mesh trunkMesh = blueprint.TrunkMesh ?? throw new InvalidOperationException($"{blueprint.name} is missing trunkMesh.");
@@ -261,18 +222,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             Material treeL3Material = blueprint.ImpostorMaterial ??
                                       throw new InvalidOperationException($"{blueprint.name} is missing impostorMaterial.");
             CreateMeshChild(parent, "TreeL3", treeL3Mesh, treeL3Material);
-        }
-
-        private static List<BranchShellNode> GetRequiredLeafNodes(BranchPrototypeSO prototype, int shellLevel)
-        {
-            List<BranchShellNode> leafNodes = BranchShellNodeUtility.CollectLeafNodes(
-                BranchShellNodeUtility.GetHierarchyForLevel(prototype, shellLevel));
-            if (leafNodes.Count == 0)
-            {
-                throw new InvalidOperationException($"{prototype.name} is missing shellNodesL{shellLevel}.");
-            }
-
-            return leafNodes;
         }
 
         private static Mesh GetRequiredSplitCanopyMesh(BranchPrototypeSO prototype, VegetationPreviewTier previewTier)

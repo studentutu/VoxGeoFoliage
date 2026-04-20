@@ -152,54 +152,6 @@ public sealed class VegetationEditorAuthoringTests
 
     [Test]
     [Ignore("Takes too long, developer already verified in editor manually")]
-    public void ShowPreview_ShellL1Only_RebuildsBranchHierarchyFromShellNodes()
-    {
-        Mesh shellMesh = CreateMeshAsset(
-            "reconstruct_shell.asset",
-            new[]
-            {
-                new Vector3(-0.5f, -0.5f, -0.5f),
-                new Vector3(0.5f, 0.5f, -0.5f),
-                new Vector3(-0.5f, -0.5f, 0.5f)
-            });
-        Material shellMaterial = CreateMaterialAsset("reconstruct_shell.mat");
-
-        BranchPrototypeSO prototype = CreateTransientScriptableObject<BranchPrototypeSO>();
-        SetPrivateField(prototype, "shellNodesL0", new[] { CreateShellNode(shellMesh, 0) });
-        SetPrivateField(prototype, "shellMaterial", shellMaterial);
-
-        BranchPlacement placement = CreateBranchPlacement(
-            prototype,
-            new Vector3(2f, 1f, -3f),
-            Quaternion.Euler(0f, 60f, 15f),
-            1.5f);
-
-        TreeBlueprintSO blueprint = CreateTransientScriptableObject<TreeBlueprintSO>();
-        SetPrivateField(blueprint, "branches", new[] { placement });
-
-        GameObject authoringObject = CreateTransientGameObject("Authoring");
-        GameObject branchRoot = CreateTransientGameObject("BranchRoot");
-        branchRoot.transform.SetParent(authoringObject.transform, false);
-
-        VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
-        SetPrivateField(authoring, "blueprint", blueprint);
-        SetPrivateField(authoring, "_rootForBranches", branchRoot);
-
-        VegetationEditorPreview.ShowPreview(authoring, VegetationPreviewTier.ShellL1Only);
-
-        Assert.AreEqual(1, branchRoot.transform.childCount);
-        Transform previewRoot = branchRoot.transform.GetChild(0);
-        Transform branch = previewRoot.GetChild(0);
-        Assert.AreEqual(placement.LocalPosition, branch.localPosition);
-        AssertQuaternionApproximatelyEqual(placement.LocalRotation, branch.localRotation);
-        Assert.AreEqual(Vector3.one * placement.Scale, branch.localScale);
-        Assert.AreEqual(1, branch.childCount);
-        Assert.AreEqual(shellMesh, branch.GetChild(0).GetComponent<MeshFilter>().sharedMesh);
-        Assert.AreEqual(shellMaterial, branch.GetChild(0).GetComponent<MeshRenderer>().sharedMaterial);
-    }
-
-    [Test]
-    [Ignore("Takes too long, developer already verified in editor manually")]
     public void ShowPreview_L2_UsesSimplifiedTrunkMesh()
     {
         Mesh trunkMesh = CreateMeshAsset(
@@ -218,7 +170,7 @@ public sealed class VegetationEditorAuthoringTests
                 new Vector3(0.2f, 1.2f, -0.2f),
                 new Vector3(-0.2f, -0.8f, 0.2f)
             });
-        Mesh shellL1WoodMesh = CreateMeshAsset(
+        Mesh branchL2WoodMesh = CreateMeshAsset(
             "preview_l2_wood.asset",
             new[]
             {
@@ -226,7 +178,7 @@ public sealed class VegetationEditorAuthoringTests
                 new Vector3(0.1f, 0.5f, -0.1f),
                 new Vector3(-0.1f, -0.3f, 0.1f)
             });
-        Mesh shellMesh = CreateMeshAsset(
+        Mesh branchL2CanopyMesh = CreateMeshAsset(
             "preview_l2_shell.asset",
             new[]
             {
@@ -240,8 +192,8 @@ public sealed class VegetationEditorAuthoringTests
 
         BranchPrototypeSO prototype = CreateTransientScriptableObject<BranchPrototypeSO>();
         SetPrivateField(prototype, "woodMaterial", woodMaterial);
-        SetPrivateField(prototype, "shellL1WoodMesh", shellL1WoodMesh);
-        SetPrivateField(prototype, "shellNodesL1", new[] { CreateShellNode(shellMesh, 1) });
+        SetPrivateField(prototype, "branchL2WoodMesh", branchL2WoodMesh);
+        SetPrivateField(prototype, "branchL2CanopyMesh", branchL2CanopyMesh);
         SetPrivateField(prototype, "shellMaterial", shellMaterial);
 
         BranchPlacement placement = CreateBranchPlacement(
@@ -345,11 +297,12 @@ public sealed class VegetationEditorAuthoringTests
 
         VegetationTreeAuthoringEditorUtility.BakeImpostor(authoring);
 
-        Assert.AreEqual(0, prototype.ShellNodesL0.Length);
-        Assert.AreEqual(0, prototype.ShellNodesL1.Length);
-        Assert.AreEqual(0, prototype.ShellNodesL2.Length);
-        Assert.IsNull(prototype.ShellL1WoodMesh);
-        Assert.IsNull(prototype.ShellL2WoodMesh);
+        Assert.IsNull(prototype.BranchL1CanopyMesh);
+        Assert.IsNull(prototype.BranchL2CanopyMesh);
+        Assert.IsNull(prototype.BranchL3CanopyMesh);
+        Assert.IsNull(prototype.BranchL1WoodMesh);
+        Assert.IsNull(prototype.BranchL2WoodMesh);
+        Assert.IsNull(prototype.BranchL3WoodMesh);
         AssertGeneratedMeshStored(blueprint.ImpostorMesh);
     }
 
@@ -614,29 +567,6 @@ public sealed class VegetationEditorAuthoringTests
         AssetDatabase.CreateAsset(material, assetPath);
         createdObjects.Add(material);
         return material;
-    }
-
-    private BranchShellNode CreateShellNode(Mesh shellMesh, int shellLevel)
-    {
-        Mesh? shellL0Mesh = null;
-        Mesh? shellL1Mesh = null;
-        Mesh? shellL2Mesh = null;
-        switch (shellLevel)
-        {
-            case 0:
-                shellL0Mesh = shellMesh;
-                break;
-            case 1:
-                shellL1Mesh = shellMesh;
-                break;
-            case 2:
-                shellL2Mesh = shellMesh;
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(shellLevel), shellLevel, "Shell level must be 0, 1, or 2.");
-        }
-
-        return new BranchShellNode(new Bounds(Vector3.zero, Vector3.one), 0, -1, 0, shellL0Mesh, shellL1Mesh, shellL2Mesh);
     }
 
     private ImpostorBakeSettings CreateFastImpostorBakeSettings()

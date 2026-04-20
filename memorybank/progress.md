@@ -9,6 +9,7 @@ Purpose: current milestone, current blockers, next tasks. Nothing else.
 - Runtime authority: [VegetationRuntimeArchitecture.md](../DetailedDocs/VegetationRuntimeArchitecture.md)
   now includes full ASCII bake, registration, color/depth, and shadow pipelines with payload ownership and resident-memory surfaces
 - Finished baseline: [Milestone1.md](../DetailedDocs/Milestone1.md)
+- Latest completed cleanup: branch prototype authoring now persists only the split-tier runtime mesh chain (`branchL1/2/3CanopyMesh` + `branchL1/2/3WoodMesh`); obsolete shell-node authoring/runtime contracts and sample per-node shell assets were removed.
 
 ## Current Blockers
 

@@ -34,6 +34,7 @@ Turn the shipped baseline into a production-usable package.
 - Completed: prepared-frame telemetry now reports actual visible instances, generated branch work, and budget-cap-hit flags through latest async readback snapshots.
 - Completed: submission now uses the live active-slot surface from latest completed emitted-slot readback, with registered-slot fallback only during async warm-up.
 - Completed: enabled shadow promotion is now near-only; trees in the `L2` band stay at `TreeL3`, while only `L1/L0` bands can expand in shadows.
+- Completed: branch authoring/runtime cleanup now persists only `branchL1/2/3CanopyMesh` plus `branchL1/2/3WoodMesh`; obsolete shell-node authoring/runtime contracts and sample per-node shell assets were removed.
 1. Validate and tune the cheap-shadow defaults against the split-budget path.
 2. Reduce duplicated camera/shadow GPU residency instead of keeping two full pipelines per active container.
 3. Remove slot-order bias from visible-instance clamping.
