@@ -23,36 +23,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             commandBuffer = null;
         }
 
-        public void SetGlobalBuffer(int propertyId, GraphicsBuffer buffer)
-        {
-            if (commandBuffer == null || buffer == null)
-            {
-                return;
-            }
-
-            commandBuffer.SetGlobalBuffer(propertyId, buffer);
-        }
-
-        public void SetGlobalBuffer(int propertyId, ComputeBuffer buffer)
-        {
-            if (commandBuffer == null || buffer == null)
-            {
-                return;
-            }
-
-            commandBuffer.SetGlobalBuffer(propertyId, buffer);
-        }
-
-        public void SetGlobalInt(int propertyId, int value)
-        {
-            if (commandBuffer == null)
-            {
-                return;
-            }
-
-            commandBuffer.SetGlobalInt(propertyId, value);
-        }
-
         public void DrawMeshInstancedIndirect(
             Mesh mesh,
             Material material,

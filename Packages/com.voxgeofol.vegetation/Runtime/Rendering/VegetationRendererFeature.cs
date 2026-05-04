@@ -350,7 +350,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         }
 
                         builder.AllowPassCulling(false);
-                        builder.AllowGlobalStateModification(true);
                         builder.SetRenderFunc<PassData>(ExecuteRasterPass);
                     }
                 }

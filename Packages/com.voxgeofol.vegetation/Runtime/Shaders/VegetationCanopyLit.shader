@@ -29,6 +29,7 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
             #pragma target 4.5
             #pragma vertex Vert
             #pragma fragment Frag
+            #pragma multi_compile_instancing
             #pragma multi_compile_fog
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
@@ -67,6 +68,7 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
 
             Varyings Vert(Attributes input)
             {
+                UNITY_SETUP_INSTANCE_ID(input);
                 VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
 
                 Varyings output;
@@ -108,6 +110,7 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
             #pragma target 4.5
             #pragma vertex ShadowVert
             #pragma fragment ShadowFrag
+            #pragma multi_compile_instancing
             #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
@@ -127,6 +130,7 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
 
             Varyings ShadowVert(Attributes input)
             {
+                UNITY_SETUP_INSTANCE_ID(input);
                 VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
 
                 Varyings output;
@@ -154,6 +158,7 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
             #pragma target 4.5
             #pragma vertex DepthVert
             #pragma fragment DepthFrag
+            #pragma multi_compile_instancing
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "VegetationIndirectCommon.hlsl"
@@ -171,6 +176,7 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
 
             Varyings DepthVert(Attributes input)
             {
+                UNITY_SETUP_INSTANCE_ID(input);
                 VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
 
                 Varyings output;

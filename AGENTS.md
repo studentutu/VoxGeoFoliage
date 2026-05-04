@@ -4,6 +4,14 @@ This file provides guidance to agents when working with code in this repository.
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
+## 0. Search and navigation
+
+Prefer `rg` and `fd` tools when available, over the `grep`.
+For project/package navigation use available mcp tools, see [MCP servers](.vscode/mcp.json).
+
+MCP tools:
+ - Resharper (https://plugins.jetbrains.com/plugin/30561-mcp-server-for-code-intelligence)
+
 ## 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
@@ -66,7 +74,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
   - Must use one of after all edits are done (mandatory): "Compile by Rider MSBuild" task or "Fully Compile by Unity" task. They will update [CompileErrorsAfterUnityRun.txt](CI/CompileErrorsAfterUnityRun.txt) which can show all compile time errors, if the text file is not empty.
     - Use "Compile by Rider MSBuild" (see .vscode/tasks.json) for a fast compile check when no new .cs/asmdef files were added. Does not use Unity editor(preferred way).
     - Use "Fully Compile by Unity" when new files/asmdefs were added. Requires to close editor and compilation will use new headless Editor process. This takes  1-4 minutes.
-  - IMPORTANT: xxxx-unity.sln will not see new .cs files, you will need to rebuild solution from within Unity Editor by running rebuildSolutionFromUnityItself.sh, see [Fully Compile by Unity](../.vscode/tasks.json).
+  - IMPORTANT: xxxx-unity.sln will not see new .cs files, you will need to rebuild solution from within Unity Editor by running rebuildSolutionFromUnityItself.sh, see [Fully Compile by Unity](.vscode/tasks.json).
   - "Compile by Rider MSBuild" task is the fast compile check but won't work if new script files/asmdefs were added to the solution. Use it when fixing failed tests or doing quick compile validation.
 
 - Test execution is Git Bash–centric and directory-sensitive:
@@ -78,7 +86,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
   - IMPORTANT: Unity Editor for this project must be CLOSED before running tests (scripts launch their own instance). See [CI/RunUnityTestsReadme.md](CI/RunUnityTestsReadme.md).
 
 - Non-obvious environment requirements:
-  - Unity path is hardcoded for Git Bash: /c/Program Files/Unity/Hub/Editor/6000.1.12f1/Editor/Unity.exe in [runTestsBash.sh](.runTestsBash.sh). Update if Editor is installed elsewhere.
+  - Unity editor path is hardcoded for Git Bash in [runTestsBash.sh](.runTestsBash.sh). Update if Editor is installed elsewhere.
   - VS Code tasks invoke Git Bash explicitly; use those on Windows: [Run Unity Tests](.vscode/tasks.json) and [Parse Unity Tests](.vscode/tasks.json).
   - Rider path (along with it's MSbuild tools) is hardcoded: see [Compile by Rider MSbuild](rebuildSolutionWithRiderMsBuild.sh). Update if Rider version is installed elsewhere.
   - We use edit-mode tests, it has limitation that no unity methods will be automatically invoked, so we should always expose API and treat unity methods as redundant (but necessary) initialization.
@@ -174,11 +182,11 @@ flowchart TD
 
 ## CI/Tests/Verification
 
-- See: [vscode.tasks.json](../../.vscode/tasks.json), [RunUnityTestsReadme.md](../../CI/RunUnityTestsReadme.md)
-- Build(rebuild solution): [Fully Compile by Unity](../.vscode/tasks.json) and check [CompileErrorsAfterUnityRun.txt](CI/CompileErrorsAfterUnityRun.txt) for any compilation errors (will be empty if no errors), only full rebuild or running unity tests require Unity Editor, so it is required all unity editors with current project to be closed.
-- Tests (from repo root, it is required all unity editors with current project to be closed): "C:\Program Files\Git\bin\bash.exe" ./runTestsFromRoot.sh
-  - Ensures CI/CITestOutput.xml refreshed
-- Run [runParsetests.sh](runParsetests.sh): 
+- See: [vscode.tasks.json](.vscode/tasks.json), [RunUnityTestsReadme.md](/CI/RunUnityTestsReadme.md)
+- Build(rebuild solution): [Fully Compile by Unity](.vscode/tasks.json) and check [CompileErrorsAfterUnityRun.txt](CI/CompileErrorsAfterUnityRun.txt) for any compilation errors (will be empty if no errors), only full rebuild or running unity tests require Unity Editor, so it is required all unity editors with current project to be closed.
+- Tests (from repo root, it is required all unity editors with current project to be closed): `"C:\Program Files\Git\bin\bash.exe" ./runTestsFromRoot.sh`
+  - Ensures `CI/CITestOutput.xml` refreshed
+- Run [runParsetests.sh](runParsetests.sh):
   - Ensure [Unity Editor compiler errors](CI/CompileErrorsAfterUnityRun.txt) is empty (no compilation errors while running Unity Editor).
   - See output of [runParsetests.sh](runParsetests.sh) to check if there are any failed tests, it will also enumerate them if failed tests exists.
 
