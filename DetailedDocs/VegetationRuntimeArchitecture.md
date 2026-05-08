@@ -534,6 +534,12 @@ Important current contract:
 
 ## 4. Current Shadow Pipeline
 
+Current code status:
+
+- Shadows are implemented, but the shipped controls are not the target design.
+- Current `RenderMainLightShadows` / `AllowExpandedTreePromotionInShadows` behavior can select shadow-only tree proxy meshes for near bands.
+- That legacy proxy path is brittle because it lets shadow caster geometry diverge from the visible accepted tier.
+
 ```text
 VegetationRendererFeature.RecordShadowRenderGraph()
 -> DrawMainLightShadowAtlas()
@@ -581,6 +587,7 @@ Important current contract:
 - Shadow preparation owns a second full `VegetationGpuDecisionPipeline` per container once used.
 - Shadow and camera still share one `VegetationIndirectRenderer`, but render calls no longer share one renderer-global mutable bound frame.
 - Camera, depth, and shadow now pass explicit prepared-view handles through submission.
+- Current enabled shadow promotion is legacy behavior. It is not the required target because it can choose a shadow-only LOD family that differs from the rendered branch-expanded color representation.
 
 ## 5. Current Resident Memory Surfaces
 
@@ -759,24 +766,56 @@ PrepareView(staticState, observer, frustum, budget)
 ### 7.4 Required Shadow Policy
 
 ```text
-default shadow policy
-  far      -> Impostor
-  non-far  -> TreeL3
-  branch promotion -> off
+ShadowMode
+  Off
+    -> no vegetation shadow-caster submission
 
-first optional upgrade
-  allow only L1/L0 in shadows
+  CheapTree
+    near active L0/L1 color tiers
+      -> same-as-color shadow casters
+      -> uses the same accepted branch/trunk representation as the color prepared view
 
-do not default to
-  L2 in shadows
-  full color-equivalent promotion in shadows
+    farther accepted L2/TreeL3 tiers
+      -> cheap tree-only caster
+      -> default caster is TreeL3 or a cheaper validated TreeShadowLod
+
+    far Impostor tier
+      -> no cast shadow by default
 ```
 
 Reason:
 
-- Shadow is secondary.
-- Current runtime already overpays for it.
-- Cheap shadow policy only works if shadow and color no longer fight over one shared submission state.
+- Shadows are a target feature, but they must remain subordinate to the fast opaque foliage goal.
+- Near self-shadowing is allowed only when it reuses the active visible representation, so the shadow caster cannot be larger than the rendered branch/trunk geometry.
+- Farther vegetation shadows are allowed only as cheap tree-level casters, because branch-equivalent shadows at distance conflict with the performance target.
+- The public runtime contract has two modes only: `Off` and `CheapTree`. Do not expose separate `L0/L1` shadow proxy promotion as a production option.
+- Cheap shadow policy only works if shadow and color no longer fight over one shared submission state and if the shadow prepare path avoids a second full color-equivalent decision pipeline.
+
+Required `CheapTree` tier matrix:
+
+```text
+accepted color tier L0
+  shadow caster -> same trunk + branch draw slots as color
+
+accepted color tier L1
+  shadow caster -> same trunk + branch draw slots as color
+
+accepted color tier L2
+  shadow caster -> TreeL3 or validated cheaper TreeShadowLod
+
+accepted color tier TreeL3
+  shadow caster -> TreeL3 or validated cheaper TreeShadowLod
+
+accepted color tier Impostor
+  shadow caster -> none by default
+```
+
+Required validation:
+
+- A cheap tree-only shadow caster must not have a larger bounds extent than the rendered tree tier it replaces, except for a tiny documented bake tolerance.
+- A cheap tree-only shadow caster must not exceed the `TreeL3` index count unless a target-specific benchmark explicitly approves it.
+- Any shadow caster used for same-as-color near shadows must be derived from the same accepted color tier, not from a separate shadow-only proxy mesh.
+- Shadow preparation must never promote an accepted tree to a visually richer or geometrically larger shadow tier than the color path selected for that tree.
 
 ## 8. Non-Negotiable Invariants
 
@@ -785,6 +824,9 @@ Reason:
 - Promotion is nearest-first.
 - Branch work exists only for trees already accepted above `TreeL3`.
 - Slot order must not decide survival.
+- Shadows are supported through `ShadowMode.Off` and `ShadowMode.CheapTree` only.
+- `ShadowMode.CheapTree` uses same-as-color casters for near active `L0/L1` tiers and cheap tree-only casters for farther accepted tiers.
+- Shadow can be cheaper than color, but it must never cast a larger or unrelated silhouette than the accepted visible tier.
 - Shadow can be cheaper than color, but it must have explicit ownership.
 
 ## 9. Immediate Implementation Order
@@ -802,6 +844,9 @@ Completed:
 
 Remaining:
 
-1. Keep shadow cheap by default and tune shadow budgets separately from color residency.
-2. Remove slot-order bias from visible-instance clamping.
-3. Collapse duplicated camera/frustum GPU residency into the pooled prepared-view ownership target.
+1. Replace legacy shadow toggles with `ShadowMode.Off` and `ShadowMode.CheapTree`.
+2. Implement `CheapTree` tier selection: same-as-color near `L0/L1`, cheap tree-only farther `L2/TreeL3`, no impostor cast shadow by default.
+3. Remove production use of independent `ShadowProxyL0/L1` promotion.
+4. Keep shadow cheap by default and tune shadow budgets separately from color residency.
+5. Remove slot-order bias from visible-instance clamping.
+6. Collapse duplicated camera/frustum GPU residency into the pooled prepared-view ownership target.

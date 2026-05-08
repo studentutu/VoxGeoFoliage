@@ -13,8 +13,10 @@ Purpose: current milestone, current blockers, next tasks. Nothing else.
 
 ## Current Blockers
 
+- shadow target is now `ShadowMode.Off` / `ShadowMode.CheapTree`, but current code still exposes legacy `RenderMainLightShadows` / `AllowExpandedTreePromotionInShadows`
 - shadow currently reuses the same default budget shape as color, so explicit-frustum/shadow preparation doubles fixed residency without proving it needs to
 - camera and explicit-frustum preparation still keep two full GPU pipelines per active container instead of the target pooled prepared-view residency
+- current enabled shadow promotion can use independent `ShadowProxyL0/L1` tree proxies; production target requires same-as-color near `L0/L1` shadows and cheap tree-only farther `L2/TreeL3` shadows instead
 - visible-instance clamping is still slot-order biased
 - active-slot submission and actual-usage telemetry are latest async readback snapshots, so first prepared frames can still fall back to registered slots and reported counts can lag the frame being rendered
 - dense-forest and shadow validation are still pending on the split-budget path
@@ -23,9 +25,12 @@ Purpose: current milestone, current blockers, next tasks. Nothing else.
 
 Goal: finish the post-ownership-split runtime cleanup now that split budgets and actual-work dispatch match the prepared-view design.
 
-1. Tune shadow budgets separately from color now that actual usage telemetry exists.
-2. Reduce duplicated camera/shadow GPU residency toward the pooled prepared-view ownership target.
-3. Remove slot-order bias from visible-instance clamping.
-4. Run dense-forest and shadow validation on the split-budget path, including async active-slot warm-up behavior.
+1. Replace legacy shadow toggles with `ShadowMode.Off` and `ShadowMode.CheapTree`.
+2. Implement `CheapTree`: same-as-color shadow casters for near active `L0/L1`, cheap tree-only casters for farther `L2/TreeL3`, and no impostor cast shadow by default.
+3. Remove production use of independent `ShadowProxyL0/L1` promotion and add shadow-caster cost/bounds validation.
+4. Tune shadow budgets separately from color now that actual usage telemetry exists.
+5. Reduce duplicated camera/shadow GPU residency toward the pooled prepared-view ownership target.
+6. Remove slot-order bias from visible-instance clamping.
+7. Run dense-forest and shadow validation on the split-budget path, including async active-slot warm-up behavior.
 
-Target Result: simplified memory footprint for runtime  path, true separation of draw calls for shadow path and depth/main color path and production ready support for a container with 10_000 trees, that has near prioritization and actual hard budgeting.
+Target Result: simplified memory footprint for runtime path, production shadow support through `ShadowMode.CheapTree`, true separation of draw calls for shadow path and depth/main color path, and production ready support for a container with 10_000 trees that has near prioritization and actual hard budgeting.

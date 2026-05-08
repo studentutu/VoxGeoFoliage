@@ -87,17 +87,20 @@
    World-space size of the frozen spatial grid. Smaller cells improve culling granularity but increase cell count; larger cells are cheaper but more conservative.
 3. `VegetationFoliageFeatureSettings.ShadowPassEvent`
    URP event for vegetation main-light shadow submission. Current contract: main-light directional atlas only, using cascade-specific resident frames derived from the camera-visible vegetation set.
-4. `VegetationFoliageFeatureSettings.RenderMainLightShadows`
-   Enables or disables vegetation submission into the URP main-light shadow atlas.
-5. `VegetationFoliageFeatureSettings.AllowExpandedTreePromotionInShadows`
-   When disabled, shadow preparation clamps visible non-far vegetation to the `TreeL3` floor and skips expanded branch shadow casters. When enabled, only trees in the authored `L1/L0` distance bands can expand in shadows; the `L2` band stays at `TreeL3`.
-5. `VegetationFoliageFeatureSettings.DepthPassEvent`
+4. Target `ShadowMode`
+   The public shadow contract must collapse shadow behavior to `Off` and `CheapTree`.
+   `Off` skips vegetation shadow-caster submission.
+   `CheapTree` combines same-as-color near shadows for active `L0/L1` trees with cheap tree-only casters for farther accepted tiers.
+   Shadow behavior must not expose a separate LOD family that can cast silhouettes larger than the visible vegetation.
+5. Legacy `VegetationFoliageFeatureSettings.RenderMainLightShadows` / `AllowExpandedTreePromotionInShadows`
+   These are the current implementation toggles and must be replaced by `ShadowMode`. The current expanded-shadow path is not the target contract because it can choose whole-tree shadow proxies that do not match the rendered branch representation.
+6. `VegetationFoliageFeatureSettings.DepthPassEvent`
    URP event for vegetation depth submission. The first vegetation pass of the frame also prepares the GPU-resident buffers.
-6. `VegetationFoliageFeatureSettings.ColorPassEvent`
+7. `VegetationFoliageFeatureSettings.ColorPassEvent`
    URP event for vegetation color submission. It controls ordering against the rest of the opaque pipeline.
-7. `VegetationFoliageFeatureSettings.EnableDiagnostics`
+8. `VegetationFoliageFeatureSettings.EnableDiagnostics`
    Renderer-wide diagnostics toggle for every active container rendered by that feature. This is also the switch for current runtime-review telemetry in the Unity Console.
-8. `VegetationRuntimeContainer` runtime budgets
+9. `VegetationRuntimeContainer` runtime budgets
    Per-container runtime limits are now split into color/shadow visible-instance caps, color/shadow expanded-branch work-item caps, color/shadow approximate work-unit caps, and one registered draw-slot cap. This still does not define a global full-scene budget unless the whole scene is rendered through one container.
 
 ## Diagnostics
@@ -144,6 +147,8 @@
 | `Accepted tree tier` | Shipped urgent path | `VegetationGpuDecisionPipeline`, `TreeVisibilityGpu.acceptedTier` | The one final representation chosen for one visible tree in the current frame: `Impostor`, `TreeL3`, `L2`, `L1`, or `L0`. |
 | `Compact expanded branch work item` | Shipped urgent path | `_ExpandedBranchWorkItems`, promoted-tree branch count/emit kernels | Per-frame branch placement work generated only for trees already promoted above `TreeL3`. |
 | `Prepared view handle` | Shipped Milestone 2 cleanup | `VegetationIndirectRenderer.BindGpuResidentFrame()`, `AuthoringContainerRuntime.PrepareViewForCamera()`, `AuthoringContainerRuntime.PrepareViewForFrustum()` | Explicit per-view binding surface carrying instance/args/slot-start buffers so camera and shadow do not share one mutable renderer-bound frame. |
+| `ShadowMode.Off` | Required target | `VegetationFoliageFeatureSettings` replacement shadow contract | Disables vegetation cast-shadow submission while vegetation can still receive scene shadows in the color pass. |
+| `ShadowMode.CheapTree` | Required target | `VegetationFoliageFeatureSettings` replacement shadow contract, shadow prepare path | Uses same-as-color shadow casters for near active `L0/L1` trees and cheap tree-only casters for farther accepted tiers. It is the only production shadow mode. |
 
 ## Current Lifecycle
 
@@ -251,7 +256,7 @@ Examples:
 
 1. Registration is `serialized authorings -> VegetationTreeAuthoringRuntime[] -> VegetationRuntimeRegistry`.
 2. Per-camera work is `camera -> GPU classification/emission -> shared instance buffer + indirect args`.
-3. Final rendering is `shared instance buffer + indirect args -> main-light shadow pass + depth pass + color pass -> one indirect submission per active draw slot per pass`.
+3. Final rendering is `shared instance buffer + indirect args -> optional main-light shadow pass + depth pass + color pass -> one indirect submission per active draw slot per pass`.
 4. `changed transforms / hierarchy / blueprint data -> RefreshRuntimeRegistration() -> rebuilt runtime state`
 
 ## Important Limitations
@@ -269,7 +274,7 @@ Examples:
 11. The urgent runtime should prioritize inside one container with `TreeL3` floor plus nearest-first promotion, but there is still no global cross-container arbiter.
 12. Multi-container prioritization stays unresolved follow-up work; the one-container runtime authority remains [../../DetailedDocs/VegetationRuntimeArchitecture.md](../../DetailedDocs/VegetationRuntimeArchitecture.md).
 13. Closed `SubScene` runtime loading requires `SubSceneAuthoring` on the same GameObject as `VegetationRuntimeContainer`; the plain container alone is only the classic-scene lifecycle provider.
-14. Runtime shadow support is currently limited to the URP main-light directional shadow atlas, using cascade-specific resident frames derived from the camera-visible vegetation set. Default shipped behavior clamps visible non-far shadow casters to `TreeL3` and skips expanded branch shadow promotion unless `AllowExpandedTreePromotionInShadows` is explicitly enabled. When that setting is enabled, only `L1/L0` bands can expand in shadows; the `L2` band still stays at `TreeL3`. Offscreen vegetation casters and additional-light shadow atlases are still follow-up work.
+14. Runtime shadow support is limited to the URP main-light directional shadow atlas. The target public contract is `ShadowMode.Off` or `ShadowMode.CheapTree` only. `CheapTree` must use same-as-color casters for near active `L0/L1` trees and cheap tree-only casters for farther accepted tiers; it must not use independent enlarged shadow-proxy LODs. Offscreen vegetation casters and additional-light shadow atlases are outside the current production target.
 15. Actual visible-instance counts, generated branch-work counts, cap-hit flags, and active-slot subsets are latest completed async readback snapshots. They can lag the frame being rendered, and the first prepared frames can fall back to registered-slot submission before the async slot readback warms.
 
 ## Supported Devices
