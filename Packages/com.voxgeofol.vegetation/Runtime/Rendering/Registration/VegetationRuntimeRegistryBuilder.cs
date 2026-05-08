@@ -9,11 +9,17 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
     /// Builds the frozen runtime registry from scene authoring data without touching editor-only fields.
+    /// The urgent-path shape is tree-first: reusable blueprint placements and prototype tier meshes are static,
+    /// while expanded branch work is derived later per frame from accepted trees only.
     /// </summary>
     public sealed class VegetationRuntimeRegistryBuilder
     {
+        // Range-Condition-Output: convert per-instance index count into coarse work units so
+        // one huge canopy mesh cannot consume the same acceptance budget as one tiny impostor.
+        private const int IndirectWorkCostIndexQuantum = 1024;
         private readonly Vector3 gridOrigin;
         private readonly Vector3 cellSize;
+        private readonly int maxRegisteredDrawSlots;
         private readonly List<VegetationDrawSlot> drawSlots = new List<VegetationDrawSlot>();
         private readonly Dictionary<LODProfileSO, int> lodProfileIndices = new Dictionary<LODProfileSO, int>();
         private readonly Dictionary<TreeBlueprintSO, int> blueprintIndices = new Dictionary<TreeBlueprintSO, int>();
@@ -23,16 +29,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly List<VegetationTreeBlueprintRuntime> treeBlueprints = new List<VegetationTreeBlueprintRuntime>();
         private readonly List<VegetationBlueprintBranchPlacementRuntime> blueprintBranchPlacements = new List<VegetationBlueprintBranchPlacementRuntime>();
         private readonly List<VegetationBranchPrototypeRuntime> branchPrototypes = new List<VegetationBranchPrototypeRuntime>();
-        private readonly List<VegetationBranchShellNodeRuntimeBfs> shellNodesL1 = new List<VegetationBranchShellNodeRuntimeBfs>();
-        private readonly List<VegetationBranchShellNodeRuntimeBfs> shellNodesL2 = new List<VegetationBranchShellNodeRuntimeBfs>();
-        private readonly List<VegetationBranchShellNodeRuntimeBfs> shellNodesL3 = new List<VegetationBranchShellNodeRuntimeBfs>();
         private readonly List<VegetationTreeInstanceRuntime> treeInstances = new List<VegetationTreeInstanceRuntime>();
-        private readonly List<VegetationSceneBranchRuntime> sceneBranches = new List<VegetationSceneBranchRuntime>();
 
-        public VegetationRuntimeRegistryBuilder(Vector3 gridOrigin, Vector3 cellSize)
+        public VegetationRuntimeRegistryBuilder(Vector3 gridOrigin, Vector3 cellSize, int maxRegisteredDrawSlots = int.MaxValue)
         {
             this.gridOrigin = gridOrigin;
             this.cellSize = cellSize;
+            this.maxRegisteredDrawSlots = Mathf.Max(1, maxRegisteredDrawSlots);
         }
 
         /// <summary>
@@ -55,7 +58,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
 
                 TreeBlueprintSO blueprint = authoring.Blueprint ??
-                                            throw new InvalidOperationException($"{authoring.DebugName} is missing blueprint and cannot enter Phase D runtime registration.");
+                                            throw new InvalidOperationException($"{authoring.DebugName} is missing blueprint and cannot enter urgent runtime registration.");
 
                 int blueprintIndex = RegisterBlueprint(blueprint);
                 VegetationTreeBlueprintRuntime blueprintRuntime = treeBlueprints[blueprintIndex];
@@ -64,44 +67,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 Bounds treeWorldBounds = VegetationRuntimeMathUtility.TransformBounds(blueprint.TreeBounds, treeMatrix);
                 Vector3 treeSphereCenter = treeWorldBounds.center;
                 float treeSphereRadius = treeWorldBounds.extents.magnitude;
-                int sceneBranchStart = sceneBranches.Count;
-
-                for (int branchPlacementIndex = 0; branchPlacementIndex < blueprint.Branches.Length; branchPlacementIndex++)
-                {
-                    BranchPlacement placement = blueprint.Branches[branchPlacementIndex] ??
-                                               throw new InvalidOperationException($"{blueprint.name}.branches[{branchPlacementIndex}] is missing.");
-                    BranchPrototypeSO prototype = placement.Prototype ??
-                                                  throw new InvalidOperationException($"{blueprint.name}.branches[{branchPlacementIndex}] is missing prototype.");
-
-                    int prototypeIndex = RegisterPrototype(prototype);
-                    Matrix4x4 branchLocalMatrix = Matrix4x4.TRS(
-                        placement.LocalPosition,
-                        placement.LocalRotation,
-                        Vector3.one * placement.Scale);
-                    Matrix4x4 branchWorldMatrix = treeMatrix * branchLocalMatrix;
-                    Matrix4x4 branchWorldToObject = branchWorldMatrix.inverse;
-                    Bounds branchWorldBounds = VegetationRuntimeMathUtility.TransformBounds(prototype.LocalBounds, branchWorldMatrix);
-                    Vector3 branchSphereCenter = branchWorldBounds.center;
-                    float branchSphereRadius = branchWorldBounds.extents.magnitude;
-                    VegetationBranchPrototypeRuntime prototypeRuntime = branchPrototypes[prototypeIndex];
-
-                    sceneBranches.Add(new VegetationSceneBranchRuntime
-                    {
-                        TreeIndex = treeInstances.Count,
-                        BranchPlacementIndex = branchPlacementIndex,
-                        PrototypeIndex = prototypeIndex,
-                        WoodDrawSlotL0 = prototypeRuntime.WoodDrawSlotL0,
-                        WoodDrawSlotL1 = prototypeRuntime.WoodDrawSlotL1,
-                        WoodDrawSlotL2 = prototypeRuntime.WoodDrawSlotL2,
-                        WoodDrawSlotL3 = prototypeRuntime.WoodDrawSlotL3,
-                        FoliageDrawSlotL0 = prototypeRuntime.FoliageDrawSlotL0,
-                        LocalToWorld = branchWorldMatrix,
-                        SphereCenterWorld = branchSphereCenter,
-                        BoundingSphereRadius = branchSphereRadius,
-                        WoodUploadInstanceData = CreateUploadInstanceData(branchWorldMatrix, branchWorldToObject, 0u),
-                        FoliageUploadInstanceData = CreateUploadInstanceData(branchWorldMatrix, branchWorldToObject, prototypeRuntime.PackedLeafTint)
-                    });
-                }
 
                 treeInstances.Add(new VegetationTreeInstanceRuntime
                 {
@@ -111,18 +76,37 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     WorldBounds = treeWorldBounds,
                     TrunkFullWorldBounds = TransformDrawSlotBounds(blueprintRuntime.TrunkFullDrawSlot, treeMatrix),
                     TrunkL3WorldBounds = TransformDrawSlotBounds(blueprintRuntime.TrunkL3DrawSlot, treeMatrix),
+                    TreeL3WorldBounds = TransformDrawSlotBounds(blueprintRuntime.TreeL3DrawSlot, treeMatrix),
                     ImpostorWorldBounds = TransformDrawSlotBounds(blueprintRuntime.ImpostorDrawSlot, treeMatrix),
                     SphereCenterWorld = treeSphereCenter,
                     BoundingSphereRadius = treeSphereRadius,
                     BlueprintIndex = blueprintIndex,
-                    SceneBranchStartIndex = sceneBranchStart,
-                    SceneBranchCount = sceneBranches.Count - sceneBranchStart,
                     CellIndex = -1,
                     UploadInstanceData = CreateUploadInstanceData(treeMatrix, treeWorldToObject, 0u)
                 });
             }
 
             VegetationSpatialGrid spatialGrid = VegetationSpatialGrid.Build(gridOrigin, cellSize, treeInstances);
+            int[] cellTreeIndexStarts = new int[spatialGrid.Cells.Count];
+            int[] cellTreeIndexCounts = new int[spatialGrid.Cells.Count];
+            List<int> cellTreeIndices = new List<int>(treeInstances.Count);
+            for (int cellIndex = 0; cellIndex < spatialGrid.Cells.Count; cellIndex++)
+            {
+                IReadOnlyList<int> registeredTreeIndices = spatialGrid.Cells[cellIndex].TreeIndices;
+                cellTreeIndexStarts[cellIndex] = cellTreeIndices.Count;
+                cellTreeIndexCounts[cellIndex] = registeredTreeIndices.Count;
+                for (int treeOffset = 0; treeOffset < registeredTreeIndices.Count; treeOffset++)
+                {
+                    cellTreeIndices.Add(registeredTreeIndices[treeOffset]);
+                }
+            }
+
+            if (cellTreeIndices.Count != treeInstances.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Spatial-grid tree flattening expected exactly one registered cell entry per tree, but collected {cellTreeIndices.Count} entries for {treeInstances.Count} trees.");
+            }
+
             return new VegetationRuntimeRegistry(
                 drawSlots.ToArray(),
                 BuildDrawSlotConservativeBounds(),
@@ -130,11 +114,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 treeBlueprints.ToArray(),
                 blueprintBranchPlacements.ToArray(),
                 branchPrototypes.ToArray(),
-                shellNodesL1.ToArray(),
-                shellNodesL2.ToArray(),
-                shellNodesL3.ToArray(),
                 treeInstances.ToArray(),
-                sceneBranches.ToArray(),
+                cellTreeIndexStarts,
+                cellTreeIndexCounts,
+                cellTreeIndices.ToArray(),
                 spatialGrid);
         }
 
@@ -162,21 +145,36 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
 
                 AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, blueprint.ImpostorDrawSlot, treeInstance.ImpostorWorldBounds);
+                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, blueprint.TreeL3DrawSlot, treeInstance.TreeL3WorldBounds);
+                AccumulateSlot(
+                    drawSlotConservativeWorldBounds,
+                    hasBounds,
+                    blueprint.ShadowProxyDrawSlotL0,
+                    TransformDrawSlotBounds(blueprint.ShadowProxyDrawSlotL0, treeInstance.LocalToWorld));
+                AccumulateSlot(
+                    drawSlotConservativeWorldBounds,
+                    hasBounds,
+                    blueprint.ShadowProxyDrawSlotL1,
+                    TransformDrawSlotBounds(blueprint.ShadowProxyDrawSlotL1, treeInstance.LocalToWorld));
                 AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, blueprint.TrunkFullDrawSlot, treeInstance.TrunkFullWorldBounds);
                 AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, blueprint.TrunkL3DrawSlot, treeInstance.TrunkL3WorldBounds);
-            }
 
-            for (int branchIndex = 0; branchIndex < sceneBranches.Count; branchIndex++)
-            {
-                VegetationSceneBranchRuntime sceneBranch = sceneBranches[branchIndex];
-                VegetationBranchPrototypeRuntime prototype = branchPrototypes[sceneBranch.PrototypeIndex];
-                Bounds branchWorldBounds = TransformBounds(prototype.LocalBoundsCenter, prototype.LocalBoundsExtents, sceneBranch.LocalToWorld);
+                for (int branchOffset = 0; branchOffset < blueprint.BranchPlacementCount; branchOffset++)
+                {
+                    VegetationBlueprintBranchPlacementRuntime placement = blueprintBranchPlacements[blueprint.BranchPlacementStartIndex + branchOffset];
+                    VegetationBranchPrototypeRuntime prototype = branchPrototypes[placement.PrototypeIndex];
+                    Matrix4x4 branchWorldMatrix = treeInstance.LocalToWorld * placement.LocalToTree;
+                    Bounds branchWorldBounds = TransformBounds(prototype.LocalBoundsCenter, prototype.LocalBoundsExtents, branchWorldMatrix);
 
-                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL0, branchWorldBounds);
-                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL1, branchWorldBounds);
-                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL2, branchWorldBounds);
-                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, sceneBranch.WoodDrawSlotL3, branchWorldBounds);
-                AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, sceneBranch.FoliageDrawSlotL0, branchWorldBounds);
+                    AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, prototype.WoodDrawSlotL0, branchWorldBounds);
+                    AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, prototype.FoliageDrawSlotL0, branchWorldBounds);
+                    AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, prototype.WoodDrawSlotL1, branchWorldBounds);
+                    AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, prototype.CanopyDrawSlotL1, branchWorldBounds);
+                    AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, prototype.WoodDrawSlotL2, branchWorldBounds);
+                    AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, prototype.CanopyDrawSlotL2, branchWorldBounds);
+                    AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, prototype.WoodDrawSlotL3, branchWorldBounds);
+                    AccumulateSlot(drawSlotConservativeWorldBounds, hasBounds, prototype.CanopyDrawSlotL3, branchWorldBounds);
+                }
             }
 
             Bounds fallbackBounds = hasSceneBounds
@@ -238,18 +236,20 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             LODProfileSO lodProfile = blueprint.LodProfile ??
-                                      throw new InvalidOperationException($"{blueprint.name} is missing lodProfile and cannot enter Phase D runtime registration.");
+                                      throw new InvalidOperationException($"{blueprint.name} is missing lodProfile and cannot enter urgent runtime registration.");
 
             Mesh trunkMesh = blueprint.TrunkMesh ??
-                             throw new InvalidOperationException($"{blueprint.name} is missing trunkMesh and cannot enter Phase D runtime registration.");
+                             throw new InvalidOperationException($"{blueprint.name} is missing trunkMesh and cannot enter urgent runtime registration.");
             Material trunkMaterial = blueprint.TrunkMaterial ??
-                                     throw new InvalidOperationException($"{blueprint.name} is missing trunkMaterial and cannot enter Phase D runtime registration.");
+                                     throw new InvalidOperationException($"{blueprint.name} is missing trunkMaterial and cannot enter urgent runtime registration.");
             Mesh trunkL3Mesh = blueprint.TrunkL3Mesh ??
-                               throw new InvalidOperationException($"{blueprint.name} is missing trunkL3Mesh and cannot enter Phase D runtime registration.");
+                               throw new InvalidOperationException($"{blueprint.name} is missing trunkL3Mesh and cannot enter urgent runtime registration.");
+            Mesh treeL3Mesh = blueprint.TreeL3Mesh ??
+                              throw new InvalidOperationException($"{blueprint.name} is missing treeL3Mesh and cannot enter urgent runtime registration.");
             Mesh impostorMesh = blueprint.ImpostorMesh ??
-                                throw new InvalidOperationException($"{blueprint.name} is missing impostorMesh and cannot enter Phase D runtime registration.");
+                                throw new InvalidOperationException($"{blueprint.name} is missing impostorMesh and cannot enter urgent runtime registration.");
             Material impostorMaterial = blueprint.ImpostorMaterial ??
-                                        throw new InvalidOperationException($"{blueprint.name} is missing impostorMaterial and cannot enter Phase D runtime registration.");
+                                        throw new InvalidOperationException($"{blueprint.name} is missing impostorMaterial and cannot enter urgent runtime registration.");
 
             int blueprintIndex = treeBlueprints.Count;
             int branchPlacementStart = blueprintBranchPlacements.Count;
@@ -262,11 +262,14 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                 int prototypeIndex = RegisterPrototype(prototype);
                 float branchRadius = prototype.LocalBounds.extents.magnitude * placement.Scale;
+                Matrix4x4 localToTree = Matrix4x4.TRS(
+                    placement.LocalPosition,
+                    placement.LocalRotation,
+                    Vector3.one * placement.Scale);
                 blueprintBranchPlacements.Add(new VegetationBlueprintBranchPlacementRuntime
                 {
-                    LocalPosition = placement.LocalPosition,
-                    LocalRotation = placement.LocalRotation,
-                    Scale = placement.Scale,
+                    LocalToTree = localToTree,
+                    TreeToLocal = localToTree.inverse,
                     PrototypeIndex = prototypeIndex,
                     LocalBoundsCenter = prototype.LocalBounds.center,
                     LocalBoundsExtents = prototype.LocalBounds.extents,
@@ -274,14 +277,52 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 });
             }
 
+            int trunkFullDrawSlot = RegisterDrawSlot(trunkMesh, trunkMaterial, VegetationRenderMaterialKind.Trunk, $"{blueprint.name}:TrunkFull");
+            int trunkL3DrawSlot = RegisterDrawSlot(trunkL3Mesh, trunkMaterial, VegetationRenderMaterialKind.Trunk, $"{blueprint.name}:TrunkL3");
+            int treeL3DrawSlot = RegisterDrawSlot(treeL3Mesh, impostorMaterial, VegetationRenderMaterialKind.FarMesh, $"{blueprint.name}:TreeL3");
+            int impostorDrawSlot = RegisterDrawSlot(impostorMesh, impostorMaterial, VegetationRenderMaterialKind.FarMesh, $"{blueprint.name}:Impostor");
+            int shadowProxyDrawSlotL0 = RegisterDrawSlot(
+                blueprint.ShadowProxyMeshL0 ?? treeL3Mesh,
+                impostorMaterial,
+                VegetationRenderMaterialKind.FarMesh,
+                $"{blueprint.name}:ShadowProxyL0");
+            int shadowProxyDrawSlotL1 = RegisterDrawSlot(
+                blueprint.ShadowProxyMeshL1 ?? treeL3Mesh,
+                impostorMaterial,
+                VegetationRenderMaterialKind.FarMesh,
+                $"{blueprint.name}:ShadowProxyL1");
+            int expandedTierCostL2 = ComputeDrawSlotWorkCost(trunkL3DrawSlot);
+            int expandedTierCostL1 = ComputeDrawSlotWorkCost(trunkFullDrawSlot);
+            int expandedTierCostL0 = ComputeDrawSlotWorkCost(trunkFullDrawSlot);
+            for (int branchPlacementIndex = branchPlacementStart;
+                 branchPlacementIndex < blueprintBranchPlacements.Count;
+                 branchPlacementIndex++)
+            {
+                VegetationBlueprintBranchPlacementRuntime placement = blueprintBranchPlacements[branchPlacementIndex];
+                VegetationBranchPrototypeRuntime prototypeRuntime = branchPrototypes[placement.PrototypeIndex];
+                expandedTierCostL2 += ComputePrototypeTierWorkCost(prototypeRuntime.WoodDrawSlotL2, prototypeRuntime.CanopyDrawSlotL2);
+                expandedTierCostL1 += ComputePrototypeTierWorkCost(prototypeRuntime.WoodDrawSlotL1, prototypeRuntime.CanopyDrawSlotL1);
+                expandedTierCostL0 += ComputePrototypeTierWorkCost(prototypeRuntime.WoodDrawSlotL0, prototypeRuntime.FoliageDrawSlotL0);
+            }
+
             treeBlueprints.Add(new VegetationTreeBlueprintRuntime
             {
                 LodProfileIndex = RegisterLodProfile(lodProfile),
                 BranchPlacementStartIndex = branchPlacementStart,
                 BranchPlacementCount = blueprint.Branches.Length,
-                TrunkFullDrawSlot = RegisterDrawSlot(trunkMesh, trunkMaterial, VegetationRenderMaterialKind.Trunk, $"{blueprint.name}:TrunkFull"),
-                TrunkL3DrawSlot = RegisterDrawSlot(trunkL3Mesh, trunkMaterial, VegetationRenderMaterialKind.Trunk, $"{blueprint.name}:TrunkL3"),
-                ImpostorDrawSlot = RegisterDrawSlot(impostorMesh, impostorMaterial, VegetationRenderMaterialKind.FarMesh, $"{blueprint.name}:Impostor")
+                TrunkFullDrawSlot = trunkFullDrawSlot,
+                TrunkL3DrawSlot = trunkL3DrawSlot,
+                TreeL3DrawSlot = treeL3DrawSlot,
+                ImpostorDrawSlot = impostorDrawSlot,
+                ShadowProxyDrawSlotL0 = shadowProxyDrawSlotL0,
+                ShadowProxyDrawSlotL1 = shadowProxyDrawSlotL1,
+                TreeL3WorkCost = ComputeDrawSlotWorkCost(treeL3DrawSlot),
+                ImpostorWorkCost = ComputeDrawSlotWorkCost(impostorDrawSlot),
+                ShadowProxyWorkCostL0 = ComputeDrawSlotWorkCost(shadowProxyDrawSlotL0),
+                ShadowProxyWorkCostL1 = ComputeDrawSlotWorkCost(shadowProxyDrawSlotL1),
+                ExpandedTierCostL2 = expandedTierCostL2,
+                ExpandedTierCostL1 = expandedTierCostL1,
+                ExpandedTierCostL0 = expandedTierCostL0
             });
 
             blueprintIndices.Add(blueprint, blueprintIndex);
@@ -296,41 +337,39 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             Mesh woodMesh = prototype.WoodMesh ??
-                            throw new InvalidOperationException($"{prototype.name} is missing woodMesh and cannot enter Phase D runtime registration.");
+                            throw new InvalidOperationException($"{prototype.name} is missing woodMesh and cannot enter urgent runtime registration.");
             Material woodMaterial = prototype.WoodMaterial ??
-                                    throw new InvalidOperationException($"{prototype.name} is missing woodMaterial and cannot enter Phase D runtime registration.");
+                                    throw new InvalidOperationException($"{prototype.name} is missing woodMaterial and cannot enter urgent runtime registration.");
             Mesh foliageMesh = prototype.FoliageMesh ??
-                               throw new InvalidOperationException($"{prototype.name} is missing foliageMesh and cannot enter Phase D runtime registration.");
+                               throw new InvalidOperationException($"{prototype.name} is missing foliageMesh and cannot enter urgent runtime registration.");
             Material foliageMaterial = prototype.FoliageMaterial ??
-                                       throw new InvalidOperationException($"{prototype.name} is missing foliageMaterial and cannot enter Phase D runtime registration.");
+                                       throw new InvalidOperationException($"{prototype.name} is missing foliageMaterial and cannot enter urgent runtime registration.");
             Material shellMaterial = prototype.ShellMaterial ??
-                                     throw new InvalidOperationException($"{prototype.name} is missing shellMaterial and cannot enter Phase D runtime registration.");
-            Mesh shellL1WoodMesh = prototype.ShellL1WoodMesh ??
-                                   throw new InvalidOperationException($"{prototype.name} is missing shellL1WoodMesh and cannot enter Phase D runtime registration.");
-            Mesh shellL2WoodMesh = prototype.ShellL2WoodMesh ??
-                                   throw new InvalidOperationException($"{prototype.name} is missing shellL2WoodMesh and cannot enter Phase D runtime registration.");
+                                     throw new InvalidOperationException($"{prototype.name} is missing shellMaterial and cannot enter urgent runtime registration.");
+            Mesh branchL1WoodMesh = prototype.BranchL1WoodMesh ??
+                                    throw new InvalidOperationException($"{prototype.name} is missing branchL1WoodMesh and cannot enter urgent runtime registration.");
+            Mesh branchL2WoodMesh = prototype.BranchL2WoodMesh ??
+                                    throw new InvalidOperationException($"{prototype.name} is missing branchL2WoodMesh and cannot enter urgent runtime registration.");
+            Mesh branchL3WoodMesh = prototype.BranchL3WoodMesh ??
+                                    throw new InvalidOperationException($"{prototype.name} is missing branchL3WoodMesh and cannot enter urgent runtime registration.");
+            Mesh branchL1CanopyMesh = prototype.BranchL1CanopyMesh ??
+                                      throw new InvalidOperationException($"{prototype.name} is missing branchL1CanopyMesh and cannot enter urgent runtime registration.");
+            Mesh branchL2CanopyMesh = prototype.BranchL2CanopyMesh ??
+                                      throw new InvalidOperationException($"{prototype.name} is missing branchL2CanopyMesh and cannot enter urgent runtime registration.");
+            Mesh branchL3CanopyMesh = prototype.BranchL3CanopyMesh ??
+                                      throw new InvalidOperationException($"{prototype.name} is missing branchL3CanopyMesh and cannot enter urgent runtime registration.");
 
             int prototypeIndex = branchPrototypes.Count;
-            int shellStartL1 = shellNodesL1.Count;
-            AppendShellHierarchy(shellNodesL1, prototype.ShellNodesL0, 0, shellMaterial, $"{prototype.name}:ShellL1");
-            int shellStartL2 = shellNodesL2.Count;
-            AppendShellHierarchy(shellNodesL2, prototype.ShellNodesL1, 1, shellMaterial, $"{prototype.name}:ShellL2");
-            int shellStartL3 = shellNodesL3.Count;
-            AppendShellHierarchy(shellNodesL3, prototype.ShellNodesL2, 2, shellMaterial, $"{prototype.name}:ShellL3");
-
             branchPrototypes.Add(new VegetationBranchPrototypeRuntime
             {
                 WoodDrawSlotL0 = RegisterDrawSlot(woodMesh, woodMaterial, VegetationRenderMaterialKind.Trunk, $"{prototype.name}:WoodL0"),
-                WoodDrawSlotL1 = RegisterDrawSlot(woodMesh, woodMaterial, VegetationRenderMaterialKind.Trunk, $"{prototype.name}:WoodL1"),
-                WoodDrawSlotL2 = RegisterDrawSlot(shellL1WoodMesh, woodMaterial, VegetationRenderMaterialKind.Trunk, $"{prototype.name}:WoodL2"),
-                WoodDrawSlotL3 = RegisterDrawSlot(shellL2WoodMesh, woodMaterial, VegetationRenderMaterialKind.Trunk, $"{prototype.name}:WoodL3"),
                 FoliageDrawSlotL0 = RegisterDrawSlot(foliageMesh, foliageMaterial, VegetationRenderMaterialKind.CanopyFoliage, $"{prototype.name}:FoliageL0"),
-                ShellNodeStartIndexL1 = shellStartL1,
-                ShellNodeCountL1 = prototype.ShellNodesL0.Length,
-                ShellNodeStartIndexL2 = shellStartL2,
-                ShellNodeCountL2 = prototype.ShellNodesL1.Length,
-                ShellNodeStartIndexL3 = shellStartL3,
-                ShellNodeCountL3 = prototype.ShellNodesL2.Length,
+                WoodDrawSlotL1 = RegisterDrawSlot(branchL1WoodMesh, woodMaterial, VegetationRenderMaterialKind.Trunk, $"{prototype.name}:WoodL1"),
+                CanopyDrawSlotL1 = RegisterDrawSlot(branchL1CanopyMesh, shellMaterial, VegetationRenderMaterialKind.CanopyShell, $"{prototype.name}:CanopyL1"),
+                WoodDrawSlotL2 = RegisterDrawSlot(branchL2WoodMesh, woodMaterial, VegetationRenderMaterialKind.Trunk, $"{prototype.name}:WoodL2"),
+                CanopyDrawSlotL2 = RegisterDrawSlot(branchL2CanopyMesh, shellMaterial, VegetationRenderMaterialKind.CanopyShell, $"{prototype.name}:CanopyL2"),
+                WoodDrawSlotL3 = RegisterDrawSlot(branchL3WoodMesh, woodMaterial, VegetationRenderMaterialKind.Trunk, $"{prototype.name}:WoodL3"),
+                CanopyDrawSlotL3 = RegisterDrawSlot(branchL3CanopyMesh, shellMaterial, VegetationRenderMaterialKind.CanopyShell, $"{prototype.name}:CanopyL3"),
                 PackedLeafTint = VegetationRuntimeMathUtility.PackColorToUint(prototype.LeafColorTint),
                 LocalBoundsCenter = prototype.LocalBounds.center,
                 LocalBoundsExtents = prototype.LocalBounds.extents
@@ -338,35 +377,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             prototypeIndices.Add(prototype, prototypeIndex);
             return prototypeIndex;
-        }
-
-        private void AppendShellHierarchy(
-            List<VegetationBranchShellNodeRuntimeBfs> targetList,
-            BranchShellNode[] sourceNodes,
-            int shellLevel,
-            Material shellMaterial,
-            string debugLabelPrefix)
-        {
-            if (sourceNodes == null || sourceNodes.Length == 0)
-            {
-                throw new InvalidOperationException($"{debugLabelPrefix} is missing persisted shell nodes and cannot enter Phase D runtime registration.");
-            }
-
-            for (int i = 0; i < sourceNodes.Length; i++)
-            {
-                BranchShellNode sourceNode = sourceNodes[i] ??
-                                             throw new InvalidOperationException($"{debugLabelPrefix}[{i}] is missing.");
-                Mesh shellMesh = BranchShellNodeUtility.GetShellMesh(sourceNode, shellLevel) ??
-                                 throw new InvalidOperationException($"{debugLabelPrefix}[{i}] is missing shell mesh.");
-                targetList.Add(new VegetationBranchShellNodeRuntimeBfs
-                {
-                    LocalCenter = sourceNode.LocalBounds.center,
-                    LocalExtents = sourceNode.LocalBounds.extents,
-                    FirstChildIndex = sourceNode.FirstChildIndex,
-                    ChildMask = sourceNode.ChildMask,
-                    ShellDrawSlot = RegisterDrawSlot(shellMesh, shellMaterial, VegetationRenderMaterialKind.CanopyShell, $"{debugLabelPrefix}[{i}]")
-                });
-            }
         }
 
         private Bounds TransformDrawSlotBounds(int drawSlotIndex, Matrix4x4 localToWorld)
@@ -397,10 +407,28 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 return existingIndex;
             }
 
+            if (drawSlots.Count >= maxRegisteredDrawSlots)
+            {
+                throw new InvalidOperationException(
+                    $"Runtime registration exceeded the configured registered draw-slot cap ({maxRegisteredDrawSlots}) while adding '{debugLabel}'.");
+            }
+
             int slotIndex = drawSlots.Count;
             drawSlots.Add(new VegetationDrawSlot(slotIndex, mesh, material, materialKind, debugLabel));
             drawSlotIndices.Add(key, slotIndex);
             return slotIndex;
+        }
+
+        private int ComputeDrawSlotWorkCost(int drawSlotIndex)
+        {
+            VegetationDrawSlot drawSlot = drawSlots[drawSlotIndex];
+            int indexCountPerInstance = checked((int)Math.Max(1u, drawSlot.IndexCountPerInstance));
+            return Math.Max(1, (indexCountPerInstance + (IndirectWorkCostIndexQuantum - 1)) / IndirectWorkCostIndexQuantum);
+        }
+
+        private int ComputePrototypeTierWorkCost(int woodDrawSlot, int canopyDrawSlot)
+        {
+            return checked(ComputeDrawSlotWorkCost(woodDrawSlot) + ComputeDrawSlotWorkCost(canopyDrawSlot));
         }
 
         private readonly struct DrawSlotKey : IEquatable<DrawSlotKey>

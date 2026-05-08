@@ -13,6 +13,9 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
     {
         [SerializeField] private Mesh? trunkMesh;
         [SerializeField] private Mesh? trunkL3Mesh;
+        [SerializeField] private Mesh? treeL3Mesh;
+        [SerializeField] private Mesh? shadowProxyMeshL0;
+        [SerializeField] private Mesh? shadowProxyMeshL1;
         [SerializeField] private Material? trunkMaterial;
         [SerializeField] private BranchPlacement[] branches = Array.Empty<BranchPlacement>();
         [SerializeField] private string generatedImpostorMeshesRelativeFolder = string.Empty;
@@ -20,11 +23,18 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         [SerializeField] private Material? impostorMaterial;
         [SerializeField] private LODProfileSO? lodProfile;
         [SerializeField] private ImpostorBakeSettings? ImposterBakeSettings;
+        [SerializeField] private ShadowProxyBakeSettings? shadowProxyBakeSettings;
         [SerializeField] private Bounds treeBounds = new Bounds(Vector3.zero, Vector3.one);
 
         public Mesh? TrunkMesh => trunkMesh;
 
         public Mesh? TrunkL3Mesh => trunkL3Mesh;
+
+        public Mesh? TreeL3Mesh => treeL3Mesh;
+
+        public Mesh? ShadowProxyMeshL0 => shadowProxyMeshL0;
+
+        public Mesh? ShadowProxyMeshL1 => shadowProxyMeshL1;
 
         public Material? TrunkMaterial => trunkMaterial;
 
@@ -37,6 +47,8 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         public Material? ImpostorMaterial => impostorMaterial;
 
         public ImpostorBakeSettings ImposterSettings => ImposterBakeSettings ?? new ImpostorBakeSettings();
+
+        public ShadowProxyBakeSettings ShadowProxySettings => shadowProxyBakeSettings ?? new ShadowProxyBakeSettings();
 
         public LODProfileSO? LodProfile => lodProfile;
 

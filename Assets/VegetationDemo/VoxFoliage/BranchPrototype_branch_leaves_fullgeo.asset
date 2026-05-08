@@ -17,7 +17,7 @@ MonoBehaviour:
   foliageMesh: {fileID: -6062578164958778753, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
   foliageMaterial: {fileID: 2100000, guid: 1e8b3c0229b50f94bab471853295c8d5, type: 2}
   leafColorTint: {r: 0.5867785, g: 0.9547169, b: 0.38008535, a: 1}
-  generatedCanopyShellsRelativeFolder: Tree/VoxFoliage/GeneratedMeshes/Branch_leaves
+  generatedCanopyShellsRelativeFolder: VegetationDemo/VoxFoliage/GeneratedMeshes/Branch_leaves
   shellNodesL0:
   - localBounds:
       m_Center: {x: -0.88199586, y: 0.03168489, z: 0.29744375}
@@ -6870,6 +6870,10 @@ MonoBehaviour:
     shellL0Mesh: {fileID: 0}
     shellL1Mesh: {fileID: 0}
     shellL2Mesh: {fileID: 4300000, guid: 0e43bd51d80590c45962399a1a1bb3b8, type: 2}
+  branchL1CanopyMesh: {fileID: 4300000, guid: 071ba517333334a4db950eb974b5397e, type: 2}
+  branchL2CanopyMesh: {fileID: 4300000, guid: 1e9e3593f59d35942864e5d026495dc1, type: 2}
+  branchL3CanopyMesh: {fileID: 4300000, guid: e5ec964ade5647a449bd07db93e278af, type: 2}
+  branchL1WoodMesh: {fileID: 8242496408859003367, guid: 1c1b4dd596015c3438e745b375f6cc9c, type: 3}
   shellL1WoodMesh: {fileID: 4300000, guid: b49a89fa041e5234ab2e4e1e117639fb, type: 2}
   shellL2WoodMesh: {fileID: 4300000, guid: 7413fe29846e2e64198e6fc4f4ec2ba6, type: 2}
   shellMaterial: {fileID: 2100000, guid: 1e8b3c0229b50f94bab471853295c8d5, type: 2}
@@ -6880,7 +6884,7 @@ MonoBehaviour:
   triangleBudgetFoliage: 4000
   triangleBudgetShellL0: 2000
   triangleBudgetShellL1: 500
-  triangleBudgetShellL2: 150
+  triangleBudgetShellL2: 250
   shellBakeSettings:
     maxOctreeDepth: 4
     voxelResolutionL0: 45

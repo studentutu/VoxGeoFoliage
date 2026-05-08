@@ -27,6 +27,7 @@ Shader "Hidden/VoxGeoFol/Vegetation/DepthOnly"
             #pragma target 4.5
             #pragma vertex Vert
             #pragma fragment Frag
+            #pragma multi_compile_instancing
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "VegetationIndirectCommon.hlsl"
@@ -44,6 +45,7 @@ Shader "Hidden/VoxGeoFol/Vegetation/DepthOnly"
 
             Varyings Vert(Attributes input)
             {
+                UNITY_SETUP_INSTANCE_ID(input);
                 VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
 
                 Varyings output;

@@ -38,7 +38,7 @@ public static class VegetationAuthoringValidator
         ValidateTriangleBudget(prototype.WoodMesh, prototype.TriangleBudgetWood, "woodMesh", result);
         ValidateTriangleBudget(prototype.FoliageMesh, prototype.TriangleBudgetFoliage, "foliageMesh", result);
         ValidateLocalBoundsContainSourceMeshes(prototype, result);
-        ValidateShellChain(prototype, result);
+        ValidateBranchSplitTierChain(prototype, result);
 
         return result;
     }
@@ -58,12 +58,15 @@ public static class VegetationAuthoringValidator
 
         ValidateRequiredReadableMesh(blueprint.TrunkMesh, "trunkMesh", result);
         ValidateRequiredReadableMesh(blueprint.TrunkL3Mesh, "trunkL3Mesh", result);
+        ValidateRequiredReadableMesh(blueprint.TreeL3Mesh, "treeL3Mesh", result);
         ValidateRequiredOpaqueMaterial(blueprint.TrunkMaterial, "trunkMaterial", result);
         ValidateBranchPlacements(blueprint, result);
         result.Merge(ValidateLodProfile(blueprint.LodProfile));
         ValidateImpostor(blueprint, result);
         ValidateTreeBounds(blueprint, result);
         ValidateTrunkL3Bounds(blueprint, result);
+        ValidateTreeL3Bounds(blueprint, result);
+        ValidateShadowProxies(blueprint, result);
 
         return result;
     }
@@ -124,220 +127,103 @@ public static class VegetationAuthoringValidator
         return result;
     }
 
-    private static void ValidateShellChain(BranchPrototypeSO prototype, VegetationValidationResult result)
+    private static void ValidateBranchSplitTierChain(BranchPrototypeSO prototype, VegetationValidationResult result)
     {
-        BranchShellNode[] shellNodesL0 = prototype.ShellNodesL0;
-        BranchShellNode[] shellNodesL1 = prototype.ShellNodesL1;
-        BranchShellNode[] shellNodesL2 = prototype.ShellNodesL2;
-        Mesh? shellL1WoodMesh = prototype.ShellL1WoodMesh;
-        Mesh? shellL2WoodMesh = prototype.ShellL2WoodMesh;
-        bool hasAnyShell = (shellNodesL0 != null && shellNodesL0.Length > 0) ||
-                           (shellNodesL1 != null && shellNodesL1.Length > 0) ||
-                           (shellNodesL2 != null && shellNodesL2.Length > 0) ||
-                           shellL1WoodMesh != null ||
-                           shellL2WoodMesh != null;
+        Mesh? sourceWoodMesh = prototype.WoodMesh;
+        Mesh? sourceFoliageMesh = prototype.FoliageMesh;
+        Mesh? branchL1WoodMesh = prototype.BranchL1WoodMesh;
+        Mesh? branchL2WoodMesh = prototype.BranchL2WoodMesh;
+        Mesh? branchL3WoodMesh = prototype.BranchL3WoodMesh;
+        Mesh? branchL1CanopyMesh = prototype.BranchL1CanopyMesh;
+        Mesh? branchL2CanopyMesh = prototype.BranchL2CanopyMesh;
+        Mesh? branchL3CanopyMesh = prototype.BranchL3CanopyMesh;
 
-        if (!hasAnyShell)
-        {
-            return;
-        }
-
-        if (shellNodesL0 == null || shellNodesL0.Length == 0 ||
-            shellNodesL1 == null || shellNodesL1.Length == 0 ||
-            shellNodesL2 == null || shellNodesL2.Length == 0 ||
-            shellL1WoodMesh == null ||
-            shellL2WoodMesh == null)
-        {
-            result.AddError("shellNodesL0, shellNodesL1, shellNodesL2, shellL1WoodMesh, and shellL2WoodMesh must all be assigned together.");
-            return;
-        }
-
-        ValidateOptionalReadableMesh(shellL1WoodMesh, "shellL1WoodMesh", result);
-        ValidateOptionalReadableMesh(shellL2WoodMesh, "shellL2WoodMesh", result);
+        ValidateRequiredReadableMesh(branchL1WoodMesh, "branchL1WoodMesh", result);
+        ValidateRequiredReadableMesh(branchL2WoodMesh, "branchL2WoodMesh", result);
+        ValidateRequiredReadableMesh(branchL3WoodMesh, "branchL3WoodMesh", result);
+        ValidateRequiredReadableMesh(branchL1CanopyMesh, "branchL1CanopyMesh", result);
+        ValidateRequiredReadableMesh(branchL2CanopyMesh, "branchL2CanopyMesh", result);
+        ValidateRequiredReadableMesh(branchL3CanopyMesh, "branchL3CanopyMesh", result);
 
         if (prototype.ShellMaterial == null)
         {
-            result.AddError("shellMaterial is required when shell meshes are assigned.");
+            result.AddError("shellMaterial is required when branch split tier meshes are assigned.");
         }
         else if (!TryValidateOpaqueMaterial(prototype.ShellMaterial, out string reason))
         {
             result.AddError($"shellMaterial must be opaque. {reason}");
         }
 
-        Mesh? sourceWoodMesh = prototype.WoodMesh;
         if (sourceWoodMesh == null ||
+            sourceFoliageMesh == null ||
+            branchL1WoodMesh == null ||
+            branchL2WoodMesh == null ||
+            branchL3WoodMesh == null ||
+            branchL1CanopyMesh == null ||
+            branchL2CanopyMesh == null ||
+            branchL3CanopyMesh == null ||
             !sourceWoodMesh.isReadable ||
-            !shellL1WoodMesh.isReadable ||
-            !shellL2WoodMesh.isReadable)
+            !sourceFoliageMesh.isReadable ||
+            !branchL1WoodMesh.isReadable ||
+            !branchL2WoodMesh.isReadable ||
+            !branchL3WoodMesh.isReadable ||
+            !branchL1CanopyMesh.isReadable ||
+            !branchL2CanopyMesh.isReadable ||
+            !branchL3CanopyMesh.isReadable)
         {
-            ValidateShellNodeHierarchy(shellNodesL0, 0, "shellNodesL0", result);
-            ValidateShellNodeHierarchy(shellNodesL1, 1, "shellNodesL1", result);
-            ValidateShellNodeHierarchy(shellNodesL2, 2, "shellNodesL2", result);
             return;
         }
 
         int sourceWoodTriangles = GetTriangleCount(sourceWoodMesh);
-        int shellL1WoodTriangles = GetTriangleCount(shellL1WoodMesh);
-        int shellL2WoodTriangles = GetTriangleCount(shellL2WoodMesh);
-
-        if (!(sourceWoodTriangles >= shellL1WoodTriangles && shellL1WoodTriangles >= shellL2WoodTriangles))
+        int branchL1WoodTriangles = GetTriangleCount(branchL1WoodMesh);
+        int branchL2WoodTriangles = GetTriangleCount(branchL2WoodMesh);
+        int branchL3WoodTriangles = GetTriangleCount(branchL3WoodMesh);
+        if (!(sourceWoodTriangles >= branchL1WoodTriangles &&
+              branchL1WoodTriangles >= branchL2WoodTriangles &&
+              branchL2WoodTriangles >= branchL3WoodTriangles))
         {
-            result.AddError("Wood triangle counts must not increase: source >= L1Wood >= L2Wood.");
+            result.AddError("Wood triangle counts must not increase: source >= branchL1WoodMesh >= branchL2WoodMesh >= branchL3WoodMesh.");
         }
 
-        if (!ContainsBounds(sourceWoodMesh.bounds, shellL1WoodMesh.bounds))
+        int sourceCanopyTriangles = GetTriangleCount(sourceFoliageMesh);
+        int branchL1CanopyTriangles = GetTriangleCount(branchL1CanopyMesh);
+        int branchL2CanopyTriangles = GetTriangleCount(branchL2CanopyMesh);
+        int branchL3CanopyTriangles = GetTriangleCount(branchL3CanopyMesh);
+        if (!(sourceCanopyTriangles >= branchL1CanopyTriangles &&
+              branchL1CanopyTriangles >= branchL2CanopyTriangles &&
+              branchL2CanopyTriangles >= branchL3CanopyTriangles))
         {
-            result.AddError("shellL1WoodMesh bounds must stay inside woodMesh bounds.");
+            result.AddError("Canopy triangle counts must not increase: source >= branchL1CanopyMesh >= branchL2CanopyMesh >= branchL3CanopyMesh.");
         }
 
-        if (!ContainsBounds(sourceWoodMesh.bounds, shellL2WoodMesh.bounds))
+        if (!ContainsBounds(sourceWoodMesh.bounds, branchL1WoodMesh.bounds))
         {
-            result.AddError("shellL2WoodMesh bounds must stay inside woodMesh bounds.");
+            result.AddError("branchL1WoodMesh bounds must stay inside woodMesh bounds.");
         }
 
-        ValidateShellNodeHierarchy(shellNodesL0, 0, "shellNodesL0", result);
-        ValidateShellNodeHierarchy(shellNodesL1, 1, "shellNodesL1", result);
-        ValidateShellNodeHierarchy(shellNodesL2, 2, "shellNodesL2", result);
-
-        int shellL0Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(shellNodesL0, 0);
-        int shellL1Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(shellNodesL1, 1);
-        int shellL2Triangles = BranchShellNodeUtility.GetTriangleCountForLeafFrontier(shellNodesL2, 2);
-        if (!(shellL0Triangles > shellL1Triangles && shellL1Triangles > shellL2Triangles))
+        if (!ContainsBounds(sourceWoodMesh.bounds, branchL2WoodMesh.bounds))
         {
-            result.AddError("Leaf-frontier shell triangle counts must strictly decrease: L0 > L1 > L2.");
+            result.AddError("branchL2WoodMesh bounds must stay inside woodMesh bounds.");
         }
 
-        if (shellL0Triangles > prototype.TriangleBudgetShellL0)
+        if (!ContainsBounds(sourceWoodMesh.bounds, branchL3WoodMesh.bounds))
         {
-            result.AddError($"Leaf-frontier shellL0 triangle count {shellL0Triangles} exceeds budget {prototype.TriangleBudgetShellL0}.");
+            result.AddError("branchL3WoodMesh bounds must stay inside woodMesh bounds.");
         }
 
-        if (shellL1Triangles > prototype.TriangleBudgetShellL1)
+        if (!ContainsBounds(sourceFoliageMesh.bounds, branchL1CanopyMesh.bounds))
         {
-            result.AddError($"Leaf-frontier shellL1 triangle count {shellL1Triangles} exceeds budget {prototype.TriangleBudgetShellL1}.");
+            result.AddError("branchL1CanopyMesh bounds must stay inside foliageMesh bounds.");
         }
 
-        if (shellL2Triangles > prototype.TriangleBudgetShellL2)
+        if (!ContainsBounds(sourceFoliageMesh.bounds, branchL2CanopyMesh.bounds))
         {
-            result.AddError($"Leaf-frontier shellL2 triangle count {shellL2Triangles} exceeds budget {prototype.TriangleBudgetShellL2}.");
-        }
-    }
-
-    private static void ValidateShellNodeHierarchy(
-        BranchShellNode[] shellNodes,
-        int shellLevel,
-        string fieldPrefix,
-        VegetationValidationResult result)
-    {
-        if (shellNodes.Length == 0)
-        {
-            result.AddError($"{fieldPrefix} must contain at least one occupied hierarchy node.");
-            return;
+            result.AddError("branchL2CanopyMesh bounds must stay inside foliageMesh bounds.");
         }
 
-        if (shellNodes[0] == null)
+        if (!ContainsBounds(sourceFoliageMesh.bounds, branchL3CanopyMesh.bounds))
         {
-            result.AddError($"{fieldPrefix}[0] is missing.");
-            return;
-        }
-
-        if (shellNodes[0].Depth != 0)
-        {
-            result.AddError($"{fieldPrefix}[0] must be the root node at depth 0.");
-        }
-
-        for (int i = 0; i < shellNodes.Length; i++)
-        {
-            BranchShellNode? node = shellNodes[i];
-            if (node == null)
-            {
-                result.AddError($"{fieldPrefix}[{i}] is missing.");
-                continue;
-            }
-
-            Mesh? relevantShellMesh = BranchShellNodeUtility.GetShellMesh(node, shellLevel);
-            if (relevantShellMesh == null)
-            {
-                result.AddError($"{fieldPrefix}[{i}] must assign shellL{shellLevel}Mesh.");
-                continue;
-            }
-
-            ValidateOptionalReadableMesh(relevantShellMesh, $"{fieldPrefix}[{i}].shellL{shellLevel}Mesh", result);
-
-            if (node.FirstChildIndex >= 0 && node.FirstChildIndex <= i)
-            {
-                result.AddError($"{fieldPrefix}[{i}] firstChildIndex must point to a later node index in the flattened hierarchy.");
-            }
-
-            if (node.ChildMask == 0)
-            {
-                if (node.FirstChildIndex >= 0)
-                {
-                    result.AddError($"{fieldPrefix}[{i}] cannot declare firstChildIndex without childMask.");
-                }
-            }
-            else
-            {
-                int childCount = CountBits(node.ChildMask);
-                if (node.FirstChildIndex < 0)
-                {
-                    result.AddError($"{fieldPrefix}[{i}] childMask requires firstChildIndex.");
-                }
-                else if (node.FirstChildIndex + childCount > shellNodes.Length)
-                {
-                    result.AddError($"{fieldPrefix}[{i}] child range exceeds {fieldPrefix} length.");
-                }
-                else
-                {
-                    for (int childOffset = 0; childOffset < childCount; childOffset++)
-                    {
-                        BranchShellNode? childNode = shellNodes[node.FirstChildIndex + childOffset];
-                        if (childNode == null)
-                        {
-                            result.AddError($"{fieldPrefix}[{i}] child {childOffset} is missing.");
-                            continue;
-                        }
-
-                        if (childNode.Depth != node.Depth + 1)
-                        {
-                            result.AddError($"{fieldPrefix}[{i}] children must be exactly one depth level deeper.");
-                        }
-
-                        if (!ContainsBounds(node.LocalBounds, childNode.LocalBounds))
-                        {
-                            result.AddError($"{fieldPrefix}[{i}] child bounds must stay inside parent bounds.");
-                        }
-
-                        int expectedOctant = GetExpectedChildOctant(node.ChildMask, childOffset);
-                        if (!TryGetChildOctant(node.LocalBounds, childNode.LocalBounds, out int actualOctant))
-                        {
-                            result.AddError($"{fieldPrefix}[{i}] child bounds must resolve to exactly one octant for BFS validation.");
-                            continue;
-                        }
-
-                        if (actualOctant != expectedOctant)
-                        {
-                            result.AddError($"{fieldPrefix}[{i}] child block order must follow ascending octant-bit order from childMask.");
-                        }
-                    }
-                }
-            }
-
-            if (!relevantShellMesh.isReadable)
-            {
-                continue;
-            }
-
-            if (!ContainsBounds(node.LocalBounds, relevantShellMesh.bounds))
-            {
-                result.AddError($"{fieldPrefix}[{i}] mesh bounds must stay inside node localBounds.");
-            }
-        }
-
-        List<BranchShellNode> leafNodes = BranchShellNodeUtility.CollectLeafNodes(shellNodes);
-        if (leafNodes.Count == 0)
-        {
-            result.AddError($"{fieldPrefix} must contain at least one renderable leaf node.");
+            result.AddError("branchL3CanopyMesh bounds must stay inside foliageMesh bounds.");
         }
     }
 
@@ -488,6 +374,68 @@ public static class VegetationAuthoringValidator
         }
     }
 
+    private static void ValidateTreeL3Bounds(TreeBlueprintSO blueprint, VegetationValidationResult result)
+    {
+        Mesh? treeL3Mesh = blueprint.TreeL3Mesh;
+        Mesh? trunkMesh = blueprint.TrunkMesh;
+        if (treeL3Mesh == null || !treeL3Mesh.isReadable || trunkMesh == null || !trunkMesh.isReadable)
+        {
+            return;
+        }
+
+        if (!ContainsBounds(blueprint.TreeBounds, treeL3Mesh.bounds))
+        {
+            result.AddError("treeL3Mesh bounds must stay inside treeBounds.");
+        }
+
+        int sourceTriangleCount = ComputeAssembledSourceTreeTriangleCount(blueprint);
+
+        if (GetTriangleCount(treeL3Mesh) >= sourceTriangleCount)
+        {
+            result.AddError("treeL3Mesh triangle count must be strictly lower than the assembled source tree triangle count.");
+        }
+    }
+
+    private static void ValidateShadowProxies(TreeBlueprintSO blueprint, VegetationValidationResult result)
+    {
+        Mesh? treeL3Mesh = blueprint.TreeL3Mesh;
+        if (treeL3Mesh == null || !treeL3Mesh.isReadable)
+        {
+            return;
+        }
+
+        int sourceTriangleCount = ComputeAssembledSourceTreeTriangleCount(blueprint);
+        if (sourceTriangleCount <= 0)
+        {
+            return;
+        }
+
+        int treeL3Triangles = GetTriangleCount(treeL3Mesh);
+        ValidateShadowProxyMesh(
+            blueprint,
+            blueprint.ShadowProxyMeshL1,
+            "shadowProxyMeshL1",
+            "treeL3Mesh",
+            treeL3Triangles,
+            sourceTriangleCount,
+            result);
+
+        int l1ReferenceTriangles = blueprint.ShadowProxyMeshL1 != null && blueprint.ShadowProxyMeshL1.isReadable
+            ? GetTriangleCount(blueprint.ShadowProxyMeshL1)
+            : treeL3Triangles;
+        string l1ReferenceField = blueprint.ShadowProxyMeshL1 != null && blueprint.ShadowProxyMeshL1.isReadable
+            ? "shadowProxyMeshL1"
+            : "treeL3Mesh";
+        ValidateShadowProxyMesh(
+            blueprint,
+            blueprint.ShadowProxyMeshL0,
+            "shadowProxyMeshL0",
+            l1ReferenceField,
+            l1ReferenceTriangles,
+            sourceTriangleCount,
+            result);
+    }
+
     private static void ValidateRequiredReadableMesh(Mesh? mesh, string fieldName, VegetationValidationResult result)
     {
         if (mesh == null)
@@ -507,6 +455,43 @@ public static class VegetationAuthoringValidator
         if (mesh != null && !mesh.isReadable)
         {
             result.AddError($"{fieldName} must be readable.");
+        }
+    }
+
+    private static void ValidateShadowProxyMesh(
+        TreeBlueprintSO blueprint,
+        Mesh? mesh,
+        string fieldName,
+        string lowerDetailFieldName,
+        int lowerDetailTriangleCount,
+        int sourceTriangleCount,
+        VegetationValidationResult result)
+    {
+        if (mesh == null)
+        {
+            return;
+        }
+
+        ValidateOptionalReadableMesh(mesh, fieldName, result);
+        if (!mesh.isReadable)
+        {
+            return;
+        }
+
+        if (!ContainsBounds(blueprint.TreeBounds, mesh.bounds))
+        {
+            result.AddError($"{fieldName} bounds must stay inside treeBounds.");
+        }
+
+        int triangleCount = GetTriangleCount(mesh);
+        if (triangleCount >= sourceTriangleCount)
+        {
+            result.AddError($"{fieldName} triangle count must be strictly lower than the assembled source tree triangle count.");
+        }
+
+        if (triangleCount <= lowerDetailTriangleCount)
+        {
+            result.AddError($"{fieldName} triangle count must stay above {lowerDetailFieldName} triangle count.");
         }
     }
 
@@ -586,6 +571,34 @@ public static class VegetationAuthoringValidator
     private static int GetTriangleCount(Mesh mesh)
     {
         return mesh.triangles.Length / 3;
+    }
+
+    private static int ComputeAssembledSourceTreeTriangleCount(TreeBlueprintSO blueprint)
+    {
+        Mesh? trunkMesh = blueprint.TrunkMesh;
+        if (trunkMesh == null || !trunkMesh.isReadable)
+        {
+            return 0;
+        }
+
+        int sourceTriangleCount = GetTriangleCount(trunkMesh);
+        BranchPlacement[] placements = blueprint.Branches;
+        for (int i = 0; i < placements.Length; i++)
+        {
+            BranchPrototypeSO? prototype = placements[i]?.Prototype;
+            if (prototype?.WoodMesh == null ||
+                prototype.FoliageMesh == null ||
+                !prototype.WoodMesh.isReadable ||
+                !prototype.FoliageMesh.isReadable)
+            {
+                continue;
+            }
+
+            sourceTriangleCount += GetTriangleCount(prototype.WoodMesh);
+            sourceTriangleCount += GetTriangleCount(prototype.FoliageMesh);
+        }
+
+        return sourceTriangleCount;
     }
 
     private static int CountBits(byte value)

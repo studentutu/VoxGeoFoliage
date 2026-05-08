@@ -100,10 +100,8 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     DrawTriangleLabel("L1", summary.L1Triangles);
                     DrawTriangleLabel("L2", summary.L2Triangles);
                     DrawTriangleLabel("L3", summary.L3Triangles);
+                    DrawTriangleLabel("TreeL3", summary.TreeL3Triangles);
                     DrawTriangleLabel("Impostor", summary.ImpostorTriangles);
-                    DrawTriangleLabel("ShellL1 Only", summary.ShellL1OnlyTriangles);
-                    DrawTriangleLabel("ShellL2 Only", summary.ShellL2OnlyTriangles);
-                    DrawTriangleLabel("ShellL3 Only", summary.ShellL3OnlyTriangles);
                 }
                 catch (Exception exception)
                 {
@@ -140,6 +138,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             EditorGUILayout.LabelField("Trunk L3 Mesh", authoring.Blueprint.TrunkL3Mesh == null ? "Missing" : "Assigned");
+            EditorGUILayout.LabelField("Tree L3 Mesh", authoring.Blueprint.TreeL3Mesh == null ? "Missing" : "Assigned");
             EditorGUILayout.LabelField("Manual Rebake", "Required on package sample and repo-local mirror assets");
 
             if (!string.IsNullOrEmpty(validationExceptionMessage))
@@ -258,14 +257,32 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    if (GUILayout.Button("Regenerate Shells"))
+                    if (GUILayout.Button("Regenerate Canopy LODs"))
                     {
-                        TryRun("Regenerate Shells", () => VegetationTreeAuthoringEditorUtility.BakeCanopyShells(authoring));
+                        TryRun("Regenerate Canopy LODs", () => VegetationTreeAuthoringEditorUtility.BakeCanopyShells(authoring));
                     }
 
                     if (GUILayout.Button("Regenerate Trunk L3"))
                     {
                         TryRun("Regenerate Trunk L3", () => VegetationTreeAuthoringEditorUtility.BakeTrunkL3(authoring));
+                    }
+
+                    if (GUILayout.Button("Regenerate Tree L3"))
+                    {
+                        TryRun("Regenerate Tree L3", () => VegetationTreeAuthoringEditorUtility.BakeTreeL3(authoring));
+                    }
+                }
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("Regenerate Shadow Proxy L1"))
+                    {
+                        TryRun("Regenerate Shadow Proxy L1", () => VegetationTreeAuthoringEditorUtility.BakeShadowProxyL1(authoring));
+                    }
+
+                    if (GUILayout.Button("Regenerate Shadow Proxy L0"))
+                    {
+                        TryRun("Regenerate Shadow Proxy L0", () => VegetationTreeAuthoringEditorUtility.BakeShadowProxyL0(authoring));
                     }
 
                     if (GUILayout.Button("Regenerate Impostor"))
@@ -339,8 +356,10 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             }
 
             AddMatchingIssues(blockers, validationResult, "trunkL3Mesh");
-            AddMatchingIssues(blockers, validationResult, "octant-bit order");
-            AddMatchingIssues(blockers, validationResult, "octant for BFS validation");
+            AddMatchingIssues(blockers, validationResult, "treeL3Mesh");
+            AddMatchingIssues(blockers, validationResult, "branchL1CanopyMesh");
+            AddMatchingIssues(blockers, validationResult, "branchL2CanopyMesh");
+            AddMatchingIssues(blockers, validationResult, "branchL3CanopyMesh");
             return blockers;
         }
 

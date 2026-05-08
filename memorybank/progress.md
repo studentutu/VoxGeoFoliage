@@ -1,56 +1,36 @@
 # Progress
 
-Purpose: track the active milestone, the current blockers, and the next concrete tasks only.
+Purpose: current milestone, current blockers, next tasks. Nothing else.
 
 ## Current Milestone
 
-- Milestone: `Milestone 2 - Wind and Production Improvements`
+- Milestone: `Milestone 2 - Production Runtime Cleanup`
 - Scope authority: [Milestone2.md](../DetailedDocs/Milestone2.md)
-- Runtime/data authority: [UnityAssembledVegetation_FULL.md](../DetailedDocs/UnityAssembledVegetation_FULL.md)
+- Runtime authority: [VegetationRuntimeArchitecture.md](../DetailedDocs/VegetationRuntimeArchitecture.md)
+  now includes full ASCII bake, registration, color/depth, and shadow pipelines with payload ownership and resident-memory surfaces
 - Finished baseline: [Milestone1.md](../DetailedDocs/Milestone1.md)
+- Latest completed cleanup: branch prototype authoring now persists only the split-tier runtime mesh chain (`branchL1/2/3CanopyMesh` + `branchL1/2/3WoodMesh`); obsolete shell-node authoring/runtime contracts and sample per-node shell assets were removed.
 
-## Status Snapshot
+## Current Blockers
 
-- `2026-04-11`: Milestone 1 is finished. The shipped runtime path is GPU-resident only through `VegetationRuntimeContainer`, `VegetationGpuDecisionPipeline`, `VegetationIndirectRenderer`, and `VegetationRendererFeature`.
-- `2026-04-12`: Runtime scaling hardening landed. Shell-node runtime caches stay prototype-local, branch and shell-node bounds are generated on GPU per frame from transforms, and `VegetationRuntimeContainer.maxVisibleInstanceCapacity` now hard-bounds the shared visible-instance buffer instead of reserving scene-scale per-slot/node memory.
-- `2026-04-12`: `VegetationRuntimeContainer.maxVisibleInstanceCapacity` default was raised to `262144`, and changing that serialized value now forces the GPU pipeline to rebuild so higher per-container budgets actually apply without a full registration rebuild.
-- `2026-04-12`: Documentation was corrected to state the real runtime scope: `maxVisibleInstanceCapacity` is per container, not a global scene budget. Large forests may be split across multiple containers to avoid one-container overflow, but total scene memory and visible capacity then scale with the number of visible containers because there is still no global coordinator.
-- `2026-04-12`: Urgent dense-forest redesign was documented in `DetailedDocs/urgentRedesign.md`. Current shipped overflow policy is still slot-order-based; the approved direction is guaranteed tree presence first, then nearest-tree and nearest-branch promotion buckets.
-- `2026-04-12`: Closed-`SubScene` runtime registration support landed. `AuthoringContainerRuntime` is now the single runtime owner, `VegetationRuntimeContainer` is only the classic-scene lifecycle provider, `VegetationTreeAuthoringRuntime` is the shared registration contract, `VegetationRendererFeature` consumes active runtime owners from `VegetationActiveAuthoringContainerRuntimes`, and `Vegetation.SubScene` bootstraps the same runtime owner from baked `SubSceneAuthoring` data.
-- `2026-04-12`: Unity full compile now passes after the `Vegetation.SubScene` asmdef was added and wired to `Unity.Entities.Hybrid` plus `Unity.Mathematics`.
-- Current production gap 1: hierarchical wind is still not implemented.
-- Current production gap 2: runtime material ownership is still hard-coded through `VegetationIndirectMaterialFactory`, which rebuilds runtime materials from package shader names and copies only a narrow property subset.
-- Current production gap 3: canopy-shell generation still does not support the intended `GPUVoxelizer` path from quad and alpha-masked branch inputs.
-- Current package-consumer risk: project-local custom materials and masked-quad foliage inputs are not first-class yet because runtime rendering and bake tooling still expose a narrow source contract.
+- shadow target is now `ShadowMode.Off` / `ShadowMode.CheapTree`, but current code still exposes legacy `RenderMainLightShadows` / `AllowExpandedTreePromotionInShadows`
+- shadow currently reuses the same default budget shape as color, so explicit-frustum/shadow preparation doubles fixed residency without proving it needs to
+- camera and explicit-frustum preparation still keep two full GPU pipelines per active container instead of the target pooled prepared-view residency
+- current enabled shadow promotion can use independent `ShadowProxyL0/L1` tree proxies; production target requires same-as-color near `L0/L1` shadows and cheap tree-only farther `L2/TreeL3` shadows instead
+- visible-instance clamping is still slot-order biased
+- active-slot submission and actual-usage telemetry are latest async readback snapshots, so first prepared frames can still fall back to registered slots and reported counts can lag the frame being rendered
+- dense-forest and shadow validation are still pending on the split-budget path
 
-## Immediate Tasks
+## Next Tasks
 
-### Urgent runtime redesign
+Goal: finish the post-ownership-split runtime cleanup now that split budgets and actual-work dispatch match the prepared-view design.
 
-- Replace slot-order overflow with the `urgentRedesign.md` pipeline: guaranteed tree presence proxy first, then nearest-tree promotion.
-- Add explicit per-frame tree acceptance records before per-slot packing.
-- Add dense-forest validation for one container with around `6000` tightly packed trees and camera inside the forest.
-- Add overflow telemetry: visible trees, proxy trees, promoted trees, rejected promotions, requested detail, accepted detail, and per-bucket usage.
+1. Replace legacy shadow toggles with `ShadowMode.Off` and `ShadowMode.CheapTree`.
+2. Implement `CheapTree`: same-as-color shadow casters for near active `L0/L1`, cheap tree-only casters for farther `L2/TreeL3`, and no impostor cast shadow by default.
+3. Remove production use of independent `ShadowProxyL0/L1` promotion and add shadow-caster cost/bounds validation.
+4. Tune shadow budgets separately from color now that actual usage telemetry exists.
+5. Reduce duplicated camera/shadow GPU residency toward the pooled prepared-view ownership target.
+6. Remove slot-order bias from visible-instance clamping.
+7. Run dense-forest and shadow validation on the split-budget path, including async active-slot warm-up behavior.
 
-### Milestone 2 Breakdown
-
-- Freeze the public runtime material compatibility contract: direct-compatible materials, explicit adapter/binding path, and hard-fail validation for unsupported materials.
-- Remove `VegetationIndirectMaterialFactory` as the public material authority so runtime does not silently replace authored materials with package-only shaders.
-- Enforce shader contract for the custom materials, test on the package material (enforce to use package supportVegetation.hlsl, not yet implemented). 
-- Resolve draw-slot identity from the final runtime-compatible material pair, not from stale pre-conversion assumptions.
-- Freeze the first-pass hierarchical wind contract: global wind inputs, species-level profile, per-tree phase seed, and tier-specific deformation rules.
-- Implement wind support in the compatible material path so custom project materials are not locked out of the wind system.
-- Freeze the `GPUVoxelizer` masked-quad bake input contract and implement canopy-shell generation from quad and alpha-masked branch inputs.
-- Run a clean URP package-consumer smoke pass and tighten docs around custom materials, masked-quad bake support, depth-pass requirements, and runtime setup.
-
-## Improvement right after Milestone
-
-- Dithered LOD transitions
-- DFS hierarchy migration plus subtree spans
-- Scale quantization optimization
-- HiZ depth pyramid occlusion (or other deep occlusion in classification)
-
-## Deferred
-
-- Feature-grade placement tools
-- Optional texture/quad-card branch baking follow-up
+Target Result: simplified memory footprint for runtime path, production shadow support through `ShadowMode.CheapTree`, true separation of draw calls for shadow path and depth/main color path, and production ready support for a container with 10_000 trees that has near prioritization and actual hard budgeting.

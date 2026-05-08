@@ -179000,7 +179000,13 @@ MonoBehaviour:
   - {fileID: 1608642082}
   - {fileID: 114211208}
   - {fileID: 1317893972}
-  maxVisibleInstanceCapacity: 262144
+  colorMaxVisibleInstanceCapacity: 131072
+  colorMaxExpandedBranchWorkItemCapacity: 131072
+  colorMaxApproxWorkUnitCapacity: 131072
+  shadowMaxVisibleInstanceCapacity: 65536
+  shadowMaxExpandedBranchWorkItemCapacity: 65536
+  shadowMaxApproxWorkUnitCapacity: 65536
+  maxRegisteredDrawSlots: 2048
 --- !u!114 &805065711
 MonoBehaviour:
   m_ObjectHideFlags: 0

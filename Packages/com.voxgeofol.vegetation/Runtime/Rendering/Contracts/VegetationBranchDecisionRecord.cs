@@ -3,7 +3,7 @@
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// Stable branch-tier decision payload for one scene branch instance.
+    /// Compact promoted-tree branch work payload used by the urgent runtime path.
     /// </summary>
     public struct VegetationBranchDecisionRecord
     {

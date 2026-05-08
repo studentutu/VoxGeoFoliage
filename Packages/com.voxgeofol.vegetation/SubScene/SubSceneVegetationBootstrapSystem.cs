@@ -62,7 +62,16 @@ namespace VoxGeoFol.Features.Vegetation.SubScene
                     container.RenderLayer,
                     container.GridOrigin,
                     container.CellSize,
-                    container.MaxVisibleInstanceCapacity,
+                    new VegetationRuntimeBudget(
+                        new VegetationViewRuntimeBudget(
+                            container.ColorMaxVisibleInstances,
+                            container.ColorMaxExpandedBranchWorkItems,
+                            container.ColorMaxApproxWorkUnits),
+                        new VegetationViewRuntimeBudget(
+                            container.ShadowMaxVisibleInstances,
+                            container.ShadowMaxExpandedBranchWorkItems,
+                            container.ShadowMaxApproxWorkUnits),
+                        container.MaxRegisteredDrawSlots),
                     runtimeTrees);
                 runtimeOwner.Activate();
                 runtimeOwner.RefreshRuntimeRegistration();

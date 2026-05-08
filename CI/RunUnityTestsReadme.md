@@ -5,12 +5,13 @@ We are using Unity Editor’s Test Runner.
 All tests are in xml file and Unity logs here `./CI/CITestOutput.xml`
 
 1. Rebuild C# solution and check for compile errors in [CompileErrorsAfterUnityRun.txt](CI/CompileErrorsAfterUnityRun.txt) file (if any):
-   - Use "Compile by Rider MSBuild" (see .vscode/tasks.json) for a fast compile check when no new .cs/asmdef files were added. Does not use Unity editor(preferred way).
+   - Use "Compile by Rider MSBuild" (see .vscode/tasks.json) for a fast compile check when no new .cs/asmdef files were added. Does not use Unity editor(preferred way). 
    - Use "Fully Compile by Unity" when new files/asmdefs were added or before running tests. Requires to close editor and compilation will use new headless Editor process. This takes  1-4 minutes.
    - "Fully Compile by Unity" will search for `error CS...` lines plus `## Script Compilation Error` blocks with a 50-line capture window of Burst generated error.
 
 Note:
 
+- If agent touches shader or compute shader MSBUILD/Rider won’t validate shader import/runtime kernel shape. Prefer "Fully Compile by Unity" or ask user to validate shader (click on the shader to view any errors/warnings)
 - "Fully Compile by Unity" task must be called if new `.cs` file is added, before running any tests, as it is the only way to properly rebuild solution. This will also update [CompileErrorsAfterUnityRun.txt](CI/CompileErrorsAfterUnityRun.txt) which shows all compile time errors, if the text file is not empty. This is best to run automatically but infrequent (this process takes 1-2 minutes).
 - **IMPORTANT**: `xxxx-unity.sln` will not see new `.cs` files, you will need to rebuild solution from within Unity Editor by running `rebuildSolutionFromUnityItself.sh`, see [Fully Compile by Unity](../.vscode/tasks.json).
 - "Compile by Rider MSBuild" and "Fully Compile by Unity" writes compile errors to the same [CompileErrorsAfterUnityRun.txt](CI/CompileErrorsAfterUnityRun.txt) file.

@@ -18,12 +18,14 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
         [SerializeField] private Material? foliageMaterial;
         [SerializeField] private Color leafColorTint = Color.white;
         [SerializeField] private string generatedCanopyShellsRelativeFolder = string.Empty;
-        [FormerlySerializedAs("shellNodes")]
-        [SerializeField] private BranchShellNode[] shellNodesL0 = Array.Empty<BranchShellNode>();
-        [SerializeField] private BranchShellNode[] shellNodesL1 = Array.Empty<BranchShellNode>();
-        [SerializeField] private BranchShellNode[] shellNodesL2 = Array.Empty<BranchShellNode>();
-        [SerializeField] private Mesh? shellL1WoodMesh;
-        [SerializeField] private Mesh? shellL2WoodMesh;
+        [SerializeField] private Mesh? branchL1CanopyMesh;
+        [SerializeField] private Mesh? branchL2CanopyMesh;
+        [SerializeField] private Mesh? branchL3CanopyMesh;
+        [SerializeField] private Mesh? branchL1WoodMesh;
+        [FormerlySerializedAs("shellL1WoodMesh")]
+        [SerializeField] private Mesh? branchL2WoodMesh;
+        [FormerlySerializedAs("shellL2WoodMesh")]
+        [SerializeField] private Mesh? branchL3WoodMesh;
         [SerializeField] private Material? shellMaterial;
         [SerializeField] private Bounds localBounds = new Bounds(Vector3.zero, Vector3.one);
         [SerializeField] [Min(1)] private int triangleBudgetWood = 2048;
@@ -46,15 +48,17 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
 
         public string GeneratedCanopyShellsRelativeFolder => generatedCanopyShellsRelativeFolder;
 
-        public BranchShellNode[] ShellNodesL0 => shellNodesL0;
+        public Mesh? BranchL1CanopyMesh => branchL1CanopyMesh;
 
-        public BranchShellNode[] ShellNodesL1 => shellNodesL1;
+        public Mesh? BranchL2CanopyMesh => branchL2CanopyMesh;
 
-        public BranchShellNode[] ShellNodesL2 => shellNodesL2;
+        public Mesh? BranchL3CanopyMesh => branchL3CanopyMesh;
 
-        public Mesh? ShellL1WoodMesh => shellL1WoodMesh;
+        public Mesh? BranchL1WoodMesh => branchL1WoodMesh;
 
-        public Mesh? ShellL2WoodMesh => shellL2WoodMesh;
+        public Mesh? BranchL2WoodMesh => branchL2WoodMesh;
+
+        public Mesh? BranchL3WoodMesh => branchL3WoodMesh;
 
         public Material? ShellMaterial => shellMaterial;
 

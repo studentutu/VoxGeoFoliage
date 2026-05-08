@@ -24,13 +24,25 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         [Tooltip("Render event for the vegetation color pass after the GPU-resident frame has been prepared.")]
         public RenderPassEvent ColorPassEvent = RenderPassEvent.AfterRenderingOpaques;
 
+        /// <summary>
+        /// Main-light shadow atlas submission runs here.
+        /// </summary>
+        [Tooltip("Render event for vegetation shadow-map submission. Current contract: main-light directional shadow atlas only, using cascade-specific resident frames derived from the camera-visible vegetation set.")]
+        public RenderPassEvent ShadowPassEvent = RenderPassEvent.AfterRenderingShadows;
+
+        [Tooltip("When enabled, the feature appends vegetation shadow casters into the main-light shadow atlas. Current contract: main-light directional shadows only, using cascade-specific resident frames derived from the camera-visible vegetation set.")]
+        public bool RenderMainLightShadows = true;
+
+        [Tooltip("When disabled, shadow preparation clamps visible vegetation to the TreeL3 shadow floor. When enabled, only trees inside the authored L1/L0 distance bands can promote to tree-level shadowProxyMeshL1/L0 casters; trees in the L2 band and farther stay at TreeL3.")]
+        public bool AllowExpandedTreePromotionInShadows;
+
         [Tooltip("When enabled, vegetation renders for Game cameras.")]
         public bool RenderGameCameras = true;
 
         [Tooltip("When enabled, vegetation renders for SceneView cameras.")]
         public bool RenderSceneViewCameras = true;
 
-        [Tooltip("Emits renderer-wide runtime diagnostics for registration, preparation, and indirect submission.")]
+        [Tooltip("Emits renderer-wide runtime diagnostics for registration, preparation, indirect submission, branch/shell/visible-instance telemetry, and one-shot emitted-slot readback for architecture review.")]
         public bool EnableDiagnostics;
 
         /// <summary>

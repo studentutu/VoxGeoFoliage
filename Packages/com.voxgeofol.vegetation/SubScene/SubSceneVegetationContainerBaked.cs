@@ -16,6 +16,12 @@ namespace VoxGeoFol.Features.Vegetation.SubScene
         public Vector3 GridOrigin;
         public Vector3 CellSize;
         public int RenderLayer;
-        public int MaxVisibleInstanceCapacity;
+        public int ColorMaxVisibleInstances;
+        public int ColorMaxExpandedBranchWorkItems;
+        public int ColorMaxApproxWorkUnits;
+        public int ShadowMaxVisibleInstances;
+        public int ShadowMaxExpandedBranchWorkItems;
+        public int ShadowMaxApproxWorkUnits;
+        public int MaxRegisteredDrawSlots;
     }
 }

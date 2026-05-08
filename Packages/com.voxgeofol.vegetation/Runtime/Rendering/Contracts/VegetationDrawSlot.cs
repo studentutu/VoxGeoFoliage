@@ -5,7 +5,9 @@ using UnityEngine;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// Stable exact mesh/material slot consumed by outputs and rendering.
+    /// Stable exact runtime registry identity defined by mesh, material, and material kind.
+    /// One draw slot owns one slot index, one indirect-args record, and one potential final indirect submission in a pass.
+    /// It is not the same thing as a packed visible instance.
     /// </summary>
     public sealed class VegetationDrawSlot
     {

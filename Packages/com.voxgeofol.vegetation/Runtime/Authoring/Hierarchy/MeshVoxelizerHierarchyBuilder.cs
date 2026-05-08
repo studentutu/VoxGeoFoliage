@@ -280,6 +280,7 @@ namespace MeshVoxelizerProject
             }
 
             int compactTriangles = GetTriangleCount(compactMesh);
+            // Compact tiers intentionally collapse to one node when the resampled shell is cheaper than keeping the child frontier.
             if (compactTriangles > 0 && compactTriangles <= compactChildLeafTriangles)
             {
                 compactNode.LeafTriangleCount = compactTriangles;

@@ -38,7 +38,7 @@ public sealed class VegetationRuntimeFoundationTests
     }
 
     [Test]
-    public void RuntimeRegistryBuilder_AssignsCellsAndKeepsPrototypeShellDataShared()
+    public void RuntimeRegistryBuilder_AssignsCellsAndKeepsBlueprintPlacementsShared()
     {
         VegetationTreeAuthoring firstAuthoring = CreateAuthoring("Tree_A", new Vector3(0f, 0f, 10f));
         VegetationTreeAuthoring secondAuthoring = CreateAuthoring("Tree_B", new Vector3(120f, 0f, 10f));
@@ -54,15 +54,57 @@ public sealed class VegetationRuntimeFoundationTests
         Assert.AreEqual("Tree_B", registry.TreeInstances[1].Authoring.DebugName);
         Assert.AreEqual(2, registry.SpatialGrid.Cells.Count);
         Assert.AreNotEqual(registry.TreeInstances[0].CellIndex, registry.TreeInstances[1].CellIndex);
-        Assert.AreEqual(2, registry.SceneBranches.Count);
-        Assert.AreEqual(2, registry.ShellNodesL1.Count);
-        Assert.AreEqual(2, registry.ShellNodesL2.Count);
-        Assert.AreEqual(2, registry.ShellNodesL3.Count);
-        Assert.AreEqual(registry.SceneBranches[0].PrototypeIndex, registry.SceneBranches[1].PrototypeIndex);
+        Assert.AreEqual(registry.SpatialGrid.Cells.Count, registry.CellTreeIndexStarts.Count);
+        Assert.AreEqual(registry.SpatialGrid.Cells.Count, registry.CellTreeIndexCounts.Count);
+        Assert.AreEqual(registry.TreeInstances.Count, registry.CellTreeIndices.Count);
+        Assert.AreEqual(1, registry.TreeBlueprints.Count);
+        Assert.AreEqual(1, registry.BlueprintBranchPlacements.Count);
+        Assert.AreEqual(1, registry.BranchPrototypes.Count);
+        Assert.AreEqual(0, registry.BlueprintBranchPlacements[0].PrototypeIndex);
+        int firstCellIndex = registry.TreeInstances[0].CellIndex;
+        int secondCellIndex = registry.TreeInstances[1].CellIndex;
+        Assert.AreEqual(1, registry.CellTreeIndexCounts[firstCellIndex]);
+        Assert.AreEqual(1, registry.CellTreeIndexCounts[secondCellIndex]);
+        Assert.AreEqual(0, registry.CellTreeIndices[registry.CellTreeIndexStarts[firstCellIndex]]);
+        Assert.AreEqual(1, registry.CellTreeIndices[registry.CellTreeIndexStarts[secondCellIndex]]);
+        Matrix4x4 expectedLocalToTree = Matrix4x4.TRS(Vector3.zero + new Vector3(0f, 1f, 0f), Quaternion.identity, Vector3.one);
+        AssertMatrixApproximatelyEqual(expectedLocalToTree, registry.BlueprintBranchPlacements[0].LocalToTree);
+        AssertMatrixApproximatelyEqual(expectedLocalToTree.inverse, registry.BlueprintBranchPlacements[0].TreeToLocal);
     }
 
     [Test]
-    public void IndirectRenderer_BindGpuResidentFrame_ExposesConservativeSnapshots()
+    public void RuntimeRegistryBuilder_ThrowsWhenRegisteredDrawSlotCapIsExceeded()
+    {
+        VegetationTreeAuthoring authoring = CreateAuthoring("CappedSlotsTree", new Vector3(0f, 0f, 10f));
+        Hash128 containerIdHash = Hash128.Compute("RuntimeRegistryBuilder_ThrowsWhenRegisteredDrawSlotCapIsExceeded");
+        VegetationTreeAuthoringRuntime runtimeAuthoring = CreateRuntimeAuthoring(authoring, containerIdHash, 0);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f), 1)
+                .Build(new[] { runtimeAuthoring }));
+
+        StringAssert.Contains("registered draw-slot cap", exception!.Message);
+    }
+
+    [Test]
+    public void RuntimeRegistryBuilder_ShadowProxySlotsFallbackToTreeL3_WhenBlueprintDoesNotAssignThem()
+    {
+        VegetationTreeAuthoring authoring = CreateAuthoring("ShadowProxyFallbackTree", new Vector3(0f, 0f, 10f));
+        Hash128 containerIdHash = Hash128.Compute("RuntimeRegistryBuilder_ShadowProxyFallback");
+        VegetationTreeAuthoringRuntime runtimeAuthoring = CreateRuntimeAuthoring(authoring, containerIdHash, 0);
+
+        VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
+            .Build(new[] { runtimeAuthoring });
+
+        VegetationTreeBlueprintRuntime blueprint = registry.TreeBlueprints[0];
+        Assert.AreEqual(blueprint.TreeL3DrawSlot, blueprint.ShadowProxyDrawSlotL0);
+        Assert.AreEqual(blueprint.TreeL3DrawSlot, blueprint.ShadowProxyDrawSlotL1);
+        Assert.AreEqual(blueprint.TreeL3WorkCost, blueprint.ShadowProxyWorkCostL0);
+        Assert.AreEqual(blueprint.TreeL3WorkCost, blueprint.ShadowProxyWorkCostL1);
+    }
+
+    [Test]
+    public void IndirectRenderer_BindGpuResidentFrame_ExposesPreparedViewSnapshotsWithoutExactCounts()
     {
         VegetationTreeAuthoring authoring = CreateAuthoring("RuntimeTree", new Vector3(0f, 0f, 10f));
         VegetationTreeAuthoringRuntime runtimeAuthoring =
@@ -85,19 +127,126 @@ public sealed class VegetationRuntimeFoundationTests
                    Mathf.Max(1, registry.DrawSlots.Count),
                    sizeof(uint)))
         {
-            indirectRenderer.BindGpuResidentFrame(instanceBuffer, argsBuffer, slotPackedStartsBuffer);
+            uint[] emittedCounts = new uint[Mathf.Max(1, registry.DrawSlots.Count)];
+            emittedCounts[0] = 3u;
+            if (registry.DrawSlots.Count > 1)
+            {
+                emittedCounts[registry.DrawSlots.Count - 1] = 2u;
+            }
+
+            using (ComputeBuffer slotEmittedInstanceCountsBuffer = new ComputeBuffer(
+                       Mathf.Max(1, registry.DrawSlots.Count),
+                       sizeof(uint)))
+            {
+                slotEmittedInstanceCountsBuffer.SetData(emittedCounts);
+                VegetationIndirectRenderer.PreparedViewHandle? preparedView = indirectRenderer.BindGpuResidentFrame(
+                    instanceBuffer,
+                    argsBuffer,
+                    slotPackedStartsBuffer,
+                    slotEmittedInstanceCountsBuffer);
+                Assert.IsNotNull(preparedView);
+
+                List<VegetationIndirectDrawBatchSnapshot> snapshots = new List<VegetationIndirectDrawBatchSnapshot>();
+                indirectRenderer.GetDebugSnapshots(preparedView!, snapshots);
+
+                int expectedActiveSlotCount = registry.DrawSlots.Count;
+                Assert.AreEqual(expectedActiveSlotCount, preparedView!.ActiveSlotIndices.Count);
+                Assert.AreEqual(expectedActiveSlotCount, snapshots.Count);
+                for (int i = 0; i < snapshots.Count; i++)
+                {
+                    VegetationIndirectDrawBatchSnapshot snapshot = snapshots[i];
+                    Assert.IsFalse(snapshot.HasExactInstanceCount);
+                    Assert.AreEqual(0, snapshot.InstanceCount);
+                    Bounds expectedBounds = registry.DrawSlotConservativeWorldBounds[snapshot.SlotIndex];
+                    AssertBoundsEqual(snapshot.WorldBounds, expectedBounds);
+                }
+            }
+        }
+    }
+
+    [Test]
+    public void IndirectRenderer_BindGpuResidentFrame_ReturnsIndependentPreparedViewHandles()
+    {
+        VegetationTreeAuthoring authoring = CreateAuthoring("IndependentPreparedViewTree", new Vector3(0f, 0f, 10f));
+        VegetationTreeAuthoringRuntime runtimeAuthoring =
+            CreateRuntimeAuthoring(authoring, Hash128.Compute("IndirectRenderer_IndependentPreparedViews"), 0);
+        VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
+            .Build(new[] { runtimeAuthoring });
+
+        int indirectArgsUintCount = registry.DrawSlots.Count * (GraphicsBuffer.IndirectDrawIndexedArgs.size / sizeof(uint));
+
+        using (VegetationIndirectRenderer indirectRenderer = new VegetationIndirectRenderer(registry, 7))
+        using (GraphicsBuffer firstInstanceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 16, 16))
+        using (GraphicsBuffer secondInstanceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 16, 16))
+        using (GraphicsBuffer firstArgsBuffer = new GraphicsBuffer(
+                   GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.IndirectArguments,
+                   Mathf.Max(1, indirectArgsUintCount),
+                   sizeof(uint)))
+        using (GraphicsBuffer secondArgsBuffer = new GraphicsBuffer(
+                   GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.IndirectArguments,
+                   Mathf.Max(1, indirectArgsUintCount),
+                   sizeof(uint)))
+        using (ComputeBuffer firstSlotPackedStartsBuffer = new ComputeBuffer(Mathf.Max(1, registry.DrawSlots.Count), sizeof(uint)))
+        using (ComputeBuffer secondSlotPackedStartsBuffer = new ComputeBuffer(Mathf.Max(1, registry.DrawSlots.Count), sizeof(uint)))
+        {
+            VegetationIndirectRenderer.PreparedViewHandle? firstPreparedView = indirectRenderer.BindGpuResidentFrame(
+                firstInstanceBuffer,
+                firstArgsBuffer,
+                firstSlotPackedStartsBuffer);
+            VegetationIndirectRenderer.PreparedViewHandle? secondPreparedView = indirectRenderer.BindGpuResidentFrame(
+                secondInstanceBuffer,
+                secondArgsBuffer,
+                secondSlotPackedStartsBuffer);
+
+            Assert.IsNotNull(firstPreparedView);
+            Assert.IsNotNull(secondPreparedView);
+            Assert.AreNotSame(firstPreparedView, secondPreparedView);
+            Assert.AreSame(firstInstanceBuffer, firstPreparedView!.InstanceBuffer);
+            Assert.AreSame(firstArgsBuffer, firstPreparedView.ArgsBuffer);
+            Assert.AreSame(firstSlotPackedStartsBuffer, firstPreparedView.SlotPackedStartsBuffer);
+            Assert.AreSame(secondInstanceBuffer, secondPreparedView!.InstanceBuffer);
+            Assert.AreSame(secondArgsBuffer, secondPreparedView.ArgsBuffer);
+            Assert.AreSame(secondSlotPackedStartsBuffer, secondPreparedView.SlotPackedStartsBuffer);
+        }
+    }
+
+    [Test]
+    public void IndirectRenderer_BindGpuResidentFrame_ExplicitActiveSlotList_FiltersPreparedViewSnapshots()
+    {
+        VegetationTreeAuthoring authoring = CreateAuthoring("ExplicitActiveSlotTree", new Vector3(0f, 0f, 10f));
+        VegetationTreeAuthoringRuntime runtimeAuthoring =
+            CreateRuntimeAuthoring(authoring, Hash128.Compute("IndirectRenderer_ExplicitActiveSlotList"), 0);
+        VegetationRuntimeRegistry registry = new VegetationRuntimeRegistryBuilder(Vector3.zero, new Vector3(64f, 64f, 64f))
+            .Build(new[] { runtimeAuthoring });
+
+        int indirectArgsUintCount = registry.DrawSlots.Count * (GraphicsBuffer.IndirectDrawIndexedArgs.size / sizeof(uint));
+        int[] expectedActiveSlots = registry.DrawSlots.Count > 1
+            ? new[] { 0, registry.DrawSlots.Count - 1 }
+            : new[] { 0 };
+
+        using (VegetationIndirectRenderer indirectRenderer = new VegetationIndirectRenderer(registry, 7))
+        using (GraphicsBuffer instanceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 16, 16))
+        using (GraphicsBuffer argsBuffer = new GraphicsBuffer(
+                   GraphicsBuffer.Target.Raw | GraphicsBuffer.Target.IndirectArguments,
+                   Mathf.Max(1, indirectArgsUintCount),
+                   sizeof(uint)))
+        using (ComputeBuffer slotPackedStartsBuffer = new ComputeBuffer(Mathf.Max(1, registry.DrawSlots.Count), sizeof(uint)))
+        {
+            VegetationIndirectRenderer.PreparedViewHandle? preparedView = indirectRenderer.BindGpuResidentFrame(
+                instanceBuffer,
+                argsBuffer,
+                slotPackedStartsBuffer,
+                expectedActiveSlots);
+            Assert.IsNotNull(preparedView);
+            Assert.IsFalse(preparedView!.UsesRegisteredSlotFallback);
+            CollectionAssert.AreEqual(expectedActiveSlots, preparedView.ActiveSlotIndices);
 
             List<VegetationIndirectDrawBatchSnapshot> snapshots = new List<VegetationIndirectDrawBatchSnapshot>();
-            indirectRenderer.GetDebugSnapshots(snapshots);
-
-            Assert.AreEqual(registry.DrawSlots.Count, snapshots.Count);
+            indirectRenderer.GetDebugSnapshots(preparedView, snapshots);
+            Assert.AreEqual(expectedActiveSlots.Length, snapshots.Count);
             for (int i = 0; i < snapshots.Count; i++)
             {
-                VegetationIndirectDrawBatchSnapshot snapshot = snapshots[i];
-                Assert.IsFalse(snapshot.HasExactInstanceCount);
-                Assert.AreEqual(0, snapshot.InstanceCount);
-                Bounds expectedBounds = registry.DrawSlotConservativeWorldBounds[snapshot.SlotIndex];
-                AssertBoundsEqual(snapshot.WorldBounds, expectedBounds);
+                Assert.AreEqual(expectedActiveSlots[i], snapshots[i].SlotIndex);
             }
         }
     }
@@ -147,20 +296,78 @@ public sealed class VegetationRuntimeFoundationTests
         Assert.AreSame(classicRuntime, activeRuntimes[0]);
     }
 
+    [Test]
+    public void AuthoringContainerRuntime_PrepareFrameForCamera_MissingClassifyShader_ReturnsFalseWithoutFault()
+    {
+        VegetationTreeAuthoring authoring = CreateAuthoring("NoShaderTree", new Vector3(0f, 0f, 10f));
+        Hash128 containerIdHash = Hash128.Compute("PrepareFrame_NoClassifyShader");
+        VegetationTreeAuthoringRuntime runtimeAuthoring = CreateRuntimeAuthoring(authoring, containerIdHash, 0);
+        AuthoringContainerRuntime runtimeOwner = CreateRuntimeOwner(
+            containerIdHash.ToString(),
+            VegetationRuntimeProviderKind.ClassicScene,
+            "NoShaderRuntime",
+            runtimeAuthoring);
+        GameObject cameraObject = new GameObject("RuntimeCamera");
+        createdObjects.Add(cameraObject);
+        Camera camera = cameraObject.AddComponent<Camera>();
+
+        Assert.IsTrue(runtimeOwner.Activate());
+
+        bool prepared = runtimeOwner.PrepareFrameForCamera(camera, null, false);
+
+        Assert.IsFalse(prepared);
+        Assert.IsFalse(runtimeOwner.IsRenderRuntimeFaulted);
+    }
+
+    [Test]
+    public void AuthoringContainerRuntime_PrepareFrameForCamera_FaultsWhenVisibleNonFarBaselineDoesNotFitColorBudget()
+    {
+        VegetationTreeAuthoring firstAuthoring = CreateAuthoring("BaselineOverflowTree_A", new Vector3(0f, 0f, 10f));
+        VegetationTreeAuthoring secondAuthoring = CreateAuthoring("BaselineOverflowTree_B", new Vector3(2f, 0f, 12f));
+        Hash128 containerIdHash = Hash128.Compute("PrepareFrame_BaselineOverflow");
+        VegetationTreeAuthoringRuntime firstRuntimeAuthoring = CreateRuntimeAuthoring(firstAuthoring, containerIdHash, 0);
+        VegetationTreeAuthoringRuntime secondRuntimeAuthoring = CreateRuntimeAuthoring(secondAuthoring, containerIdHash, 1);
+        AuthoringContainerRuntime runtimeOwner = new AuthoringContainerRuntime(
+            containerIdHash.ToString(),
+            VegetationRuntimeProviderKind.ClassicScene,
+            "BaselineOverflowRuntime",
+            null,
+            0,
+            Vector3.zero,
+            new Vector3(64f, 64f, 64f),
+            new VegetationRuntimeBudget(
+                new VegetationViewRuntimeBudget(32, 32, 1),
+                new VegetationViewRuntimeBudget(32, 32, 32),
+                128),
+            new[] { firstRuntimeAuthoring, secondRuntimeAuthoring });
+        createdDisposables.Add(runtimeOwner);
+
+        GameObject cameraObject = new GameObject("BaselineOverflowCamera");
+        createdObjects.Add(cameraObject);
+        Camera camera = cameraObject.AddComponent<Camera>();
+        camera.transform.position = Vector3.zero;
+        camera.transform.rotation = Quaternion.identity;
+
+        Assert.IsTrue(runtimeOwner.Activate());
+
+        bool prepared = runtimeOwner.PrepareFrameForCamera(camera, null, false);
+
+        Assert.IsFalse(prepared);
+        Assert.IsTrue(runtimeOwner.IsRenderRuntimeFaulted);
+    }
+
     private VegetationTreeAuthoring CreateAuthoring(string name, Vector3 worldPosition)
     {
         BranchPrototypeSO prototype = CreateScriptableObject<BranchPrototypeSO>();
         prototype.name = $"{name}_Prototype";
         Mesh woodMesh = CreateCubeMesh($"{name}_Wood", new Vector3(0.3f, 0.8f, 0.3f));
         Mesh foliageMesh = CreateCubeMesh($"{name}_Foliage", new Vector3(1.6f, 1.2f, 1.6f));
-        Mesh shellL0Root = CreateCubeMesh($"{name}_ShellL0Root", new Vector3(1.2f, 1.0f, 1.2f));
-        Mesh shellL0Leaf = CreateCubeMesh($"{name}_ShellL0Leaf", new Vector3(0.6f, 0.6f, 0.6f));
-        Mesh shellL1Root = CreateCubeMesh($"{name}_ShellL1Root", new Vector3(0.9f, 0.8f, 0.9f));
-        Mesh shellL1Leaf = CreateCubeMesh($"{name}_ShellL1Leaf", new Vector3(0.45f, 0.45f, 0.45f));
-        Mesh shellL2Root = CreateCubeMesh($"{name}_ShellL2Root", new Vector3(0.7f, 0.6f, 0.7f));
-        Mesh shellL2Leaf = CreateCubeMesh($"{name}_ShellL2Leaf", new Vector3(0.35f, 0.35f, 0.35f));
-        Mesh shellL1WoodMesh = CreateCubeMesh($"{name}_WoodL2", new Vector3(0.25f, 0.5f, 0.25f));
-        Mesh shellL2WoodMesh = CreateCubeMesh($"{name}_WoodL3", new Vector3(0.2f, 0.4f, 0.2f));
+        Mesh branchL1CanopyMesh = CreateCubeMesh($"{name}_CanopyL1", new Vector3(1.4f, 1.1f, 1.4f));
+        Mesh branchL2CanopyMesh = CreateCubeMesh($"{name}_CanopyL2", new Vector3(1.0f, 0.8f, 1.0f));
+        Mesh branchL3CanopyMesh = CreateCubeMesh($"{name}_CanopyL3", new Vector3(0.75f, 0.6f, 0.75f));
+        Mesh branchL1WoodMesh = CreateCubeMesh($"{name}_WoodL1", new Vector3(0.28f, 0.65f, 0.28f));
+        Mesh branchL2WoodMesh = CreateCubeMesh($"{name}_WoodL2", new Vector3(0.25f, 0.5f, 0.25f));
+        Mesh branchL3WoodMesh = CreateCubeMesh($"{name}_WoodL3", new Vector3(0.2f, 0.4f, 0.2f));
         Material woodMaterial = CreateOpaqueMaterial($"{name}_WoodMat");
         Material foliageMaterial = CreateOpaqueMaterial($"{name}_FoliageMat");
         Material shellMaterial = CreateOpaqueMaterial($"{name}_ShellMat");
@@ -170,18 +377,20 @@ public sealed class VegetationRuntimeFoundationTests
         SetPrivateField(prototype, "foliageMesh", foliageMesh);
         SetPrivateField(prototype, "foliageMaterial", foliageMaterial);
         SetPrivateField(prototype, "shellMaterial", shellMaterial);
-        SetPrivateField(prototype, "shellL1WoodMesh", shellL1WoodMesh);
-        SetPrivateField(prototype, "shellL2WoodMesh", shellL2WoodMesh);
+        SetPrivateField(prototype, "branchL1CanopyMesh", branchL1CanopyMesh);
+        SetPrivateField(prototype, "branchL2CanopyMesh", branchL2CanopyMesh);
+        SetPrivateField(prototype, "branchL3CanopyMesh", branchL3CanopyMesh);
+        SetPrivateField(prototype, "branchL1WoodMesh", branchL1WoodMesh);
+        SetPrivateField(prototype, "branchL2WoodMesh", branchL2WoodMesh);
+        SetPrivateField(prototype, "branchL3WoodMesh", branchL3WoodMesh);
         SetPrivateField(prototype, "leafColorTint", Color.green);
         SetPrivateField(prototype, "localBounds", new Bounds(new Vector3(0f, 0.6f, 0f), new Vector3(2f, 2f, 2f)));
-        SetPrivateField(prototype, "shellNodesL0", CreateShellHierarchy(shellL0Root, shellL0Leaf, 0));
-        SetPrivateField(prototype, "shellNodesL1", CreateShellHierarchy(shellL1Root, shellL1Leaf, 1));
-        SetPrivateField(prototype, "shellNodesL2", CreateShellHierarchy(shellL2Root, shellL2Leaf, 2));
 
         TreeBlueprintSO blueprint = CreateScriptableObject<TreeBlueprintSO>();
         blueprint.name = $"{name}_Blueprint";
         Mesh trunkMesh = CreateCubeMesh($"{name}_Trunk", new Vector3(0.5f, 2.2f, 0.5f));
         Mesh trunkL3Mesh = CreateCubeMesh($"{name}_TrunkL3", new Vector3(0.3f, 1.8f, 0.3f));
+        Mesh treeL3Mesh = CreateCubeMesh($"{name}_TreeL3", new Vector3(2.0f, 2.5f, 2.0f));
         Mesh impostorMesh = CreateCubeMesh($"{name}_Impostor", new Vector3(2.4f, 2.8f, 2.4f));
         Material trunkMaterial = CreateOpaqueMaterial($"{name}_TrunkMat");
         Material impostorMaterial = CreateOpaqueMaterial($"{name}_ImpostorMat");
@@ -201,6 +410,7 @@ public sealed class VegetationRuntimeFoundationTests
 
         SetPrivateField(blueprint, "trunkMesh", trunkMesh);
         SetPrivateField(blueprint, "trunkL3Mesh", trunkL3Mesh);
+        SetPrivateField(blueprint, "treeL3Mesh", treeL3Mesh);
         SetPrivateField(blueprint, "trunkMaterial", trunkMaterial);
         SetPrivateField(blueprint, "impostorMesh", impostorMesh);
         SetPrivateField(blueprint, "impostorMaterial", impostorMaterial);
@@ -244,44 +454,13 @@ public sealed class VegetationRuntimeFoundationTests
             0,
             Vector3.zero,
             new Vector3(64f, 64f, 64f),
-            32,
+            new VegetationRuntimeBudget(
+                new VegetationViewRuntimeBudget(32, 32, 32),
+                new VegetationViewRuntimeBudget(32, 32, 32),
+                128),
             runtimeTrees);
         createdDisposables.Add(runtimeOwner);
         return runtimeOwner;
-    }
-
-    private BranchShellNode[] CreateShellHierarchy(Mesh rootMesh, Mesh leafMesh, int shellLevel)
-    {
-        Bounds rootBounds = new Bounds(new Vector3(0f, 0.5f, 0f), new Vector3(1.4f, 1.4f, 1.4f));
-        Bounds childBounds = new Bounds(new Vector3(0.35f, 0.85f, 0.35f), new Vector3(0.7f, 0.7f, 0.7f));
-        return new[]
-        {
-            CreateShellNode(rootBounds, 0, 1, 1, rootMesh, shellLevel),
-            CreateShellNode(childBounds, 1, -1, 0, leafMesh, shellLevel)
-        };
-    }
-
-    private BranchShellNode CreateShellNode(Bounds bounds, int depth, int firstChildIndex, byte childMask, Mesh mesh, int shellLevel)
-    {
-        Mesh? shellL0Mesh = null;
-        Mesh? shellL1Mesh = null;
-        Mesh? shellL2Mesh = null;
-        switch (shellLevel)
-        {
-            case 0:
-                shellL0Mesh = mesh;
-                break;
-            case 1:
-                shellL1Mesh = mesh;
-                break;
-            case 2:
-                shellL2Mesh = mesh;
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(shellLevel), shellLevel, "Shell level must be 0, 1, or 2.");
-        }
-
-        return new BranchShellNode(bounds, depth, firstChildIndex, childMask, shellL0Mesh, shellL1Mesh, shellL2Mesh);
     }
 
     private Mesh CreateCubeMesh(string name, Vector3 size)
@@ -384,6 +563,17 @@ public sealed class VegetationRuntimeFoundationTests
         Assert.That(actualBounds.size.x, Is.EqualTo(expectedBounds.size.x).Within(0.0001f));
         Assert.That(actualBounds.size.y, Is.EqualTo(expectedBounds.size.y).Within(0.0001f));
         Assert.That(actualBounds.size.z, Is.EqualTo(expectedBounds.size.z).Within(0.0001f));
+    }
+
+    private static void AssertMatrixApproximatelyEqual(Matrix4x4 expected, Matrix4x4 actual)
+    {
+        for (int row = 0; row < 4; row++)
+        {
+            for (int column = 0; column < 4; column++)
+            {
+                Assert.That(actual[row, column], Is.EqualTo(expected[row, column]).Within(0.0001f));
+            }
+        }
     }
 
     private static void SetPrivateField(object target, string fieldName, object? value)

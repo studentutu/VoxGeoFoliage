@@ -11,7 +11,7 @@ using VoxGeoFol.Features.Vegetation.Authoring;
 namespace VoxGeoFol.Features.Vegetation.Editor
 {
     /// <summary>
-    /// Editor-only canopy shell baker that persists canonical L0 plus compact L1/L2 hierarchies.
+    /// Editor-only canopy simplifier that bakes the single-mesh branch L1/L2/L3 canopy chain.
     /// </summary>
     public static class CanopyShellGenerator
     {
@@ -19,11 +19,11 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         private static readonly int[] MeshLodFallbackLimits = { 2, 4, 6 };
 
         /// <summary>
-        /// [INTEGRATION] Called from editor tooling to populate hierarchical shell data on one branch prototype.
+        /// [INTEGRATION] Called from editor tooling to populate the runtime branch L1/L2/L3 mesh chain on one branch prototype.
         /// </summary>
         public static void BakeCanopyShells(BranchPrototypeSO prototype, ShellBakeSettings? settings = null)
         {
-            // Range: requires readable foliage and wood meshes plus valid shell budgets. Condition: builds canonical L0 plus compact L1/L2 hierarchies first, then only applies optional mesh-only fallback on the already generated tier meshes. Output: the prototype receives shellNodesL0/shellNodesL1/shellNodesL2 plus refreshed simplified wood attachments.
+            // Range: requires readable foliage and wood meshes plus valid canopy budgets. Condition: uses temporary voxel hierarchies only as an internal simplification step, then persists one canopy mesh per runtime tier plus the simplified wood chain. Output: the prototype receives refreshed branchL1/2/3 canopy meshes and branchL1/2/3 wood meshes.
             if (prototype == null)
             {
                 throw new ArgumentNullException(nameof(prototype));
@@ -106,12 +106,12 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     sourceWoodTriangles,
                     activeSettings.SkipReduction,
                     activeSettings.SkipSimplifyFallback,
-                    $"{prototype.name}_ShellL1Wood");
+                    $"{prototype.name}_BranchL2Wood");
                 if (shellL1WoodCandidate.TriangleCount > sourceWoodTriangles)
                 {
                     string fallbackState = activeSettings.SkipSimplifyFallback ? "skipped" : "exhausted";
                     Debug.LogError(
-                        $"{prototype.name} shellL1WoodMesh triangle count {shellL1WoodCandidate.TriangleCount} exceeds source wood triangle count {sourceWoodTriangles}. Final source: {shellL1WoodCandidate.SourceDescription}. Simplify fallback {fallbackState}.");
+                        $"{prototype.name} branchL2WoodMesh triangle count {shellL1WoodCandidate.TriangleCount} exceeds source wood triangle count {sourceWoodTriangles}. Final source: {shellL1WoodCandidate.SourceDescription}. Simplify fallback {fallbackState}.");
                 }
 
                 shellL2WoodCandidate = GeneratedMeshSimplificationUtility.SelectBestVoxelMeshCandidate(
@@ -122,52 +122,69 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     shellL1WoodCandidate.TriangleCount,
                     activeSettings.SkipReduction,
                     activeSettings.SkipSimplifyFallback,
-                    $"{prototype.name}_ShellL2Wood");
+                    $"{prototype.name}_BranchL3Wood");
                 if (shellL2WoodCandidate.TriangleCount > shellL1WoodCandidate.TriangleCount)
                 {
                     string fallbackState = activeSettings.SkipSimplifyFallback ? "skipped" : "exhausted";
                     Debug.LogError(
-                        $"{prototype.name} shellL2WoodMesh triangle count {shellL2WoodCandidate.TriangleCount} exceeds shellL1WoodMesh triangle count {shellL1WoodCandidate.TriangleCount}. Final source: {shellL2WoodCandidate.SourceDescription}. Simplify fallback {fallbackState}.");
+                        $"{prototype.name} branchL3WoodMesh triangle count {shellL2WoodCandidate.TriangleCount} exceeds branchL2WoodMesh triangle count {shellL1WoodCandidate.TriangleCount}. Final source: {shellL2WoodCandidate.SourceDescription}. Simplify fallback {fallbackState}.");
                 }
 
-                BranchShellNode[] persistedL0 = PersistShellNodes(
-                    prototype,
+                Mesh branchL1CanopyMesh = CreateMergedLeafFrontierMesh(
                     hierarchyL0,
                     l0Selection.Meshes,
-                    0,
-                    $"{prototype.name}_ShellNodeL0");
-                BranchShellNode[] persistedL1 = PersistShellNodes(
-                    prototype,
+                    $"{prototype.name}_BranchL1Canopy");
+                Mesh branchL2CanopyMesh = CreateMergedLeafFrontierMesh(
                     hierarchyL1,
                     l1Selection.Meshes,
-                    1,
-                    $"{prototype.name}_ShellNodeL1");
-                BranchShellNode[] persistedL2 = PersistShellNodes(
-                    prototype,
+                    $"{prototype.name}_BranchL2Canopy");
+                Mesh branchL3CanopyMesh = CreateMergedLeafFrontierMesh(
                     hierarchyL2,
                     l2Selection.Meshes,
-                    2,
-                    $"{prototype.name}_ShellNodeL2");
+                    $"{prototype.name}_BranchL3Canopy");
+                temporaryFallbackLevels.Add(new[] { branchL1CanopyMesh, branchL2CanopyMesh, branchL3CanopyMesh });
 
                 SetPrivateField(
                     prototype,
-                    "shellL1WoodMesh",
+                    "branchL2WoodMesh",
                     GeneratedMeshAssetUtility.PersistGeneratedMesh(
                         prototype,
-                        $"{prototype.name}_ShellL1Wood",
+                        $"{prototype.name}_BranchL2Wood",
                         shellL1WoodCandidate.Mesh,
                         prototype.GeneratedCanopyShellsRelativeFolder));
                 SetPrivateField(
                     prototype,
-                    "shellL2WoodMesh",
+                    "branchL3WoodMesh",
                     GeneratedMeshAssetUtility.PersistGeneratedMesh(
                         prototype,
-                        $"{prototype.name}_ShellL2Wood",
+                        $"{prototype.name}_BranchL3Wood",
                         shellL2WoodCandidate.Mesh,
                         prototype.GeneratedCanopyShellsRelativeFolder));
-                SetPrivateField(prototype, "shellNodesL0", persistedL0);
-                SetPrivateField(prototype, "shellNodesL1", persistedL1);
-                SetPrivateField(prototype, "shellNodesL2", persistedL2);
+                SetPrivateField(
+                    prototype,
+                    "branchL1CanopyMesh",
+                    GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                        prototype,
+                        $"{prototype.name}_BranchL1Canopy",
+                        branchL1CanopyMesh,
+                        prototype.GeneratedCanopyShellsRelativeFolder));
+                SetPrivateField(
+                    prototype,
+                    "branchL2CanopyMesh",
+                    GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                        prototype,
+                        $"{prototype.name}_BranchL2Canopy",
+                        branchL2CanopyMesh,
+                        prototype.GeneratedCanopyShellsRelativeFolder));
+                SetPrivateField(
+                    prototype,
+                    "branchL3CanopyMesh",
+                    GeneratedMeshAssetUtility.PersistGeneratedMesh(
+                        prototype,
+                        $"{prototype.name}_BranchL3Canopy",
+                        branchL3CanopyMesh,
+                        prototype.GeneratedCanopyShellsRelativeFolder));
+                SetPrivateField(prototype, "branchL1WoodMesh", prototype.WoodMesh);
 
                 EditorUtility.SetDirty(prototype);
             }
@@ -329,6 +346,35 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             return levelMeshes;
         }
 
+        private static Mesh CreateMergedLeafFrontierMesh(
+            MeshVoxelizerHierarchyNode[] hierarchyNodes,
+            Mesh[] levelMeshes,
+            string meshName)
+        {
+            int[] leafIndices = CollectLeafIndices(hierarchyNodes);
+            CombineInstance[] combineInstances = new CombineInstance[leafIndices.Length];
+            for (int i = 0; i < leafIndices.Length; i++)
+            {
+                combineInstances[i] = new CombineInstance
+                {
+                    mesh = levelMeshes[leafIndices[i]],
+                    transform = Matrix4x4.identity
+                };
+            }
+
+            Mesh combinedMesh = new Mesh
+            {
+                name = meshName,
+                indexFormat = ShouldUseUInt32(levelMeshes, leafIndices)
+                    ? UnityEngine.Rendering.IndexFormat.UInt32
+                    : UnityEngine.Rendering.IndexFormat.UInt16
+            };
+            combinedMesh.CombineMeshes(combineInstances, true, true, false);
+            combinedMesh.RecalculateBounds();
+            combinedMesh.RecalculateNormals();
+            return combinedMesh;
+        }
+
         private static int[] CollectLeafIndices(MeshVoxelizerHierarchyNode[] hierarchyNodes)
         {
             List<int> leafIndices = new List<int>();
@@ -354,53 +400,19 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             return triangleCount;
         }
 
-        private static BranchShellNode[] PersistShellNodes(
-            BranchPrototypeSO prototype,
-            MeshVoxelizerHierarchyNode[] hierarchyNodes,
-            Mesh[] levelMeshes,
-            int shellLevel,
-            string nodeMeshPrefix)
+        private static bool ShouldUseUInt32(Mesh[] meshes, int[] meshIndices)
         {
-            BranchShellNode[] persistedNodes = new BranchShellNode[hierarchyNodes.Length];
-            for (int i = 0; i < hierarchyNodes.Length; i++)
+            int vertexCount = 0;
+            for (int i = 0; i < meshIndices.Length; i++)
             {
-                MeshVoxelizerHierarchyNode node = hierarchyNodes[i];
-                string nodePath = $"D{node.Depth}_{i:D3}";
-                Mesh persistedMesh = GeneratedMeshAssetUtility.PersistGeneratedMesh(
-                    prototype,
-                    $"{nodeMeshPrefix}_{nodePath}",
-                    levelMeshes[i],
-                    prototype.GeneratedCanopyShellsRelativeFolder);
-
-                Mesh? shellL0Mesh = null;
-                Mesh? shellL1Mesh = null;
-                Mesh? shellL2Mesh = null;
-                switch (shellLevel)
+                vertexCount += meshes[meshIndices[i]].vertexCount;
+                if (vertexCount > ushort.MaxValue)
                 {
-                    case 0:
-                        shellL0Mesh = persistedMesh;
-                        break;
-                    case 1:
-                        shellL1Mesh = persistedMesh;
-                        break;
-                    case 2:
-                        shellL2Mesh = persistedMesh;
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(shellLevel), shellLevel, "Shell level must be 0, 1, or 2.");
+                    return true;
                 }
-
-                persistedNodes[i] = new BranchShellNode(
-                    node.LocalBounds,
-                    node.Depth,
-                    node.FirstChildIndex,
-                    node.ChildMask,
-                    shellL0Mesh,
-                    shellL1Mesh,
-                    shellL2Mesh);
             }
 
-            return persistedNodes;
+            return false;
         }
 
         private static void CleanupTemporaryHierarchies(List<MeshVoxelizerHierarchyNode[]> temporaryHierarchies)

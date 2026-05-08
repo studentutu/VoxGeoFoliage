@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: VegetationLODProfile
   m_EditorClassIdentifier: Vegetation::VoxGeoFol.Features.Vegetation.Authoring.LODProfileSO
   l0Distance: 5
-  l1Distance: 10
-  l2Distance: 30
-  impostorDistance: 65
+  l1Distance: 25
+  l2Distance: 45
+  impostorDistance: 75
   absoluteCullDistance: 10000

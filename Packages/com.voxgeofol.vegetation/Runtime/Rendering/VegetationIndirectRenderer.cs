@@ -10,22 +10,27 @@ using UnityEngine.Rendering;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// [INTEGRATION] Owns per-slot instance buffers, indirect args, runtime materials, and draw submission.
+    /// [INTEGRATION] Owns indirect args, shared instance bindings, and final draw submission.
     /// </summary>
     public sealed class VegetationIndirectRenderer : IDisposable
     {
         private static readonly ProfilerMarker BindGpuResidentFrameMarker = new ProfilerMarker("VoxGeoFol.VegetationIndirectRenderer.BindGpuResidentFrame");
         private static readonly ProfilerMarker RenderMarker = new ProfilerMarker("VoxGeoFol.VegetationIndirectRenderer.Render");
+        private static readonly int InstanceBufferId = Shader.PropertyToID("_VegetationInstanceData");
         private readonly SlotResources[] slotResources;
-        private readonly List<int> activeSlotIndices = new List<int>();
+        private readonly int[] allRegisteredSlotIndices;
+        private readonly VegetationCommandBufferIndirectDrawWrapper commandBufferDrawWrapper = new VegetationCommandBufferIndirectDrawWrapper();
+        private readonly VegetationRasterCommandBufferIndirectDrawWrapper rasterCommandBufferDrawWrapper = new VegetationRasterCommandBufferIndirectDrawWrapper();
+        private readonly MaterialPropertyBlock sharedDrawPropertyBlock = new MaterialPropertyBlock();
         private int lastDepthRenderCameraInstanceId = -1;
         private int lastDepthRenderUploadedSlotCount = -1;
         private int lastDepthRenderRenderedSlotCount = -1;
         private int lastColorRenderCameraInstanceId = -1;
         private int lastColorRenderUploadedSlotCount = -1;
         private int lastColorRenderRenderedSlotCount = -1;
-        private GraphicsBuffer? gpuResidentArgsBuffer;
-        private bool hasGpuResidentFrame;
+        private int lastShadowRenderCameraInstanceId = -1;
+        private int lastShadowRenderUploadedSlotCount = -1;
+        private int lastShadowRenderRenderedSlotCount = -1;
         private bool disposed;
 
         public VegetationIndirectRenderer(VegetationRuntimeRegistry registry, int renderLayer)
@@ -55,145 +60,233 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             slotResources = createdSlotResources;
+            allRegisteredSlotIndices = BuildAllRegisteredSlotIndices(createdSlotResources.Length);
         }
 
-        public IReadOnlyList<int> ActiveSlotIndices => activeSlotIndices;
+        public int RegisteredDrawSlotCount => slotResources.Length;
 
-        public bool HasUploadedFrame => hasGpuResidentFrame;
+        public int RuntimeMaterialCopyCount => 0;
 
         /// <summary>
-        /// [INTEGRATION] Binds GPU-resident indirect resources prepared by the compute classification/decode path.
+        /// [INTEGRATION] Immutable prepared-view handle that owns one prepared renderer binding surface.
         /// </summary>
-        public void BindGpuResidentFrame(GraphicsBuffer instanceBuffer, GraphicsBuffer argsBuffer, ComputeBuffer slotPackedStartsBuffer)
+        public sealed class PreparedViewHandle
+        {
+            private readonly VegetationIndirectRenderer owner;
+            private readonly IReadOnlyList<int> activeSlotIndices;
+
+            internal PreparedViewHandle(
+                VegetationIndirectRenderer owner,
+                GraphicsBuffer instanceBuffer,
+                GraphicsBuffer argsBuffer,
+                ComputeBuffer slotPackedStartsBuffer,
+                IReadOnlyList<int>? finalizedActiveSlotIndices)
+            {
+                this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
+                InstanceBuffer = instanceBuffer ?? throw new ArgumentNullException(nameof(instanceBuffer));
+                ArgsBuffer = argsBuffer ?? throw new ArgumentNullException(nameof(argsBuffer));
+                SlotPackedStartsBuffer = slotPackedStartsBuffer ?? throw new ArgumentNullException(nameof(slotPackedStartsBuffer));
+                activeSlotIndices = finalizedActiveSlotIndices == null
+                    ? owner.allRegisteredSlotIndices
+                    : owner.CopyValidActiveSlotIndices(finalizedActiveSlotIndices);
+                UsesRegisteredSlotFallback = finalizedActiveSlotIndices == null;
+                HasUploadedFrame = true;
+            }
+
+            public GraphicsBuffer InstanceBuffer { get; }
+
+            public GraphicsBuffer ArgsBuffer { get; }
+
+            public ComputeBuffer SlotPackedStartsBuffer { get; }
+
+            public IReadOnlyList<int> ActiveSlotIndices => activeSlotIndices;
+
+            public bool UsesRegisteredSlotFallback { get; }
+
+            public bool HasUploadedFrame { get; }
+
+            internal bool IsOwnedBy(VegetationIndirectRenderer renderer)
+            {
+                return ReferenceEquals(owner, renderer);
+            }
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Creates a prepared-view handle for GPU-resident indirect resources prepared by the compute classification/decode path.
+        /// </summary>
+        public PreparedViewHandle? BindGpuResidentFrame(GraphicsBuffer instanceBuffer, GraphicsBuffer argsBuffer, ComputeBuffer slotPackedStartsBuffer)
         {
             using (BindGpuResidentFrameMarker.Auto())
             {
-                if (disposed)
+                if (disposed || instanceBuffer == null || argsBuffer == null || slotPackedStartsBuffer == null)
                 {
-                    throw new ObjectDisposedException(nameof(VegetationIndirectRenderer));
+                    return null;
                 }
 
-                if (instanceBuffer == null)
-                {
-                    throw new ArgumentNullException(nameof(instanceBuffer));
-                }
-
-                if (argsBuffer == null)
-                {
-                    throw new ArgumentNullException(nameof(argsBuffer));
-                }
-
-                if (slotPackedStartsBuffer == null)
-                {
-                    throw new ArgumentNullException(nameof(slotPackedStartsBuffer));
-                }
-
-                gpuResidentArgsBuffer = argsBuffer;
-                hasGpuResidentFrame = true;
-                activeSlotIndices.Clear();
-                for (int slotIndex = 0; slotIndex < slotResources.Length; slotIndex++)
-                {
-                    SlotResources slot = slotResources[slotIndex];
-                    slot.BindSharedBuffers(instanceBuffer, slotPackedStartsBuffer);
-                    activeSlotIndices.Add(slotIndex);
-                }
+                return new PreparedViewHandle(this, instanceBuffer, argsBuffer, slotPackedStartsBuffer, null);
             }
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Creates a prepared-view handle for GPU-resident indirect resources and an explicit finalized active-slot list.
+        /// </summary>
+        public PreparedViewHandle? BindGpuResidentFrame(
+            GraphicsBuffer instanceBuffer,
+            GraphicsBuffer argsBuffer,
+            ComputeBuffer slotPackedStartsBuffer,
+            IReadOnlyList<int> finalizedActiveSlotIndices)
+        {
+            using (BindGpuResidentFrameMarker.Auto())
+            {
+                if (disposed || instanceBuffer == null || argsBuffer == null || slotPackedStartsBuffer == null)
+                {
+                    return null;
+                }
+
+                return new PreparedViewHandle(this, instanceBuffer, argsBuffer, slotPackedStartsBuffer, finalizedActiveSlotIndices);
+            }
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Compatibility overload retained while emitted-slot readback stays disabled on the render path.
+        /// </summary>
+        public PreparedViewHandle? BindGpuResidentFrame(
+            GraphicsBuffer instanceBuffer,
+            GraphicsBuffer argsBuffer,
+            ComputeBuffer slotPackedStartsBuffer,
+            ComputeBuffer slotEmittedInstanceCountsBuffer)
+        {
+            _ = slotEmittedInstanceCountsBuffer;
+            return BindGpuResidentFrame(instanceBuffer, argsBuffer, slotPackedStartsBuffer);
         }
 
         /// <summary>
         /// [INTEGRATION] Renders the uploaded slot batches through raster command-buffer indirect draws for one camera/pass pair.
         /// </summary>
-        internal void Render(IRasterCommandBuffer commandBuffer, Camera camera, VegetationRenderPassMode passMode, bool diagnosticsEnabled)
+        internal void Render(
+            IRasterCommandBuffer commandBuffer,
+            Camera camera,
+            PreparedViewHandle preparedView,
+            VegetationRenderPassMode passMode,
+            bool diagnosticsEnabled)
         {
-            if (disposed)
+            if (disposed || commandBuffer == null)
             {
-                throw new ObjectDisposedException(nameof(VegetationIndirectRenderer));
+                return;
             }
 
-            if (commandBuffer == null)
+            rasterCommandBufferDrawWrapper.RefreshCommandBuffer(commandBuffer);
+            try
             {
-                throw new ArgumentNullException(nameof(commandBuffer));
+                RenderInternal(camera, passMode, preparedView, rasterCommandBufferDrawWrapper, diagnosticsEnabled);
             }
-
-            RenderInternal(camera, passMode, (slot, material) =>
+            finally
             {
-                commandBuffer.DrawMeshInstancedIndirect(
-                    slot.DrawSlot.Mesh,
-                    0,
-                    material,
-                    0,
-                    ResolveArgsBuffer(slot),
-                    slot.ResolveArgsBufferOffset());
-            }, diagnosticsEnabled);
+                rasterCommandBufferDrawWrapper.ClearCommandBuffer();
+            }
         }
 
         /// <summary>
         /// [INTEGRATION] Renders the uploaded slot batches through compatibility command-buffer indirect draws for one camera/pass pair.
         /// </summary>
-        internal void Render(CommandBuffer commandBuffer, Camera camera, VegetationRenderPassMode passMode, bool diagnosticsEnabled)
+        internal void Render(
+            CommandBuffer commandBuffer,
+            Camera camera,
+            PreparedViewHandle preparedView,
+            VegetationRenderPassMode passMode,
+            bool diagnosticsEnabled)
         {
-            if (disposed)
+            if (disposed || commandBuffer == null)
             {
-                throw new ObjectDisposedException(nameof(VegetationIndirectRenderer));
+                return;
             }
 
-            if (commandBuffer == null)
+            commandBufferDrawWrapper.RefreshCommandBuffer(commandBuffer);
+            try
             {
-                throw new ArgumentNullException(nameof(commandBuffer));
+                RenderInternal(camera, passMode, preparedView, commandBufferDrawWrapper, diagnosticsEnabled);
             }
-
-            RenderInternal(camera, passMode, (slot, material) =>
+            finally
             {
-                commandBuffer.DrawMeshInstancedIndirect(
-                    slot.DrawSlot.Mesh,
-                    0,
-                    material,
-                    0,
-                    ResolveArgsBuffer(slot),
-                    slot.ResolveArgsBufferOffset());
-            }, diagnosticsEnabled);
+                commandBufferDrawWrapper.ClearCommandBuffer();
+            }
         }
 
         private void RenderInternal(
             Camera camera,
             VegetationRenderPassMode passMode,
-            Action<SlotResources, Material> issueDraw,
+            PreparedViewHandle preparedView,
+            IVegetationIndirectDrawWrapper drawWrapper,
             bool diagnosticsEnabled)
         {
             using (RenderMarker.Auto())
             {
-                if (camera == null)
+                if (camera == null ||
+                    drawWrapper == null ||
+                    preparedView == null ||
+                    !preparedView.IsOwnedBy(this) ||
+                    !preparedView.HasUploadedFrame)
                 {
-                    throw new ArgumentNullException(nameof(camera));
+                    return;
                 }
 
+                GraphicsBuffer argsBuffer = preparedView.ArgsBuffer;
+                sharedDrawPropertyBlock.Clear();
+                sharedDrawPropertyBlock.SetBuffer(InstanceBufferId, preparedView.InstanceBuffer);
                 int renderedSlotCount = 0;
-                for (int activeSlotOffset = 0; activeSlotOffset < activeSlotIndices.Count; activeSlotOffset++)
+                for (int activeSlotOffset = 0; activeSlotOffset < preparedView.ActiveSlotIndices.Count; activeSlotOffset++)
                 {
-                    SlotResources slot = slotResources[activeSlotIndices[activeSlotOffset]];
-                    Material material = passMode == VegetationRenderPassMode.Depth ? slot.DepthMaterial : slot.ColorMaterial;
-                    issueDraw(slot, material);
+                    int slotIndex = preparedView.ActiveSlotIndices[activeSlotOffset];
+                    if (slotIndex < 0 || slotIndex >= slotResources.Length)
+                    {
+                        continue;
+                    }
+
+                    SlotResources slot = slotResources[slotIndex];
+                    if (!slot.TryResolveDrawSubmission(passMode, out Material material, out int shaderPass))
+                    {
+                        continue;
+                    }
+
+                    drawWrapper.DrawMeshInstancedIndirect(
+                        slot.DrawSlot.Mesh,
+                        material,
+                        argsBuffer,
+                        slot.ResolveArgsBufferOffset(),
+                        shaderPass,
+                        sharedDrawPropertyBlock);
                     renderedSlotCount++;
                 }
 
-                LogRenderDiagnostics(camera, passMode, renderedSlotCount, diagnosticsEnabled);
+                LogRenderDiagnostics(camera, passMode, preparedView, renderedSlotCount, diagnosticsEnabled);
             }
         }
 
         /// <summary>
         /// [INTEGRATION] Collects the current uploaded draw-batch state for debug gizmos and EditMode verification.
         /// </summary>
-        public void GetDebugSnapshots(List<VegetationIndirectDrawBatchSnapshot> target)
+        public void GetDebugSnapshots(PreparedViewHandle preparedView, List<VegetationIndirectDrawBatchSnapshot> target)
         {
             if (target == null)
             {
-                throw new ArgumentNullException(nameof(target));
+                return;
             }
 
             target.Clear();
-            for (int activeSlotOffset = 0; activeSlotOffset < activeSlotIndices.Count; activeSlotOffset++)
+            if (preparedView == null || !preparedView.IsOwnedBy(this) || !preparedView.HasUploadedFrame)
             {
-                SlotResources slot = slotResources[activeSlotIndices[activeSlotOffset]];
+                return;
+            }
+
+            for (int activeSlotOffset = 0; activeSlotOffset < preparedView.ActiveSlotIndices.Count; activeSlotOffset++)
+            {
+                int slotIndex = preparedView.ActiveSlotIndices[activeSlotOffset];
+                if (slotIndex < 0 || slotIndex >= slotResources.Length)
+                {
+                    continue;
+                }
+
+                SlotResources slot = slotResources[slotIndex];
                 target.Add(new VegetationIndirectDrawBatchSnapshot
                 {
                     SlotIndex = slot.DrawSlot.SlotIndex,
@@ -219,19 +312,57 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 slotResources[i].Dispose();
             }
 
-            activeSlotIndices.Clear();
+            commandBufferDrawWrapper.ClearCommandBuffer();
+            rasterCommandBufferDrawWrapper.ClearCommandBuffer();
         }
 
-        private GraphicsBuffer ResolveArgsBuffer(SlotResources slot)
+        private int[] CopyValidActiveSlotIndices(IReadOnlyList<int> source)
         {
-            return gpuResidentArgsBuffer ?? throw new InvalidOperationException("GPU-resident args buffer has not been bound.");
+            if (source == null || source.Count == 0)
+            {
+                return Array.Empty<int>();
+            }
+
+            int validCount = 0;
+            for (int i = 0; i < source.Count; i++)
+            {
+                int slotIndex = source[i];
+                if (slotIndex >= 0 && slotIndex < slotResources.Length)
+                {
+                    validCount++;
+                }
+            }
+
+            if (validCount == 0)
+            {
+                return Array.Empty<int>();
+            }
+
+            int[] result = new int[validCount];
+            int writeIndex = 0;
+            for (int i = 0; i < source.Count; i++)
+            {
+                int slotIndex = source[i];
+                if (slotIndex < 0 || slotIndex >= slotResources.Length)
+                {
+                    continue;
+                }
+
+                result[writeIndex] = slotIndex;
+                writeIndex++;
+            }
+
+            return result;
         }
 
-        private sealed class SlotResources : IDisposable
+        private sealed class SlotResources
         {
-            private static readonly int InstanceBufferId = Shader.PropertyToID("_VegetationInstanceData");
-            private static readonly int SlotPackedStartsId = Shader.PropertyToID("_VegetationSlotPackedStarts");
-            private static readonly int SlotIndexId = Shader.PropertyToID("_VegetationSlotIndex");
+            private const string ForwardLitPassName = "ForwardLit";
+            private const string DepthOnlyPassName = "DepthOnly";
+            private const string ShadowCasterPassName = "ShadowCaster";
+            private readonly int forwardShaderPass;
+            private readonly int depthShaderPass;
+            private readonly int shadowShaderPass;
 
             public SlotResources(
                 VegetationDrawSlot drawSlot,
@@ -240,45 +371,61 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 DrawSlot = drawSlot;
                 ConservativeWorldBounds = conservativeWorldBounds;
                 SharedArgsBufferOffset = checked(GraphicsBuffer.IndirectDrawIndexedArgs.size * drawSlot.SlotIndex);
-                ColorMaterial = VegetationIndirectMaterialFactory.CreateColorMaterial(drawSlot);
-                DepthMaterial = VegetationIndirectMaterialFactory.CreateDepthMaterial(drawSlot);
-                ColorMaterial.SetInteger(SlotIndexId, drawSlot.SlotIndex);
-                DepthMaterial.SetInteger(SlotIndexId, drawSlot.SlotIndex);
+
+                // Source materials stay authoritative. Indirect args startInstance points directly at packed visible-instance offsets.
+                if (!drawSlot.Material.enableInstancing)
+                {
+                    drawSlot.Material.enableInstancing = true;
+                }
+
+                forwardShaderPass = drawSlot.Material.FindPass(ForwardLitPassName);
+                depthShaderPass = drawSlot.Material.FindPass(DepthOnlyPassName);
+                shadowShaderPass = drawSlot.Material.FindPass(ShadowCasterPassName);
             }
 
             public VegetationDrawSlot DrawSlot { get; }
 
             public Bounds ConservativeWorldBounds { get; }
 
-            public Material ColorMaterial { get; }
-
-            public Material DepthMaterial { get; }
-
             public int SharedArgsBufferOffset { get; }
 
-            public void BindSharedBuffers(GraphicsBuffer sharedInstanceBuffer, ComputeBuffer slotPackedStartsBuffer)
+            public bool TryResolveDrawSubmission(
+                VegetationRenderPassMode passMode,
+                out Material material,
+                out int shaderPass)
             {
-                ColorMaterial.SetBuffer(InstanceBufferId, sharedInstanceBuffer);
-                DepthMaterial.SetBuffer(InstanceBufferId, sharedInstanceBuffer);
-                ColorMaterial.SetBuffer(SlotPackedStartsId, slotPackedStartsBuffer);
-                DepthMaterial.SetBuffer(SlotPackedStartsId, slotPackedStartsBuffer);
-            }
+                material = DrawSlot.Material;
 
-            public void Dispose()
-            {
-                VegetationIndirectMaterialFactory.DestroyRuntimeMaterial(ColorMaterial);
-                VegetationIndirectMaterialFactory.DestroyRuntimeMaterial(DepthMaterial);
+                if (passMode == VegetationRenderPassMode.Depth)
+                {
+                    shaderPass = depthShaderPass;
+                    return shaderPass >= 0;
+                }
+
+                if (passMode == VegetationRenderPassMode.Shadow)
+                {
+                    shaderPass = shadowShaderPass;
+                    return shaderPass >= 0;
+                }
+
+                shaderPass = forwardShaderPass >= 0 ? forwardShaderPass : 0;
+                return true;
             }
 
             public int ResolveArgsBufferOffset()
             {
                 return SharedArgsBufferOffset;
             }
+
+            public void Dispose()
+            {
+            }
         }
 
         private void LogRenderDiagnostics(
             Camera camera,
             VegetationRenderPassMode passMode,
+            PreparedViewHandle preparedView,
             int renderedSlotCount,
             bool diagnosticsEnabled)
         {
@@ -287,10 +434,15 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 return;
             }
 
-            int cameraInstanceId = camera.GetInstanceID();
+            if (preparedView == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<int> activeSlotIndices = preparedView.ActiveSlotIndices;
             int uploadedSlotCount = activeSlotIndices.Count;
-            bool isDepthPass = passMode == VegetationRenderPassMode.Depth;
-            if (isDepthPass)
+            int cameraInstanceId = camera.GetInstanceID();
+            if (passMode == VegetationRenderPassMode.Depth)
             {
                 if (cameraInstanceId == lastDepthRenderCameraInstanceId &&
                     uploadedSlotCount == lastDepthRenderUploadedSlotCount &&
@@ -303,7 +455,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 lastDepthRenderUploadedSlotCount = uploadedSlotCount;
                 lastDepthRenderRenderedSlotCount = renderedSlotCount;
             }
-            else
+            else if (passMode == VegetationRenderPassMode.Color)
             {
                 if (cameraInstanceId == lastColorRenderCameraInstanceId &&
                     uploadedSlotCount == lastColorRenderUploadedSlotCount &&
@@ -316,12 +468,31 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 lastColorRenderUploadedSlotCount = uploadedSlotCount;
                 lastColorRenderRenderedSlotCount = renderedSlotCount;
             }
+            else
+            {
+                if (cameraInstanceId == lastShadowRenderCameraInstanceId &&
+                    uploadedSlotCount == lastShadowRenderUploadedSlotCount &&
+                    renderedSlotCount == lastShadowRenderRenderedSlotCount)
+                {
+                    return;
+                }
+
+                lastShadowRenderCameraInstanceId = cameraInstanceId;
+                lastShadowRenderUploadedSlotCount = uploadedSlotCount;
+                lastShadowRenderRenderedSlotCount = renderedSlotCount;
+            }
 
             StringBuilder builder = new StringBuilder(256);
             int slotsToLog = Mathf.Min(uploadedSlotCount, 6);
             for (int activeSlotOffset = 0; activeSlotOffset < slotsToLog; activeSlotOffset++)
             {
-                SlotResources slot = slotResources[activeSlotIndices[activeSlotOffset]];
+                int slotIndex = activeSlotIndices[activeSlotOffset];
+                if (slotIndex < 0 || slotIndex >= slotResources.Length)
+                {
+                    continue;
+                }
+
+                SlotResources slot = slotResources[slotIndex];
                 if (builder.Length > 0)
                 {
                     builder.Append(", ");
@@ -331,7 +502,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             string summary =
-                $"VegetationIndirectRenderer render camera={camera.name} pass={passMode} uploadedSlots={uploadedSlotCount} renderedSlots={renderedSlotCount} renderedInstances=unknown slots=[{builder}]";
+                $"VegetationIndirectRenderer render camera={camera.name} pass={passMode} uploadedSlots={uploadedSlotCount} renderedSlots={renderedSlotCount} activeSlotSurface={(preparedView.UsesRegisteredSlotFallback ? "registered-slot-fallback" : "latest-async-emitted-slots")} renderedInstances=unknown slots=[{builder}]";
 
             if (renderedSlotCount == 0)
             {
@@ -345,10 +516,19 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private static void DisposeSlotResources(SlotResources[] slotResources, int slotResourceCount)
         {
-            for (int i = slotResourceCount - 1; i >= 0; i--)
+            _ = slotResources;
+            _ = slotResourceCount;
+        }
+
+        private static int[] BuildAllRegisteredSlotIndices(int count)
+        {
+            int[] indices = new int[Mathf.Max(0, count)];
+            for (int i = 0; i < indices.Length; i++)
             {
-                slotResources[i]?.Dispose();
+                indices[i] = i;
             }
+
+            return indices;
         }
     }
 }

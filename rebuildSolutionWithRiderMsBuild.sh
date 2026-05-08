@@ -18,6 +18,7 @@ UnityCOMPILEError_FILE="$PROJECT_PATH/CI/CompileErrorsAfterUnityRun.log"
 UnityCOMPILEErrorFinal="$PROJECT_PATH/CI/CompileErrorsAfterUnityRun.txt"
 
 # Replace with msbuild
+# C:\Program Files\JetBrains\JetBrains Rider 2025.1.4\tools\MSBuild\Current\Bin\amd64\MSBuild.exe
 MSBUILD_DEFAULT="/c/Program Files/JetBrains/JetBrains Rider 2025.1.4/tools/MSBuild/Current/Bin/amd64/MSBuild.exe"
 MSBUILD="${RIDER_MSBUILD:-$MSBUILD_DEFAULT}"
 

@@ -9,9 +9,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
     /// </summary>
     public struct VegetationBlueprintBranchPlacementRuntime
     {
-        public Vector3 LocalPosition;
-        public Quaternion LocalRotation;
-        public float Scale;
+        public Matrix4x4 LocalToTree;
+        public Matrix4x4 TreeToLocal;
         public int PrototypeIndex;
         public Vector3 LocalBoundsCenter;
         public Vector3 LocalBoundsExtents;

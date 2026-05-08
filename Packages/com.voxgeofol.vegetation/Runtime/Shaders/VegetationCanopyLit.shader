@@ -29,7 +29,10 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
             #pragma target 4.5
             #pragma vertex Vert
             #pragma fragment Frag
+            #pragma multi_compile_instancing
             #pragma multi_compile_fog
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -60,10 +63,12 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
                 float2 uv : TEXCOORD2;
                 float3 tint : TEXCOORD3;
                 float fogCoord : TEXCOORD4;
+                float4 shadowCoord : TEXCOORD5;
             };
 
             Varyings Vert(Attributes input)
             {
+                UNITY_SETUP_INSTANCE_ID(input);
                 VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
 
                 Varyings output;
@@ -73,6 +78,7 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
                 output.uv = TRANSFORM_TEX(input.uv, _BaseMap);
                 output.tint = DecodePackedLeafTint(instanceData.packedLeafTint);
                 output.fogCoord = ComputeFogFactor(output.positionCS.z);
+                output.shadowCoord = TransformWorldToShadowCoord(output.positionWS);
                 return output;
             }
 
@@ -81,12 +87,107 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
                 float3 baseSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv).rgb;
                 float3 albedo = baseSample * _BaseColor.rgb * input.tint;
                 float3 normalWS = normalize(input.normalWS);
-                Light mainLight = GetMainLight();
-                float direct = saturate(dot(normalWS, mainLight.direction));
+                Light mainLight = GetMainLight(input.shadowCoord);
+                float direct = saturate(dot(normalWS, mainLight.direction)) * mainLight.shadowAttenuation;
                 float3 ambient = SampleSH(normalWS);
                 float3 color = albedo * (ambient + (mainLight.color * direct));
                 color = MixFog(color, input.fogCoord);
                 return half4(color, 1);
+            }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "ShadowCaster"
+            Tags { "LightMode" = "ShadowCaster" }
+            Cull [_Cull]
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma target 4.5
+            #pragma vertex ShadowVert
+            #pragma fragment ShadowFrag
+            #pragma multi_compile_instancing
+            #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "VegetationIndirectCommon.hlsl"
+
+            struct Attributes
+            {
+                float3 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+                uint instanceID : SV_InstanceID;
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+            };
+
+            Varyings ShadowVert(Attributes input)
+            {
+                UNITY_SETUP_INSTANCE_ID(input);
+                VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
+
+                Varyings output;
+                output.positionCS = GetVegetationShadowPositionHClip(input.positionOS, input.normalOS, instanceData);
+                return output;
+            }
+
+            half4 ShadowFrag(Varyings input) : SV_Target
+            {
+                return 0;
+            }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "DepthOnly"
+            Tags { "LightMode" = "DepthOnly" }
+            Cull [_Cull]
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma target 4.5
+            #pragma vertex DepthVert
+            #pragma fragment DepthFrag
+            #pragma multi_compile_instancing
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "VegetationIndirectCommon.hlsl"
+
+            struct Attributes
+            {
+                float3 positionOS : POSITION;
+                uint instanceID : SV_InstanceID;
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+            };
+
+            Varyings DepthVert(Attributes input)
+            {
+                UNITY_SETUP_INSTANCE_ID(input);
+                VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
+
+                Varyings output;
+                float3 positionWS = TransformVegetationPosition(input.positionOS, instanceData);
+                output.positionCS = TransformWorldToHClip(positionWS);
+                return output;
+            }
+
+            half4 DepthFrag(Varyings input) : SV_Target
+            {
+                return 0;
             }
             ENDHLSL
         }

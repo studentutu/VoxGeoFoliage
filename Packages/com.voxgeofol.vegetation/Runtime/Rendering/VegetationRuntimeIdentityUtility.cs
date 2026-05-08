@@ -43,7 +43,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         {
             if (transform == null)
             {
-                throw new ArgumentNullException(nameof(transform));
+               return "null";
             }
 
             Stack<string> pathParts = new Stack<string>();
