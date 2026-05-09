@@ -139,6 +139,38 @@ no per-frame branch work generation as the final architecture
    asset group = draw submission owner
    ```
 
+10. The current shadow proxy path is a correctness bug, not an optional quality mode.
+
+   Current code registers `ShadowProxyL0/L1` draw slots, sends shadow cascades through `PrepareViewForFrustum()`, sets `_ShadowProxyOnly`, and then `VegetationClassify.compute` maps accepted `L0/L1` trees to proxy tree meshes instead of the same branch/trunk geometry used by color. That directly creates the reported failure: the caster can be larger than the rendered branch, so the visible branch is covered by a shadow silhouette that does not exist in the color pass.
+
+   This cannot be fixed by tuning distances. The runtime contract must delete independent shadow proxy LOD promotion. Shadow packets must be compiled as a subordinate mapping from accepted color packets:
+
+   ```text
+   accepted color packet
+   -> legal shadow packet
+   -> never richer
+   -> never larger except tiny documented bake tolerance
+   ```
+
+11. Too much stable runtime data is still calculated in frame-time code.
+
+   Current registry and compute paths still calculate or consume tree-first data that belongs in compiled assets: branch placement matrices, inverse matrices, branch bounds, per-tree sphere bounds, work costs, draw-slot identities, shadow proxy mappings, and branch world bounds for promoted branch emission.
+
+   The final renderer must move this to the editor compiler:
+
+   ```text
+   branch placement TRS/inverse
+   scaled branch bounds and culling spheres
+   tree/page/cell bounds
+   packet ranges and packet costs
+   asset-group ids
+   shadow packet mapping
+   wind phase/amplitude metadata
+   command upper bounds
+   ```
+
+   Runtime should not rediscover static structure. Runtime should schedule compiled packet ranges.
+
 ## missing pieces
 
 1. A global vegetation render world.
@@ -396,14 +428,14 @@ no per-frame branch work generation as the final architecture
    Unity already tried to implement that in the [com.unity.virtualmesh](https://github.com/Unity-Technologies/com.unity.virtualmesh). Unreal with Nanite does not specifically target mobile, and even in the best case scenario - doesn't improve perfomance (a slight degradation and more battery drainage).
    We also need to support Mobile and VR, so it is essential to stay away from per-pixel precision!
 
-6. BRG / GPU Resident Drawer as main backend [USER-APPROVED].
+6. BRG / GPU Resident Drawer as optional backend [CONSTRAINED].
 
    Unity says BRG is intended for high-performance custom SRP rendering and large numbers of environment objects:
 
    - https://docs.unity.cn/Manual/batch-renderer-group.html
    - https://docs.unity.cn/2022.1/Documentation/Manual/batch-renderer-group-how.html
 
-   It is worth testing for page/cell HLOD or far static proxies. It should not replace the custom GPU-driven assembly path now because BRG culling is CPU-callback centered, uses a different shader/metadata contract, and would force a second renderer architecture before the current design is stable.
+   It is worth testing only over the same compiled packet/page data, mainly for page/cell HLOD and far static proxies. It must not become a parallel migration path, a second authoring model, or a second LOD/shadow/wind policy. A BRG experiment is acceptable only after the hard packet contract exists.
 
 7. unityHISM BRG pattern [PARTIALLY USEFUL].
 
@@ -412,8 +444,9 @@ no per-frame branch work generation as the final architecture
    The useful pieces:
 
    - chunk-first runtime ownership
-   - self-relative blob chunk format
+   - self-relative `BlobArray<T>` chunk format that can be loaded as disk-equals-memory data
    - async chunk streaming through `AsyncReadManager`
+   - explicit per-frame IO limits for chunk streaming
    - per-archetype BRG batch/sub-batch allocation
    - 64 KB constant-buffer windows for mobile-friendly per-instance data
    - Burst CPU BVH/frustum/LOD callback that emits BRG `visibleInstances` and `BatchDrawCommand` ranges
@@ -424,12 +457,14 @@ no per-frame branch work generation as the final architecture
    - no vegetation authoring tree
    - no page/cell HLOD compiler
    - no global active quality budget
-   - distance-threshold LOD, not screen-error plus budget
+   - hardcoded distance-threshold LOD, not screen-error plus budget
    - shallow BVH only works if chunks are already tightly bounded and capped
    - no wind contract
    - no shadow policy comparable to `CheapTree`
+   - no subordinate shadow-from-color decision
    - no million-instance proof or production telemetry
    - limited to BRG callback ownership, which does not match the current GPU-driven branch assembly path
+   - allocates/constructs BRG culling output in the callback shape, which is useful to study but not a reason to fork this renderer
 
    Verdict:
 
@@ -479,6 +514,8 @@ Authoring graph
 Containers remain authoring and streaming boundaries. They stop being renderers.
 
 The final runtime should not rebuild tree/branch draw work. It should select already compiled packets.
+
+This is a hard cutover target. There is no production old/new renderer toggle, no compatibility runtime for old tree-first assets, and no maintained shadow-proxy fallback. Existing authorings are upgraded once by editor tooling into compiled page assets; if an asset cannot compile into the packet contract, it fails before Play Mode.
 
 ```text
 runtime hot path:
@@ -531,11 +568,14 @@ AUTHORING TIME
     - bakes cell HLOD meshes
     - bakes page HLOD meshes
     - splits oversized pages/cells
-    - computes bounds, costs, screen-error metadata
+    - computes branch placement TRS/inverse data
+    - computes page/cell/tree/packet bounds and culling spheres
+    - computes costs, screen-error metadata, and hysteresis bands
     - expands tree/branch representation packets
     - groups packet ranges by AssetGroup
     - builds cheap shadow packet mappings
     - packs wind phase/amplitude metadata
+    - computes command and residency upper bounds
           |
           v
   FoliageAssemblyAsset
@@ -748,6 +788,8 @@ precompute AssetGroup ids from mesh/material/pass contract
 precompute per-representation draw packets
 precompute cheap shadow packet mapping
 precompute wind metadata ranges
+precompute branch placement matrices and inverse matrices
+precompute branch-local to packet-range ownership
 pre-sort packet ranges by AssetGroup
 quantize static transforms relative to page origin
 estimate GPU/CPU bytes per page and per detail stream
@@ -770,11 +812,14 @@ Runtime should not do:
 ```text
 branch placement traversal
 tree-to-branch work-list generation
+branch world-matrix generation
+branch world-bounds tests for already compiled packets
 per-frame bounds aggregation
 per-frame draw-slot lookup
 per-frame material compatibility checks
 per-frame HLOD selection by raw branch count
 per-frame CPU-visible active-slot readback
+slot-order capacity clamping that changes survival by registry insertion order
 ```
 
 Packet record:
@@ -863,6 +908,7 @@ one accepted tier for both eyes
 Mobile tile-based GPU rule:
 
 ```text
+avoid transparency
 avoid extra depth prepass by default
 avoid readback-driven submission
 avoid excessive compute passes before raster
@@ -885,11 +931,10 @@ VegetationRenderWorld
   Frame scratch:
     visible pages
     visible cells
-    visible trees
-    accepted representations
-    branch/cluster work
-    color instance output
-    shadow instance output
+    expanded near cells
+    selected packet ranges
+    color command records
+    shadow command records
     command buffers
     frame counters
 
@@ -1024,6 +1069,7 @@ VegetationRuntimeContainer authorings or procedural placement output
 ```text
 branch prototype render tiers
 tree tiers
+branch placement templates with local matrices, inverse matrices, bounds, and sphere radii
 representation costs
 bounds
 screen-error metadata
@@ -1041,6 +1087,7 @@ page bounds
 cell bounds
 tree transforms, quantized where acceptable
 tree blueprint indices
+compiled tree bounds and culling spheres
 cell HLOD meshes
 page HLOD meshes
 static GPU upload ranges
@@ -1066,7 +1113,9 @@ packet bounds contain all instances referenced by the packet
 packet instance ranges are contiguous per AssetGroup
 packet cost is monotonic across LOD detail
 shadow packet bounds are not larger than the color packet it can replace, except documented tolerance
+shadow packet geometry is derived from accepted color packet policy, not independent `ShadowProxyL0/L1`
 near-detail stream bytes stay below configured per-cell cap
+no page/cell requires runtime branch expansion to draw its accepted baseline
 ```
 
 Compiler output should include a build report:
@@ -1199,6 +1248,8 @@ Unified default path:
 4. Treat results as async and one-cull-late.
 5. Use hysteresis so page/cell transitions do not pop in VR.
 
+Unity's `CullingGroup` contract is sphere-only, one camera per group, frustum plus static occlusion only, with results updated during camera culling. That makes it a good conservative page/cell broad phase and a bad tree-level or dynamic-occlusion solution.
+
 Initial occlusion targets:
 
 ```text
@@ -1235,6 +1286,7 @@ distance bands match page/cell LOD bands
 callbacks update persistent visibility state
 query API is used only from non-render hot paths
 results are treated as async and one-cull-late
+dynamic occluders are ignored by design
 ```
 
 For VR:
@@ -1541,6 +1593,8 @@ no draw-slot backend kept after cutover
 no runtime compatibility shim for old tree-first assets
 no production `TreeL3` floor
 no production branch-work generator
+no production `ShadowProxyL0/L1` path
+no telemetry-gated active-slot filtering as submission policy
 no HZB work before the packet renderer is production-ready
 no BRG fork that changes authoring, LOD, shadow, or wind policy
 ```
@@ -1579,6 +1633,7 @@ Delete at this cutover:
 runtime draw-slot discovery from live authorings
 runtime material compatibility discovery
 runtime assumptions that authoring objects are render input
+runtime branch placement matrix/bounds generation for static blueprint data
 ```
 
 Acceptance:
@@ -1609,6 +1664,7 @@ mandatory far/non-far `TreeL3` contract
 independent `ShadowProxyL0/L1` production path
 runtime shadow LOD promotion
 runtime branch placement expansion for final rendering
+shadow proxy bake/validation requirements that force proxy meshes to be larger than `TreeL3`
 ```
 
 Acceptance:
@@ -1670,6 +1726,7 @@ registered-slot warm-up fallback
 legacy `RenderMainLightShadows`
 legacy `AllowExpandedTreePromotionInShadows`
 per-frame visible-instance packing for the final path
+production dependency on latest completed telemetry readback for draw submission
 ```
 
 Acceptance:
@@ -1698,6 +1755,18 @@ old shadow proxy LOD family
 old active-slot submission path
 obsolete docs that describe the old path as production target
 ```
+
+Update authoritative docs at the same cutover:
+
+```text
+Packages/com.voxgeofol.vegetation/README.md
+DetailedDocs/VegetationRuntimeArchitecture.md
+DetailedDocs/Milestone2.md
+memorybank/projectrules.md
+memorybank/FeatureRouter.md if routing changes
+```
+
+The package README must stop advertising a container-scoped tree-first runtime once this cutover lands. Keeping old behavior in docs is still maintenance of the old renderer.
 
 Keep only if rewritten around packets:
 
