@@ -8,6 +8,8 @@ Purpose: current milestone, current blockers, next tasks. Nothing else.
 - Scope authority: [Milestone2.md](../DetailedDocs/Milestone2.md)
 - Runtime authority: [VegetationRuntimeArchitecture.md](../DetailedDocs/VegetationRuntimeArchitecture.md)
   now includes full ASCII bake, registration, color/depth, and shadow pipelines with payload ownership and resident-memory surfaces
+- Strategic redesign proposal: [VegetationGenerationalRedesign.md](../DetailedDocs/VegetationGenerationalRedesign.md)
+  defines the recommended non-HZB production baseline: authoring branch/tree graph -> compiled assembly/page assets -> streaming providers -> global render world -> CullingGroup page/cell broad phase -> HLOD/tree selection -> active budgets -> `CheapTree` shadows -> shader wind -> grouped indirect submission. Target scale is 100k to 1M loaded instances with streaming; HZB is explicitly deferred until after wind and production verification. The unityHISM review is captured there as a partial BRG reference for chunk blobs, sub-batch windows, culling callback command emission, and command compaction, not as the target vegetation architecture.
 - Finished baseline: [Milestone1.md](../DetailedDocs/Milestone1.md)
 - Latest completed cleanup: branch prototype authoring now persists only the split-tier runtime mesh chain (`branchL1/2/3CanopyMesh` + `branchL1/2/3WoodMesh`); obsolete shell-node authoring/runtime contracts and sample per-node shell assets were removed.
 

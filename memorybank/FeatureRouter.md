@@ -41,6 +41,8 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
 - Read:
   - [Package README](../Packages/com.voxgeofol.vegetation/README.md) - package consumer contract, current tree-first runtime terminology, and lifecycle summary from container input to URP indirect submission
   - [VegetationRuntimeArchitecture](../DetailedDocs/VegetationRuntimeArchitecture.md) - exact bake, registration, color/depth, and shadow ASCII pipelines with payload ownership, current-code runtime review, and replacement runtime architecture authority
+  - [VegetationGenerationalRedesign](../DetailedDocs/VegetationGenerationalRedesign.md) - whole-system redesign proposal for the non-HZB production baseline: compiled pages, global render world, page/cell HLOD, active budgets, CheapTree shadows, shader wind, grouped indirect submission, and scalable 100k to 1M streamed forests
+  - [fixShadows](../DetailedDocs/fixShadows.md) - shadow-specific current-design review and proposed `ShadowMode.CheapTree` redesign with cascade-0 self-shadowing and 5 m offscreen caster ring
   - [projectrules](projectrules.md) - current SubScene provider/runtime ownership rules until a dedicated SubScene doc exists
   - [Milestone2](../DetailedDocs/Milestone2.md) - current milestone status and open work only
   - [Milestone1](../DetailedDocs/Milestone1.md) - shipped baseline summary only
