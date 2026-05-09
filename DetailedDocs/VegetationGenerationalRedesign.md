@@ -24,8 +24,8 @@ authoring branch/tree graph
 -> streaming container/page provider
 -> global VegetationRenderWorld
 -> CullingGroup page/cell broad phase
--> page/cell HLOD + tree expansion
--> active global budgets
+-> editor-compiled representation packets
+-> packet-level global active budgets
 -> CheapTree shadows
 -> shader wind
 -> grouped indirect submission
@@ -38,6 +38,7 @@ no HZB
 no per-pixel-perfect occlusion dependency
 no separate desktop renderer
 no far-field per-tree floor
+no per-frame branch work generation as the final architecture
 ```
 
 ## critical flaws
@@ -192,7 +193,7 @@ no far-field per-tree floor
    TreeL0        trunk full + source branch wood/foliage
    ```
 
-   Final target removes mandatory per-tree `TreeL3`. `TreeL3` is a migration-only compatibility fallback until page/cell HLOD exists.
+   Final target removes mandatory per-tree `TreeL3`. `TreeL3` is a current-runtime artifact and must not survive the full packet migration as a far-field or non-far floor.
 
 4. Screen-error LOD.
 
@@ -215,10 +216,12 @@ no far-field per-tree floor
    Required budgets:
 
    ```text
-   max frame visible instances
-   max frame branch work items
+   max selected packet count
+   max selected instance count
    max frame command records
-   max frame approximate vertex/index work
+   max approximate vertex/index work
+   max near-detail resident bytes
+   max near-detail upload bytes per frame
    max near-ring tree count
    max cascade-0 same-as-color shadow casters
    max offscreen shadow ring casters
@@ -283,6 +286,26 @@ no far-field per-tree floor
    ```
 
    These artifacts are generated in editor and loaded by runtime. ScriptableObjects remain authoring inputs.
+
+11. Editor-compiled render packets.
+
+   The final runtime should not generate branch work every frame. The editor compiler should precompute draw-ready representation packets:
+
+   ```text
+   RepresentationPacket
+     owner page/cell/tree
+     representation kind
+     asset group
+     first static instance
+     instance count
+     bounds
+     screen-error metric
+     cost
+     shadow packet mapping
+     wind metadata range
+   ```
+
+   Runtime then selects packets, not branches. This moves the expensive tree/branch expansion math out of the frame loop and turns the renderer into a packet scheduler.
 
 ## best alternatives
 
@@ -416,9 +439,28 @@ no far-field per-tree floor
    do not replace the non-HZB production baseline with HISM
    ```
 
+8. Iteration 6 [RECOMMENDED]: editor-compiled packet renderer.
+
+   Changes:
+
+   - compile page/cell/tree representations into immutable packet ranges
+   - pre-expand branch draw instances into page blobs when memory budgets allow
+   - keep high-detail `L0/L1` packet streams cold or near-resident instead of globally GPU-resident
+   - select packets at runtime by page/cell visibility, screen-error band, and global budget
+   - submit static instance ranges instead of packing a fresh visible-instance buffer every frame
+   - derive shadow packets from accepted color packets
+
+   Result:
+
+   - runtime cost scales with visible pages/cells and selected packets, not raw tree branches
+   - branch placement multiplication, bounds aggregation, draw-slot grouping, shadow caster mapping, and wind metadata packing happen in the editor
+   - BRG becomes a realistic optional backend for compiled packet ranges, not a separate vegetation architecture
+
+   This is the new target. The old runtime branch-work generator is replaced, not maintained as a parallel path.
+
 ## recommended combined design
 
-### Final target: page-based GPU scene with HLOD, grouped indirect submission, and CullingGroup broad phase
+### Final target: editor-compiled packet scene with HLOD, grouped submission, and CullingGroup broad phase
 
 The right generational design is:
 
@@ -426,14 +468,35 @@ The right generational design is:
 Authoring graph
 -> Editor compiler
 -> FoliageAssemblyAsset + FoliagePageAsset
+-> immutable RepresentationPacket ranges
 -> VegetationRenderWorld
--> global GPU scene
+-> global packet scene
 -> one frame decision per camera
 -> dependent shadow decision
 -> grouped RenderMeshIndirect submission
 ```
 
 Containers remain authoring and streaming boundaries. They stop being renderers.
+
+The final runtime should not rebuild tree/branch draw work. It should select already compiled packets.
+
+```text
+runtime hot path:
+  page/cell culling
+  packet LOD selection
+  packet budget admission
+  packet command emission
+  draw submission
+
+not runtime hot path:
+  branch placement expansion
+  bounds aggregation
+  HLOD mesh generation
+  draw-slot discovery
+  shadow caster LOD authoring
+  wind metadata generation
+  per-frame visible-instance compaction
+```
 
 ### Whole pipeline
 
@@ -469,12 +532,17 @@ AUTHORING TIME
     - bakes page HLOD meshes
     - splits oversized pages/cells
     - computes bounds, costs, screen-error metadata
+    - expands tree/branch representation packets
+    - groups packet ranges by AssetGroup
+    - builds cheap shadow packet mappings
+    - packs wind phase/amplitude metadata
           |
           v
   FoliageAssemblyAsset
     - reusable species/blueprint render data
     - branch/tree representation costs
     - compatible mesh/material groups
+    - reusable representation templates
           |
           v
   FoliagePageAsset[]
@@ -483,6 +551,8 @@ AUTHORING TIME
     - species/assembly references
     - page/cell HLOD assets
     - static upload ranges
+    - compiled color/shadow packet ranges
+    - hot/cold detail stream metadata
 ```
 
 Runtime ownership flow:
@@ -505,6 +575,8 @@ RUNTIME LOAD / STREAMING
     - tree table
     - assembly/representation table
     - asset group table
+    - representation packet table
+    - static instance range table
     - command layout
 ```
 
@@ -531,22 +603,22 @@ FRAME N
           v
   VegetationRenderWorld frame decision
     - consume page/cell broad-phase masks
-    - GPU frustum fallback for accepted pages/cells
+    - GPU frustum validation for accepted pages/cells
     - no HZB dependency in the production baseline
-    - screen-error representation choice
+    - screen-error packet choice
     - global budget arbitration
           |
           v
-  Accepted representation stream
-    - PageHLOD entries
-    - CellHLOD entries
-    - TreeL2/L1/L0 entries for expanded cells
-    - branch work only for admitted high-value near trees
+  Accepted packet stream
+    - PageHLOD packets
+    - CellHLOD packets
+    - TreeL2/L1/L0 packets for expanded cells
+    - no per-frame branch work generation
           |
           v
   Command emission
-    - color/depth instance payloads
-    - shadow payloads derived from accepted color state
+    - color/depth commands reference static instance ranges
+    - shadow commands reference mapped shadow packets
     - grouped indirect command buffers per AssetGroup
           |
           v
@@ -605,6 +677,7 @@ The important ownership rule:
 Pages provide compiled data.
 Cells provide culling and LOD subdivision.
 AssetGroups provide draw grouping.
+RepresentationPackets provide draw-ready static ranges.
 VegetationRenderWorld owns budgets, frame scratch, decisions, and submission.
 ```
 
@@ -616,10 +689,11 @@ The production-ready target is the complete non-HZB path:
 BranchPrototypeSO + TreeBlueprintSO
 -> FoliageAssemblyAsset
 -> FoliagePageAsset[]
+-> RepresentationPacket table
 -> VegetationRuntimeContainer / SubScene / procedural provider
 -> VegetationRenderWorld
 -> CullingGroup page/cell broad phase
--> screen-error HLOD/tree selection
+-> screen-error packet selection
 -> global active budget arbitration
 -> grouped color/depth/shadow commands
 -> shader wind
@@ -635,6 +709,8 @@ render world is the only owner of runtime budgets
 render world is the only owner of GPU scratch and command emission
 shadow casters are derived from accepted color representations
 wind data is packed into representation/instance metadata
+runtime does not expand branch placements in the final architecture
+runtime does not discover draw slots in the final architecture
 ```
 
 Scale contract:
@@ -654,6 +730,105 @@ far field:
 ```
 
 This is the point of the redesign. If 1M loaded instances still require processing one tree representation per visible far tree, the redesign failed.
+
+### Editor-prepared packet model
+
+The compiler should move every stable calculation out of the frame loop.
+
+Compile-time responsibilities:
+
+```text
+partition authorings into pages and cells
+split pages/cells that exceed count, bounds, or memory caps
+build page/cell HLOD meshes
+precompute page/cell/tree bounds and culling spheres
+precompute screen-error thresholds and hysteresis bands
+precompute representation costs and value buckets
+precompute AssetGroup ids from mesh/material/pass contract
+precompute per-representation draw packets
+precompute cheap shadow packet mapping
+precompute wind metadata ranges
+pre-sort packet ranges by AssetGroup
+quantize static transforms relative to page origin
+estimate GPU/CPU bytes per page and per detail stream
+```
+
+Runtime responsibilities:
+
+```text
+load page headers
+upload required static packet streams
+consume CullingGroup page/cell visibility
+select packets by broad-phase band, screen error, and budget
+write command records or BRG draw commands
+submit grouped draws
+sample telemetry
+```
+
+Runtime should not do:
+
+```text
+branch placement traversal
+tree-to-branch work-list generation
+per-frame bounds aggregation
+per-frame draw-slot lookup
+per-frame material compatibility checks
+per-frame HLOD selection by raw branch count
+per-frame CPU-visible active-slot readback
+```
+
+Packet record:
+
+```text
+FoliageRepresentationPacket
+  packet id
+  owner page id
+  owner cell id
+  representation kind
+  residency class
+  asset group id
+  first instance
+  instance count
+  bounds
+  culling sphere
+  max screen error
+  cost units
+  value bucket
+  color pass flags
+  depth pass flags
+  shadow packet id
+  wind metadata offset
+```
+
+Residency classes:
+
+```text
+AlwaysResident:
+  page headers
+  page/cell bounds
+  PageHLOD packets
+  CellHLOD packets
+  cheap shadow HLOD packets
+
+NearResident:
+  TreeL2 packets
+  TreeL1 packets
+  TreeL0 packets
+
+ColdBlob:
+  high-detail per-tree/branch packet streams not currently uploaded
+```
+
+Do not upload every `L0/L1` branch-expanded instance stream for 1M loaded trees. That only moves the performance failure into memory. High-detail packet streams are compiled in the editor but uploaded at cell/page granularity only when a near-ring policy can pay for them.
+
+Simplified runtime invariant:
+
+```text
+loaded page count can be high
+uploaded high-detail cell count must be bounded
+selected packet count must be bounded
+submitted command count must be bounded
+```
 
 ### Cross-platform rules
 
@@ -742,7 +917,7 @@ The current tree tiers become part of a wider ladder:
 ```text
 PageHLOD
   Many cells / many trees collapsed into an opaque aggregate.
-  Used for distant pages and emergency overload fallback.
+  Used for distant pages and emergency overload representation.
 
 CellHLOD
   Many trees inside one spatial cell collapsed into an opaque aggregate.
@@ -764,7 +939,7 @@ Rule:
 Do not expand to a finer representation unless its projected error and budget value justify the cost.
 ```
 
-Final target removes mandatory per-tree `TreeL3`. `TreeL3` may remain only as a migration alias while the HLOD compiler is not ready. Once page/cell HLOD exists, far coarse vegetation should be represented by `CellHLOD` or `PageHLOD`, not by one whole-tree proxy per tree.
+Final target removes mandatory per-tree `TreeL3`. Once the packet renderer lands, far coarse vegetation is represented by `CellHLOD` or `PageHLOD`, not by one whole-tree proxy per tree.
 
 Sparse-cell edge case:
 
@@ -855,6 +1030,8 @@ screen-error metadata
 material compatibility metadata
 wind metadata
 shadow caster metadata
+representation templates
+asset group references
 ```
 
 `FoliagePageAsset` stores world/chunk data:
@@ -867,6 +1044,9 @@ tree blueprint indices
 cell HLOD meshes
 page HLOD meshes
 static GPU upload ranges
+representation packets
+packet-to-shadow mappings
+near-detail stream offsets
 ```
 
 This turns runtime from "rebuild from live authoring graph" into "load compiled render data."
@@ -882,7 +1062,33 @@ page tree count below configured cap
 cell tree count below configured cap or recursively split
 asset groups reuse shared meshes/materials
 no per-page unique runtime material instances
+packet bounds contain all instances referenced by the packet
+packet instance ranges are contiguous per AssetGroup
+packet cost is monotonic across LOD detail
+shadow packet bounds are not larger than the color packet it can replace, except documented tolerance
+near-detail stream bytes stay below configured per-cell cap
 ```
+
+Compiler output should include a build report:
+
+```text
+page count
+cell count
+tree count
+always-resident bytes
+near-detail cold bytes
+max page bytes
+max cell bytes
+max packet count per page
+max packet count per cell
+AssetGroup count
+estimated color command upper bound
+estimated shadow command upper bound
+HLOD triangle budgets
+validation failures
+```
+
+If the compiler cannot fit a page/cell into caps, it must split or fail at authoring time. Runtime must not discover that a page is too large during rendering.
 
 ### Frame pipeline
 
@@ -893,12 +1099,11 @@ BeginFrame
 -> Register active pages from streaming providers
 -> Prepare camera constants
 -> Consume CullingGroup page/cell visibility and distance bands
--> Cull pages
--> Cull cells
--> Select page/cell/tree representations by screen error
--> Apply global budgets
--> Emit color/depth commands
--> Emit dependent shadow commands from accepted color state
+-> Select page/cell packets by screen error
+-> Apply global packet budgets
+-> Request near-detail stream uploads for future frames if needed
+-> Emit color/depth commands from accepted packet ranges
+-> Emit dependent shadow commands from accepted packet mappings
 -> Submit grouped indirect commands
 -> Capture async telemetry
 ```
@@ -910,26 +1115,35 @@ Use screen-space error and global budgets:
 ```text
 for each page:
   if projected page error <= pageHlodError:
-    accept PageHLOD
+    accept PageHLOD packet
     skip cells and trees
 
 for each cell in accepted page:
   if projected cell error <= cellHlodError:
-    accept CellHLOD
+    accept CellHLOD packet
     skip trees
 
 for each tree in accepted cell:
-  choose candidate tier by projected tree error
-  admit candidate by value/cost bucket
+  choose candidate packet by projected tree error
+  admit candidate packet by value/cost bucket
 ```
 
 Priority should be bucketed, not globally sorted with expensive dynamic sort:
 
 ```text
-bucket = screen coverage band + distance ring + representation benefit
+bucket = screen coverage band + distance ring + packet benefit
 ```
 
 This keeps the GPU path simple and avoids O(N log N) or O(N^2) behavior.
+
+If a high-detail packet is not resident yet:
+
+```text
+use current resident lower-detail packet this frame
+queue near-detail stream upload
+upgrade only after upload completes
+apply hysteresis to avoid flicker
+```
 
 ### Budget behavior
 
@@ -943,10 +1157,10 @@ HLOD budget:
   page/cell aggregates cover dense far-field.
 
 Tree budget:
-  individual tree representations admitted by screen value.
+  individual tree packets admitted by screen value.
 
-Branch budget:
-  branch expansion only for high-value near trees.
+Near detail budget:
+  near-detail packet residency and high-detail packet admission only.
 
 Shadow budget:
   subordinate to color; cascade 0 same-as-color only, cheap tree elsewhere.
@@ -964,12 +1178,23 @@ never silently drop near required visibility
 
 This is the difference between scalable degradation and brittle caps.
 
+The final design should not have a per-frame branch work budget because the frame loop should not generate branch work. It should have:
+
+```text
+near-detail upload budget
+near-detail resident byte budget
+selected packet budget
+selected instance budget
+selected command budget
+shadow packet budget
+```
+
 ### Broad-phase and occlusion strategy
 
 Unified default path:
 
 1. Use `CullingGroup` for page/cell sphere visibility and distance bands.
-2. Use GPU frustum checks as the authoritative fallback and for cells accepted by the CPU broad phase.
+2. Use GPU frustum checks as validation for cells accepted by the CPU broad phase.
 3. Never feed one sphere per tree into `CullingGroup` for dense scenes.
 4. Treat results as async and one-cull-late.
 5. Use hysteresis so page/cell transitions do not pop in VR.
@@ -1027,12 +1252,27 @@ Move toward:
 
 ```text
 AssetGroup = mesh + material + pass contract
-GPU writes one command buffer per AssetGroup
+runtime writes or enables one command buffer per AssetGroup
 CPU submits one RenderMeshIndirect per AssetGroup per pass
 inactive commands have instanceCount = 0
 ```
 
 This removes production dependency on CPU active-slot readback.
+
+Packet submission model:
+
+```text
+static instance buffer per AssetGroup
+  contains compiled page/cell/tree packet instance ranges
+
+command buffer per AssetGroup/pass
+  contains one command per accepted packet range or merged adjacent ranges
+
+shader instance lookup
+  uses start instance + instance id to read the static packet range
+```
+
+The runtime should not copy accepted instances into a fresh visible-instance buffer every frame unless profiling proves static packet ranges are worse on a target API.
 
 BRG compatibility track, informed by unityHISM:
 
@@ -1051,6 +1291,17 @@ Culling callback
 ```
 
 This is useful for far static HLOD or fully compiled page/cell representations. It is not a drop-in replacement for near `L0/L1` branch-expanded vegetation unless the branch-expanded output is first turned into stable compiled representations or a separate BRG-compatible instance stream.
+
+With editor-compiled packets, BRG becomes simpler:
+
+```text
+BRG culling callback:
+  consume selected packet ranges
+  emit visible instance ranges
+  emit compact BatchDrawCommand records
+```
+
+That is an optional backend experiment over the same packet data. It must not create a second authoring model or second LOD/shadow policy.
 
 Adopt from HISM:
 
@@ -1071,14 +1322,6 @@ per-primitive far-field floor
 renderer-owned streaming policy
 no explicit active quality budget
 no vegetation shadow/wind/material contract
-```
-
-Short-term bridge:
-
-```text
-existing draw slots remain
-but active-slot compaction must run outside diagnostics
-and zero-instance fallback must be bounded and measured
 ```
 
 Final target:
@@ -1122,8 +1365,8 @@ ShadowMode.CheapTree
 Generational integration:
 
 ```text
-accepted color representation
--> shadow representation mapping
+accepted color packet
+-> shadow packet mapping
 -> cascade 0 same-as-color for near L0/L1
 -> cascades 1+ cheap tree or HLOD shadow
 -> offscreen camera-radius ring defaults to 5 m
@@ -1132,10 +1375,12 @@ accepted color representation
 Add page/cell HLOD shadows:
 
 ```text
-PageHLOD accepted in color -> PageHLOD shadow if within shadow distance
-CellHLOD accepted in color -> CellHLOD shadow
-Tree accepted in color -> fixShadows mapping
+PageHLOD color packet -> PageHLOD shadow packet if within shadow distance
+CellHLOD color packet -> CellHLOD shadow packet
+Tree color packet -> fixShadows packet mapping
 ```
+
+Shadow packet mapping is compiled in the editor. Runtime can reject or enable shadow packets, but it must not choose a different geometry family from scratch.
 
 ### Wind
 
@@ -1145,7 +1390,7 @@ Recommended:
 
 ```text
 L0/L1:
-  shader procedural branch/trunk bend from packed per-instance phase and branch metadata
+  shader procedural branch/trunk bend from packed per-instance phase and compiled branch metadata
 
 L2:
   cheap trunk sway / canopy sway
@@ -1159,6 +1404,23 @@ Shadow:
 ```
 
 Do not add bone animation or per-vertex compute deformation until the static renderer is stable and profiled.
+
+Wind authoring data should be compiled into packet streams:
+
+```text
+per species:
+  wind profile id
+  stiffness bands
+  bend amplitude limits
+
+per packet instance:
+  phase
+  amplitude scalar
+  packed variation
+  optional branch anchor metadata
+```
+
+Runtime only updates global wind constants. It does not rebuild instance data when wind changes.
 
 ### Material contract
 
@@ -1179,17 +1441,18 @@ Reject incompatible materials at validation. Do not clone materials at runtime.
 
 ### Data layout
 
-Runtime buffers should be SoA where kernels scan many records:
+Compiled page blobs should be SoA where runtime scans many records:
 
 ```text
-tree positions
-tree radii
-tree blueprint ids
-tree page/cell ids
-tree packed rotation/scale
+page records
+cell records
+packet records
+packet costs
+packet bounds
+packet residency states
 ```
 
-Keep AoS only for final instance payload because shaders consume it directly.
+Keep AoS only for final shader instance payload because shaders consume it directly.
 
 Quantize static transforms in page assets where acceptable:
 
@@ -1201,6 +1464,36 @@ scale quantized to existing 0.25 step rule
 
 This reduces memory bandwidth, which matters more than micro-optimizing C# wrappers.
 
+Final static instance data:
+
+```text
+AssetGroupBuffer
+  static compiled instance payloads sorted by page/cell/packet
+
+PacketRange
+  assetGroup
+  firstInstance
+  instanceCount
+
+FrameCommand
+  packetRange reference
+  pass flags
+  instanceCount or zero
+```
+
+Do not duplicate the same transform data in both tree records and draw-ready instance records unless the compiler report proves the runtime savings justify the memory. Prefer:
+
+```text
+HLOD streams:
+  always resident and draw-ready
+
+near tree streams:
+  draw-ready but cold until near cells request upload
+
+tree metadata:
+  compact culling/LOD data only
+```
+
 ### Diagnostics
 
 Required frame telemetry:
@@ -1208,142 +1501,233 @@ Required frame telemetry:
 ```text
 active pages
 visible pages
-page HLOD accepted
-cell HLOD accepted
-individual trees accepted
+uploaded near-detail streams
+selected packet count
+selected instance count
+page HLOD packets accepted
+cell HLOD packets accepted
+individual tree packets accepted
 L0/L1/L2 counts
 CellHLOD/PageHLOD counts
 TreeL3 migration count
 Impostor count
-branch work count
+legacy branch work count
 color commands
 shadow commands by cascade
 instance buffer usage
 command buffer usage
+near-detail resident bytes
+near-detail upload bytes
 occlusion rejected pages/cells
 budget pressure reason
-fallback level used
+degradation level used
 GPU buffer bytes
 ```
 
-During migration, track `TreeL3` only to prove it is disappearing from the final path. Final builds should report `TreeL3 migration count = 0`.
+During replacement validation, track `TreeL3` and legacy branch work only to prove they are deleted from the final path. Final builds must report `TreeL3 migration count = 0` and `legacy branch work count = 0`.
 
 Diagnostics must be async and sampled. No synchronous readback in render callbacks.
 
-### Migration plan
+### Full migration plan
 
-#### Phase 1: stop the bleeding
+This is a replacement migration, not a staged maintenance plan. The old tree-first runtime is source material and a reference for behavior only. It must not become a supported bridge, fallback, or alternate renderer.
 
-1. Implement `fixShadows.md`.
-2. Make active-slot filtering production behavior, not diagnostics behavior.
-3. Lower default shadow budgets.
-4. Remove slot-order clamping bias.
-5. Add telemetry for actual per-pass command count and fallback submission count.
-
-Verification:
+Hard migration rules:
 
 ```text
-current sample
-dense single container
-dense multi-container
-shadows off
-cheap shadows
-scene view + game view
+no long-lived dual runtime
+no old/new renderer toggle in production
+no draw-slot backend kept after cutover
+no runtime compatibility shim for old tree-first assets
+no production `TreeL3` floor
+no production branch-work generator
+no HZB work before the packet renderer is production-ready
+no BRG fork that changes authoring, LOD, shadow, or wind policy
 ```
 
-#### Phase 2: global render world
-
-1. Add `VegetationRenderWorld`.
-2. Keep existing container registration, but have containers register pages into the world.
-3. Move GPU scratch pools and budgets to the world.
-4. Prepare one global camera decision.
-5. Shadow consumes color decision.
-
-Verification:
+Allowed implementation mechanics:
 
 ```text
-same visual result as current renderer
-less duplicated GPU residency
-one global budget visible in diagnostics
-multi-container scene no longer multiplies full pipelines
+short-lived scaffolding inside the same change series
+one editor asset-upgrade command for existing scenes/assets
+test-only comparison helpers that are deleted before production acceptance
 ```
 
-#### Phase 2.5: CPU broad-phase safety net
-
-1. Add page/cell `CullingGroup` provider as the primary broad-phase.
-2. Use shared page/cell `BoundingSphere[]`.
-3. Support one group per camera and two groups for stereo when needed.
-4. Convert results into page/cell visible masks before GPU tree work.
-5. Keep GPU frustum path as the authoritative fallback.
-6. Keep a debug toggle to bypass `CullingGroup`, but do not build a second runtime architecture.
-
-Verification:
+Rollback policy:
 
 ```text
-no allocations during query/callback handling
-mobile scene can run without HZB
-VR uses one shared accepted LOD per stereo pair
-CullingGroup disabled path still works
+rollback is source-control rollback
+not a runtime mode
+not a compatibility layer
+not a second renderer
 ```
 
-#### Phase 3: grouped indirect backend
+#### Cutover 1: new compiled asset contract
 
-1. Introduce `AssetGroup`.
-2. Build grouped command buffers.
-3. Use `RenderMeshIndirect` where compatible.
-4. Keep old draw-slot backend behind a temporary debug flag until parity is proven.
-5. Remove old backend after parity.
-
-Verification:
-
-```text
-same rendered instance counts
-no active-slot readback needed for production submission
-CPU draw submission bounded by asset groups
-```
-
-#### Phase 4: page/cell HLOD compiler
+Build the final asset contract first. Do not retrofit the old registry.
 
 1. Add `FoliageAssemblyAsset`.
 2. Add `FoliagePageAsset`.
-3. Bake cell HLOD and page HLOD meshes.
-4. Add validation for HLOD bounds and triangle budgets.
-5. Add runtime page/cell HLOD selection before tree selection.
-6. Make `TreeL3` a migration-only fallback.
-7. Remove mandatory `TreeL3` after HLOD parity is proven.
+3. Add `FoliageRepresentationPacket`.
+4. Add `AssetGroup` as the final mesh/material/pass identity.
+5. Add compiler build reports for pages, cells, packets, memory, and command upper bounds.
+6. Add one editor upgrade command that converts current container authorings into page assets.
 
-Verification:
-
-```text
-far dense forest cost depends on pages/cells, not raw tree count
-near ring still upgrades to individual trees
-no transparent or billboard fallback
-TreeL3 no longer required for far-field scalability
-```
-
-#### Phase 5: wind and material contract
-
-1. Add shader wind hooks.
-2. Add packed wind phase/amplitude.
-3. Validate compatible materials.
-4. Keep HLOD wind cheap.
-
-Verification:
+Delete at this cutover:
 
 ```text
-same tier has same wind in color/depth/shadow where required
-no new material clones
-no alpha path
+runtime draw-slot discovery from live authorings
+runtime material compatibility discovery
+runtime assumptions that authoring objects are render input
 ```
 
-#### Phase 6: production verification gate without HZB
+Acceptance:
 
-This phase blocks claiming the redesign is production-ready. It verifies the whole intended scope without HZB.
+```text
+compiled output is deterministic
+page/cell caps are enforced before Play Mode
+packet ranges are contiguous per AssetGroup
+oversized pages/cells split or fail in the compiler
+existing demo content can be upgraded by the editor command
+```
+
+#### Cutover 2: HLOD, shadow, and wind compiled into packets
+
+Compile all stable vegetation representation data in the editor.
+
+1. Bake species-specific `CellHLOD` and `PageHLOD`.
+2. Compile always-resident HLOD packet streams.
+3. Compile bounded near-resident `TreeL2/L1/L0` packet streams.
+4. Compile cheap shadow packet mappings.
+5. Compile wind metadata into packet payloads.
+6. Compile validation for packet bounds, shadow bounds, packet cost monotonicity, and near-detail stream bytes.
+
+Delete at this cutover:
+
+```text
+mandatory far/non-far `TreeL3` contract
+independent `ShadowProxyL0/L1` production path
+runtime shadow LOD promotion
+runtime branch placement expansion for final rendering
+```
+
+Acceptance:
+
+```text
+far dense forest cost depends on PageHLOD/CellHLOD packets
+shadow packet bounds are not larger than allowed color packet bounds
+wind changes update shader constants only
+near-detail packet streams can remain unloaded until near cells request them
+```
+
+#### Cutover 3: global packet render world
+
+Replace per-container renderer ownership with one render world.
+
+1. Add `VegetationRenderWorld`.
+2. Convert containers, SubScenes, and procedural outputs into page providers.
+3. Load page headers and page packet streams through the render world.
+4. Add near-detail stream residency limits.
+5. Move all budgets, packet selection, telemetry, and command emission to the render world.
+6. Add page/cell `CullingGroup` broad phase for the render world.
+7. Use one conservative stereo packet decision for VR.
+
+Delete at this cutover:
+
+```text
+per-container GPU decision pipeline ownership
+per-container render budgets
+camera/frustum duplicate full pipeline residency
+container-owned draw submission
+```
+
+Acceptance:
+
+```text
+multiple containers feed one global budget
+loaded pages and uploaded detail streams are reported separately
+high-detail uploaded cell count is bounded
+VR uses one shared packet LOD decision
+runtime chooses packets, not branch work items
+```
+
+#### Cutover 4: grouped packet submission
+
+Replace the old active-slot submission model.
+
+1. Use static instance buffers per `AssetGroup`.
+2. Emit command records from accepted packet ranges.
+3. Submit grouped `RenderMeshIndirect` commands per `AssetGroup` and pass.
+4. Derive depth and shadow commands from the accepted color packet decision.
+5. Add `ShadowMode.Off` and `ShadowMode.CheapTree` as the only public shadow modes.
+
+Delete at this cutover:
+
+```text
+old draw-slot backend
+active-slot CPU readback as normal submission input
+registered-slot warm-up fallback
+legacy `RenderMainLightShadows`
+legacy `AllowExpandedTreePromotionInShadows`
+per-frame visible-instance packing for the final path
+```
+
+Acceptance:
+
+```text
+submission count is bounded by AssetGroup and accepted packet count
+no synchronous GPU readback in render callbacks
+no active-slot readback needed for production submission
+cascade 0 uses same-as-color shadow packets where required
+cascades 1+ use cheap HLOD/tree shadow packets
+```
+
+#### Cutover 5: delete obsolete runtime architecture
+
+This cutover is mandatory. The redesign is not complete while old runtime architecture remains as a maintained path.
+
+Delete or fully repurpose:
+
+```text
+VegetationGpuDecisionPipeline as tree-first frame authority
+tree-first accepted-tier runtime as production renderer
+expanded branch work-item production path
+mandatory `TreeL3` baseline-fit logic
+per-container runtime budget ownership
+old shadow proxy LOD family
+old active-slot submission path
+obsolete docs that describe the old path as production target
+```
+
+Keep only if rewritten around packets:
+
+```text
+authoring ScriptableObjects
+editor mesh bake utilities
+opaque material validation
+SubScene/classic-scene provider concepts
+URP renderer feature shell
+diagnostics surface
+```
+
+Acceptance:
+
+```text
+there is one production vegetation renderer
+there is one public shadow policy surface
+there is one packet asset contract
+there is one global budget owner
+there is no old/new runtime selection in user settings
+```
+
+#### Cutover 6: production verification without HZB
+
+This cutover blocks release.
 
 Required scenarios:
 
 ```text
-100k loaded instances in one container/page set
+100k loaded instances in one page set
 1M loaded instances with streaming pages
 dense multi-container scene
 mobile target profile
@@ -1358,53 +1742,39 @@ scene view + game view
 Required pass conditions:
 
 ```text
-no synchronous GPU readback in render callbacks
 no per-container budget fights
 no separate mobile/desktop renderer path
-bounded command count by AssetGroup
-bounded scratch buffer usage
+bounded command count by AssetGroup and packet count
+bounded near-detail resident bytes
 stable shared stereo LOD
-cascade 0 same-as-color self-shadowing only
-cascades 1+ use cheap HLOD/tree casters
-offscreen shadow ring defaults to 5 m
-far field represented by PageHLOD/CellHLOD, not mandatory TreeL3
+far field represented by PageHLOD/CellHLOD packets
+TreeL3 migration count = 0
+legacy branch work count = 0
 wind does not allocate or add runtime material clones
-telemetry reports active pages, accepted HLOD/tree counts, budget pressure, shadow commands, and buffer usage
+telemetry reports active pages, uploaded detail streams, accepted packets, budget pressure, shadow commands, and buffer usage
 ```
 
 Production failure criteria:
 
 ```text
 renderer needs HZB to hit baseline scenes
+old renderer remains selectable
 TreeL3 remains required for far-field scalability
+runtime branch work generation remains required
+all L0/L1 detail for 1M loaded trees must be GPU-resident
 shadows select finer/larger LOD than color
 VR uses divergent per-eye LOD
-mobile path requires extra per-pixel occlusion work
 active-slot CPU readback is needed for normal submission
 ```
 
-#### Phase 7: post-wind optional HZB accelerator
+#### Post-release candidates only
 
-This is a future improvement only. Do not implement it before Phase 6 passes. It must plug into the same page/cell broad-phase masks and must not create a separate desktop renderer. If it is a performance degradation, or for mobile/VR targets, keep the async CPU `CullingGroup` page/cell broad phase as the only enabled path.
-
-Allowed work only after production baseline:
+These are not part of the migration and must not block deletion of the old runtime:
 
 ```text
-build or consume a depth pyramid after opaque occluders
-occlude pages and cells first
-add two-frame hysteresis
-keep near safety ring unoccluded by HZB
-keep HZB off by default on mobile/VR until target-device profiling proves otherwise
-```
-
-Verification:
-
-```text
-occluded forest behind terrain/buildings reduces accepted page/cell count
-non-occluded scenes are not slower
-no one-frame popping during camera turns
-occlusion can be disabled for debugging
-removing HZB leaves the production renderer functional
+BRG backend over the same packet data
+HZB page/cell accelerator after wind and packet verification
+mixed-species HLOD aggregates if draw count proves it is needed
 ```
 
 ## open questions (numbered)

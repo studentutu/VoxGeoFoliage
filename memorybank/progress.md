@@ -9,7 +9,7 @@ Purpose: current milestone, current blockers, next tasks. Nothing else.
 - Runtime authority: [VegetationRuntimeArchitecture.md](../DetailedDocs/VegetationRuntimeArchitecture.md)
   now includes full ASCII bake, registration, color/depth, and shadow pipelines with payload ownership and resident-memory surfaces
 - Strategic redesign proposal: [VegetationGenerationalRedesign.md](../DetailedDocs/VegetationGenerationalRedesign.md)
-  defines the recommended non-HZB production baseline: authoring branch/tree graph -> compiled assembly/page assets -> streaming providers -> global render world -> CullingGroup page/cell broad phase -> HLOD/tree selection -> active budgets -> `CheapTree` shadows -> shader wind -> grouped indirect submission. Target scale is 100k to 1M loaded instances with streaming; HZB is explicitly deferred until after wind and production verification. The unityHISM review is captured there as a partial BRG reference for chunk blobs, sub-batch windows, culling callback command emission, and command compaction, not as the target vegetation architecture.
+  defines the recommended non-HZB production baseline and full replacement migration: authoring branch/tree graph -> editor-compiled assembly/page assets -> immutable representation packets -> streaming providers -> global render world -> CullingGroup page/cell broad phase -> packet selection and active budgets -> `CheapTree` shadow packets -> shader wind -> grouped indirect submission. Target scale is 100k to 1M loaded instances with streaming. No old/new renderer toggle, no maintained tree-first bridge, no production `TreeL3` floor, and no HZB before packet renderer production verification. The unityHISM review is captured there as a partial BRG reference for chunk blobs, sub-batch windows, culling callback command emission, and command compaction, not as the target vegetation architecture.
 - Finished baseline: [Milestone1.md](../DetailedDocs/Milestone1.md)
 - Latest completed cleanup: branch prototype authoring now persists only the split-tier runtime mesh chain (`branchL1/2/3CanopyMesh` + `branchL1/2/3WoodMesh`); obsolete shell-node authoring/runtime contracts and sample per-node shell assets were removed.
 
@@ -25,14 +25,14 @@ Purpose: current milestone, current blockers, next tasks. Nothing else.
 
 ## Next Tasks
 
-Goal: finish the post-ownership-split runtime cleanup now that split budgets and actual-work dispatch match the prepared-view design.
+Goal: execute the full replacement migration to the packet renderer. Do not spend effort maintaining the old tree-first runtime beyond what is necessary to delete it cleanly.
 
-1. Replace legacy shadow toggles with `ShadowMode.Off` and `ShadowMode.CheapTree`.
-2. Implement `CheapTree`: same-as-color shadow casters for near active `L0/L1`, cheap tree-only casters for farther `L2/TreeL3`, and no impostor cast shadow by default.
-3. Remove production use of independent `ShadowProxyL0/L1` promotion and add shadow-caster cost/bounds validation.
-4. Tune shadow budgets separately from color now that actual usage telemetry exists.
-5. Reduce duplicated camera/shadow GPU residency toward the pooled prepared-view ownership target.
-6. Remove slot-order bias from visible-instance clamping.
-7. Run dense-forest and shadow validation on the split-budget path, including async active-slot warm-up behavior.
+1. Define `FoliageAssemblyAsset`, `FoliagePageAsset`, `FoliageRepresentationPacket`, and `AssetGroup` as the final compiled asset contract.
+2. Add the editor compiler and one editor upgrade command that converts current container authorings into compiled page assets.
+3. Compile page/cell HLOD packets, near-detail packet streams, `CheapTree` shadow packet mappings, wind metadata, and compiler build reports.
+4. Add `VegetationRenderWorld` as the only global budget, packet selection, residency, telemetry, and command-emission owner.
+5. Replace active-slot/draw-slot submission with grouped packet submission and delete legacy shadow toggles, shadow proxy promotion, and old active-slot submission.
+6. Delete or fully repurpose the old tree-first GPU decision path so there is no old/new renderer selection in user settings.
+7. Run production verification without HZB across 100k loaded instances, 1M streamed instances, mobile profile, VR stereo profile, shadows, and wind.
 
-Target Result: simplified memory footprint for runtime path, production shadow support through `ShadowMode.CheapTree`, true separation of draw calls for shadow path and depth/main color path, and production ready support for a container with 10_000 trees that has near prioritization and actual hard budgeting.
+Target Result: one production packet renderer, no maintained bridge, no production `TreeL3` floor, no runtime branch-work generator, no active-slot readback submission, and production-ready opaque vegetation with global budgets, shadows, wind, and streaming.
