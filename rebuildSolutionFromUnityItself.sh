@@ -5,7 +5,7 @@
 set -e
 
 # "C:\Program Files\Unity\Hub\Editor\6000.1.12f1\Editor\Unity.exe"
-UNITY="/c/Program Files/Unity/Hub/Editor/6000.3.7f1/Editor/Unity.exe"
+UNITY="/c/Program Files/Unity/Hub/Editor/6000.3.15f1/Editor/Unity.exe"
 
 PROJECT_PATH="$(pwd)" 
 # .log are ignore by .gitignore, so that git process will not interfere with writing into it (required, otherwise it will lock the file).

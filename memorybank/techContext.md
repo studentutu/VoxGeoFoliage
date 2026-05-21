@@ -4,7 +4,7 @@ Purpose: compact toolchain, package, and verification reference for the current 
 
 ## Engine and Language
 
-- Unity: `6000.3.7f1`
+- Unity: `6000.3.15f1`
 - C#: `8` target style, current generated projects report `LangVersion 9.0`
 - API compatibility: `.NET Standard 2.1`
 

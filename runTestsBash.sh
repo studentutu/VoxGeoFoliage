@@ -5,7 +5,7 @@ set -e
 
 # C:\Program Files\Unity\Hub\Editor\6000.1.12f1\Editor
 # "C:\Program Files\Unity\Hub\Editor\6000.1.12f1\Editor\Unity.exe"
-UNITY="/c/Program Files/Unity/Hub/Editor/6000.3.7f1/Editor/Unity.exe"
+UNITY="/c/Program Files/Unity/Hub/Editor/6000.3.15f1/Editor/Unity.exe"
 
 PROJECT_PATH="$(pwd)" 
 TEST_FILE="$PROJECT_PATH/CI/CITestOutput.xml"
