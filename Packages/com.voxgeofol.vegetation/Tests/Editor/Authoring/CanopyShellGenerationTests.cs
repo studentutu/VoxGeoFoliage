@@ -105,29 +105,6 @@ public sealed class CanopyShellGenerationTests
         Assert.AreSame(prototype.WoodMesh, prototype.BranchL1WoodMesh);
     }
 
-    [Test]
-    [Ignore("Takes too long, developer already verified in editor manually")]
-    public void ImpostorGenerate_FromOriginalTreeMeshes_CreatesReadableCoarseMesh()
-    {
-        BranchPrototypeSO prototype = CreatePrototypeForShellBake(CreateSeparatedClusterMesh("ImpostorBoundsFoliage"));
-
-        TreeBlueprintSO blueprint = CreateBlueprintForImpostorBake(prototype);
-        ImpostorMeshGenerator.BakeImpostorMesh(blueprint, CreateImpostorBakeSettings(4));
-        TrackGeneratedImpostor(blueprint);
-
-        Assert.NotNull(blueprint.ImpostorMesh);
-        Assert.IsTrue(blueprint.ImpostorMesh!.isReadable);
-        Assert.Greater(GetTriangleCount(blueprint.ImpostorMesh), 0);
-
-        Bounds impostorBounds = blueprint.ImpostorMesh!.bounds;
-        Assert.Less(impostorBounds.min.x, -1.5f);
-        Assert.Greater(impostorBounds.max.x, 1.5f);
-
-        Mesh combinedSource = CreateCombinedTreeSourceMesh(blueprint);
-        TrackObject(combinedSource);
-        Assert.IsTrue(ContainsBounds(combinedSource.bounds, impostorBounds));
-    }
-
     private BranchPrototypeSO CreatePrototypeForShellBake(Mesh foliageMesh)
     {
         BranchPrototypeSO prototype = CreateScriptableObject<BranchPrototypeSO>();
@@ -143,18 +120,6 @@ public sealed class CanopyShellGenerationTests
         return prototype;
     }
 
-    private TreeBlueprintSO CreateBlueprintForImpostorBake(BranchPrototypeSO prototype)
-    {
-        TreeBlueprintSO blueprint = CreateScriptableObject<TreeBlueprintSO>();
-        Mesh trunkMesh = CreateClosedCubeMesh("ImpostorTrunk", new Vector3(0.4f, 2f, 0.4f));
-        BranchPlacement firstPlacement = CreateBranchPlacement(prototype, new Vector3(-2f, 0.5f, 0f), Quaternion.identity, 1f);
-        BranchPlacement secondPlacement = CreateBranchPlacement(prototype, new Vector3(2f, 0.5f, 0f), Quaternion.identity, 1f);
-
-        SetPrivateField(blueprint, "trunkMesh", trunkMesh);
-        SetPrivateField(blueprint, "branches", new[] { firstPlacement, secondPlacement });
-        return blueprint;
-    }
-
     private ShellBakeSettings CreateShellBakeSettings()
     {
         ShellBakeSettings settings = new ShellBakeSettings();
@@ -167,15 +132,6 @@ public sealed class CanopyShellGenerationTests
         SetPrivateField(settings, "minimumSurfaceVoxelCountToSplit", 1);
         SetPrivateField(settings, "skipReduction", false);
         SetPrivateField(settings, "skipL0Reduction", true);
-        SetPrivateField(settings, "skipSimplifyFallback", true);
-        return settings;
-    }
-
-    private ImpostorBakeSettings CreateImpostorBakeSettings(int voxelResolution)
-    {
-        ImpostorBakeSettings settings = new ImpostorBakeSettings();
-        SetPrivateField(settings, "voxelResolution", voxelResolution);
-        SetPrivateField(settings, "skipReduction", true);
         SetPrivateField(settings, "skipSimplifyFallback", true);
         return settings;
     }
@@ -198,11 +154,6 @@ public sealed class CanopyShellGenerationTests
         TrackObject(prototype.BranchL1WoodMesh);
         TrackObject(prototype.BranchL2WoodMesh);
         TrackObject(prototype.BranchL3WoodMesh);
-    }
-
-    private void TrackGeneratedImpostor(TreeBlueprintSO blueprint)
-    {
-        TrackObject(blueprint.ImpostorMesh);
     }
 
     private void TrackObject(UnityEngine.Object? obj)
@@ -337,24 +288,6 @@ public sealed class CanopyShellGenerationTests
         combinedMesh.RecalculateNormals();
         createdObjects.Add(combinedMesh);
         return combinedMesh;
-    }
-
-    private Mesh CreateCombinedTreeSourceMesh(TreeBlueprintSO blueprint)
-    {
-        List<CombineInstance> combineInstances = new List<CombineInstance>
-        {
-            CreateCombineInstance(blueprint.TrunkMesh!, Matrix4x4.identity)
-        };
-
-        for (int i = 0; i < blueprint.Branches.Length; i++)
-        {
-            BranchPlacement branch = blueprint.Branches[i];
-            Matrix4x4 branchMatrix = Matrix4x4.TRS(branch.LocalPosition, branch.LocalRotation, Vector3.one * branch.Scale);
-            combineInstances.Add(CreateCombineInstance(branch.Prototype!.WoodMesh!, branchMatrix));
-            combineInstances.Add(CreateCombineInstance(branch.Prototype!.FoliageMesh!, branchMatrix));
-        }
-
-        return CombineMeshes($"{blueprint.name}_CombinedSource", combineInstances.ToArray());
     }
 
     private CombineInstance CreateCombineInstance(Mesh mesh, Matrix4x4 matrix)

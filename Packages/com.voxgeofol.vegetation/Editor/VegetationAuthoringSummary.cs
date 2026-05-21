@@ -15,9 +15,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             int l0Triangles,
             int l1Triangles,
             int l2Triangles,
-            int l3Triangles,
-            int treeL3Triangles,
-            int impostorTriangles)
+            int l3Triangles)
         {
             BranchCount = branchCount;
             TreeBounds = treeBounds;
@@ -25,8 +23,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             L1Triangles = l1Triangles;
             L2Triangles = l2Triangles;
             L3Triangles = l3Triangles;
-            TreeL3Triangles = treeL3Triangles;
-            ImpostorTriangles = impostorTriangles;
         }
 
         public int BranchCount { get; }
@@ -41,10 +37,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
 
         public int L3Triangles { get; }
 
-        public int TreeL3Triangles { get; }
-
-        public int ImpostorTriangles { get; }
-
         public int GetTriangleCount(VegetationPreviewTier previewTier)
         {
             return previewTier switch
@@ -53,8 +45,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 VegetationPreviewTier.L1 => L1Triangles,
                 VegetationPreviewTier.L2 => L2Triangles,
                 VegetationPreviewTier.L3 => L3Triangles,
-                VegetationPreviewTier.TreeL3 => TreeL3Triangles,
-                VegetationPreviewTier.Impostor => ImpostorTriangles,
                 _ => 0
             };
         }

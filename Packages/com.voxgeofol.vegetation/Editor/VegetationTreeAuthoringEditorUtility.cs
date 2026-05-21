@@ -49,75 +49,11 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         }
 
         /// <summary>
-        /// [INTEGRATION] Bakes the mandatory whole-tree TreeL3 floor mesh for one tree blueprint referenced by the authoring component.
-        /// </summary>
-        public static void BakeTreeL3(VegetationTreeAuthoring authoring)
-        {
-            // Range: requires a valid blueprint with readable trunk and source branch meshes. Condition: tree-local source geometry is merged once and simplified into the mandatory TreeL3 floor mesh. Output: the blueprint receives a refreshed treeL3Mesh asset.
-            if (authoring == null)
-            {
-                throw new ArgumentNullException(nameof(authoring));
-            }
-
-            TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
-            BakeTreeL3WithoutSave(blueprint);
-            SaveAuthoringChanges(authoring, blueprint);
-        }
-
-        /// <summary>
-        /// [INTEGRATION] Bakes the near-shadow L0 whole-tree proxy mesh for one tree blueprint referenced by the authoring component.
-        /// </summary>
-        public static void BakeShadowProxyL0(VegetationTreeAuthoring authoring)
-        {
-            // Range: requires a valid blueprint with readable TreeL3 and source branch meshes. Condition: whole-tree source geometry is merged once and simplified into the near-shadow L0 proxy. Output: the blueprint receives a refreshed shadowProxyMeshL0 asset.
-            if (authoring == null)
-            {
-                throw new ArgumentNullException(nameof(authoring));
-            }
-
-            TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
-            BakeShadowProxyL0WithoutSave(blueprint);
-            SaveAuthoringChanges(authoring, blueprint);
-        }
-
-        /// <summary>
-        /// [INTEGRATION] Bakes the near-shadow L1 whole-tree proxy mesh for one tree blueprint referenced by the authoring component.
-        /// </summary>
-        public static void BakeShadowProxyL1(VegetationTreeAuthoring authoring)
-        {
-            // Range: requires a valid blueprint with readable TreeL3 and source branch meshes. Condition: whole-tree source geometry is merged once and simplified into the near-shadow L1 proxy. Output: the blueprint receives a refreshed shadowProxyMeshL1 asset.
-            if (authoring == null)
-            {
-                throw new ArgumentNullException(nameof(authoring));
-            }
-
-            TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
-            BakeShadowProxyL1WithoutSave(blueprint);
-            SaveAuthoringChanges(authoring, blueprint);
-        }
-
-        /// <summary>
-        /// [INTEGRATION] Bakes the far impostor mesh for one tree blueprint referenced by the authoring component.
-        /// </summary>
-        public static void BakeImpostor(VegetationTreeAuthoring authoring)
-        {
-            // Range: requires a valid blueprint with trunk mesh and readable source branch meshes on every referenced branch prototype. Condition: uses the editor-only coarse CPU voxel impostor bake pipeline. Output: the blueprint receives a refreshed impostor mesh asset.
-            if (authoring == null)
-            {
-                throw new ArgumentNullException(nameof(authoring));
-            }
-
-            TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
-            BakeImpostorWithoutSave(blueprint);
-            SaveAuthoringChanges(authoring, blueprint);
-        }
-
-        /// <summary>
-        /// [INTEGRATION] Refreshes shells, trunkL3Mesh, treeL3Mesh, near-shadow proxy meshes, and far impostor mesh in one editor operation.
+        /// [INTEGRATION] Refreshes generated branch shells and trunkL3Mesh in one editor operation.
         /// </summary>
         public static void BakeAllGeneratedMeshes(VegetationTreeAuthoring authoring)
         {
-            // Range: requires the same authoring data as the individual shell, trunk, TreeL3, shadow proxy, and impostor bake steps. Condition: all generated meshes are refreshed before one final asset save/refresh. Output: referenced prototypes and the blueprint are updated in one command.
+            // Range: requires the same authoring data as the individual shell and trunk bake steps. Condition: all generated meshes are refreshed before one final asset save/refresh. Output: referenced prototypes and the blueprint are updated in one command.
             if (authoring == null)
             {
                 throw new ArgumentNullException(nameof(authoring));
@@ -126,10 +62,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             TreeBlueprintSO blueprint = GetRequiredBlueprint(authoring);
             BakeCanopyShellsWithoutSave(blueprint);
             BakeTrunkL3WithoutSave(blueprint);
-            BakeTreeL3WithoutSave(blueprint);
-            BakeShadowProxyL1WithoutSave(blueprint);
-            BakeShadowProxyL0WithoutSave(blueprint);
-            BakeImpostorWithoutSave(blueprint);
             SaveAuthoringChanges(authoring, blueprint);
         }
 
@@ -183,8 +115,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             int l1Triangles = GetTriangleCount(blueprint.TrunkMesh);
             int l2Triangles = GetTriangleCount(blueprint.TrunkL3Mesh);
             int l3Triangles = GetTriangleCount(blueprint.TrunkL3Mesh);
-            int treeL3Triangles = GetTriangleCount(blueprint.TreeL3Mesh);
-            int impostorTriangles = GetTriangleCount(blueprint.ImpostorMesh);
             for (int i = 0; i < placements.Length; i++)
             {
                 BranchPrototypeSO prototype = placements[i].Prototype ??
@@ -209,9 +139,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 l0Triangles,
                 l1Triangles,
                 l2Triangles,
-                l3Triangles,
-                treeL3Triangles,
-                impostorTriangles);
+                l3Triangles);
         }
 
         /// <summary>
@@ -331,28 +259,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
 
         private static void BakeTrunkL3WithoutSave(TreeBlueprintSO blueprint)
         {
-            TrunkL3MeshGenerator.BakeTrunkL3Mesh(blueprint, blueprint.ImposterSettings);
-        }
-
-        private static void BakeTreeL3WithoutSave(TreeBlueprintSO blueprint)
-        {
-            ImpostorMeshGenerator.BakeTreeL3Mesh(blueprint, blueprint.ImposterSettings);
-        }
-
-        private static void BakeShadowProxyL0WithoutSave(TreeBlueprintSO blueprint)
-        {
-            ImpostorMeshGenerator.BakeShadowProxyMeshL0(blueprint, blueprint.ShadowProxySettings);
-        }
-
-        private static void BakeShadowProxyL1WithoutSave(TreeBlueprintSO blueprint)
-        {
-            ImpostorMeshGenerator.BakeShadowProxyMeshL1(blueprint, blueprint.ShadowProxySettings);
-        }
-
-        private static void BakeImpostorWithoutSave(TreeBlueprintSO blueprint)
-        {
-            GetRequiredPlacements(blueprint);
-            ImpostorMeshGenerator.BakeImpostorMesh(blueprint, blueprint.ImposterSettings);
+            TrunkL3MeshGenerator.BakeTrunkL3Mesh(blueprint, blueprint.GeneratedMeshSettings);
         }
 
         private static void SaveAuthoringChanges(VegetationTreeAuthoring authoring, TreeBlueprintSO blueprint)

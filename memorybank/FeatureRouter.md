@@ -12,7 +12,6 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - branch
   - shell
   - canopy
-  - impostor
   - far mesh
   - foliage
   - BRG
@@ -23,14 +22,10 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - DOTS
   - baker
   - runtime owner
-  - classification
-  - classify debug
-  - debug classify
   - gpu oom
   - device removed
   - d3d12
   - base vertex
-  - impostor crash
   - telemetry
   - scene gizmo
   - LOD
@@ -39,10 +34,10 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - custom material
   - shader compatibility
 - Read:
-  - [Package README](../Packages/com.voxgeofol.vegetation/README.md) - package consumer contract, current tree-first runtime terminology, and lifecycle summary from container input to URP indirect submission
-  - [VegetationRuntimeArchitecture](../DetailedDocs/VegetationRuntimeArchitecture.md) - exact bake, registration, color/depth, and shadow ASCII pipelines with payload ownership, current-code runtime review, and replacement runtime architecture authority
-  - [VegetationGenerationalRedesign](../DetailedDocs/VegetationGenerationalRedesign.md) - whole-system redesign proposal for the non-HZB production baseline and hard replacement migration: editor-compiled representation packets, compiled pages, global render world, page/cell HLOD, active budgets, CullingGroup page/cell broad phase, CheapTree shadow packets, shader wind, grouped indirect submission, authoring-time static data compilation, no maintained old/new renderer split, no production `TreeL3` floor, no production `ShadowProxyL0/L1`, and scalable 100k to 1M streamed forests
-  - [fixShadows](../DetailedDocs/fixShadows.md) - shadow-specific current-design review and proposed `ShadowMode.CheapTree` redesign with cascade-0 self-shadowing and 5 m offscreen caster ring
+  - [Package README](../Packages/com.voxgeofol.vegetation/README.md) - package consumer contract, compiled page asset flow, render-world lifecycle, grouped packet submission, settings, and limitations
+  - [VegetationRuntimeArchitecture](../DetailedDocs/VegetationRuntimeArchitecture.md) - current runtime architecture reference for compiled providers, render-world ownership, packet submission, and shadow flow
+  - [VegetationGenerationalRedesign](../DetailedDocs/VegetationGenerationalRedesign.md) - current hard-cutover authority for the non-HZB production baseline. Classic-scene and SubScene providers now flow through `VegetationRenderWorld`; remaining work is procedural providers, screen-error LOD, externalized async payload providers, and production validation
+  - [fixShadows](../DetailedDocs/fixShadows.md) - shadow-specific notes; treat the render-world `CheapTree` packet path as the current production direction
   - [projectrules](projectrules.md) - current SubScene provider/runtime ownership rules until a dedicated SubScene doc exists
   - [Milestone2](../DetailedDocs/Milestone2.md) - current milestone status and open work only
   - [Milestone1](../DetailedDocs/Milestone1.md) - shipped baseline summary only

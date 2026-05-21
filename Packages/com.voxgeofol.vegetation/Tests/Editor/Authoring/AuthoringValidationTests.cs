@@ -137,14 +137,15 @@ public sealed class AuthoringValidationTests
     }
 
     [Test]
-    public void TreeBlueprint_NullTreeL3_FailsValidation()
+    public void TreeBlueprint_NullImpostorMaterial_FailsValidation()
     {
         TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
-        SetPrivateField(blueprint, "treeL3Mesh", null);
+        SetPrivateField(blueprint, "impostorMaterial", null);
+        SetPrivateField(blueprint, "hlodMaterial", null);
 
         VegetationValidationResult result = blueprint.Validate();
 
-        AssertHasError(result, "treeL3Mesh is required.");
+        AssertHasError(result, "impostorMaterial is required.");
     }
 
     [Test]
@@ -194,42 +195,6 @@ public sealed class AuthoringValidationTests
     }
 
     [Test]
-    public void TreeBlueprint_ShadowProxyL1BoundsStayInsideTreeBounds()
-    {
-        TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
-        SetPrivateField(blueprint, "shadowProxyMeshL1", CreateMesh("OversizedShadowProxyL1", 7, new Bounds(Vector3.zero, new Vector3(14f, 12f, 14f))));
-
-        VegetationValidationResult result = blueprint.Validate();
-
-        AssertHasError(result, "shadowProxyMeshL1 bounds must stay inside treeBounds.");
-    }
-
-    [Test]
-    public void TreeBlueprint_ShadowProxyTriangleOrder_StaysAboveLowerDetailTiers()
-    {
-        TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
-        SetPrivateField(blueprint, "shadowProxyMeshL1", CreateMesh("ShadowProxyL1", 6, new Bounds(new Vector3(1f, 1f, 0f), new Vector3(5.5f, 5.5f, 5.5f))));
-        SetPrivateField(blueprint, "shadowProxyMeshL0", CreateMesh("ShadowProxyL0", 6, new Bounds(new Vector3(1f, 1f, 0f), new Vector3(5.8f, 5.8f, 5.8f))));
-
-        VegetationValidationResult result = blueprint.Validate();
-
-        AssertHasError(result, "shadowProxyMeshL1 triangle count must stay above treeL3Mesh triangle count.");
-        AssertHasError(result, "shadowProxyMeshL0 triangle count must stay above shadowProxyMeshL1 triangle count.");
-    }
-
-    [Test]
-    public void TreeBlueprint_ImpostorTriangleBudget_Under200()
-    {
-        TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
-        SetPrivateField(blueprint, "impostorMesh", CreateMesh("HeavyImpostor", 201, new Bounds(Vector3.zero, Vector3.one)));
-        SetPrivateField(blueprint, "impostorMaterial", CreateOpaqueMaterial("ImpostorMaterial"));
-
-        VegetationValidationResult result = blueprint.Validate();
-
-        AssertHasError(result, "impostorMesh must stay at or below 200 triangles.");
-    }
-
-    [Test]
     public void TreeBlueprint_ScaleConstraint_OnlyAllowedValues()
     {
         TreeBlueprintSO blueprint = CreateValidTreeBlueprint(scale: 0.3f);
@@ -242,7 +207,7 @@ public sealed class AuthoringValidationTests
     [Test]
     public void TreeBlueprint_ValidBlueprint_PassesValidation()
     {
-        TreeBlueprintSO blueprint = CreateValidTreeBlueprint(includeImpostor: true);
+        TreeBlueprintSO blueprint = CreateValidTreeBlueprint();
 
         VegetationValidationResult result = blueprint.Validate();
 
@@ -286,7 +251,7 @@ public sealed class AuthoringValidationTests
         return prototype;
     }
 
-    private TreeBlueprintSO CreateValidTreeBlueprint(float scale = 1f, bool includeImpostor = false)
+    private TreeBlueprintSO CreateValidTreeBlueprint(float scale = 1f)
     {
         TreeBlueprintSO blueprint = CreateScriptableObject<TreeBlueprintSO>();
         BranchPrototypeSO prototype = CreateValidBranchPrototype();
@@ -294,8 +259,9 @@ public sealed class AuthoringValidationTests
         LODProfileSO lodProfile = CreateValidLodProfile();
         Mesh trunkMesh = CreateMesh("TrunkMesh", 8, new Bounds(Vector3.zero, new Vector3(2f, 6f, 2f)));
         Mesh trunkL3Mesh = CreateMesh("TrunkL3Mesh", 4, new Bounds(Vector3.zero, new Vector3(1.25f, 5f, 1.25f)));
-        Mesh treeL3Mesh = CreateMesh("TreeL3Mesh", 6, new Bounds(new Vector3(1f, 1f, 0f), new Vector3(6f, 6f, 6f)));
+        Mesh impostorMesh = CreateMesh("ImpostorMesh", 2, new Bounds(Vector3.zero, new Vector3(6f, 8f, 6f)));
         Material trunkMaterial = CreateOpaqueMaterial("TrunkMaterial");
+        Material impostorMaterial = CreateOpaqueMaterial("ImpostorMaterial");
 
         SetPrivateField(placement, "prototype", prototype);
         SetPrivateField(placement, "localPosition", new Vector3(3f, 1f, 0f));
@@ -304,17 +270,13 @@ public sealed class AuthoringValidationTests
 
         SetPrivateField(blueprint, "trunkMesh", trunkMesh);
         SetPrivateField(blueprint, "trunkL3Mesh", trunkL3Mesh);
-        SetPrivateField(blueprint, "treeL3Mesh", treeL3Mesh);
+        SetPrivateField(blueprint, "impostorMesh", impostorMesh);
         SetPrivateField(blueprint, "trunkMaterial", trunkMaterial);
+        SetPrivateField(blueprint, "impostorMaterial", impostorMaterial);
+        SetPrivateField(blueprint, "hlodMaterial", impostorMaterial);
         SetPrivateField(blueprint, "branches", new[] { placement });
         SetPrivateField(blueprint, "lodProfile", lodProfile);
         SetPrivateField(blueprint, "treeBounds", new Bounds(new Vector3(1.5f, 1f, 0f), new Vector3(12f, 10f, 12f)));
-
-        if (includeImpostor)
-        {
-            SetPrivateField(blueprint, "impostorMesh", CreateMesh("ImpostorMesh", 40, new Bounds(Vector3.zero, Vector3.one * 2f)));
-            SetPrivateField(blueprint, "impostorMaterial", CreateOpaqueMaterial("ImpostorMaterial"));
-        }
 
         return blueprint;
     }
@@ -325,7 +287,7 @@ public sealed class AuthoringValidationTests
         SetPrivateField(lodProfile, "l0Distance", 5f);
         SetPrivateField(lodProfile, "l1Distance", 15f);
         SetPrivateField(lodProfile, "l2Distance", 30f);
-        SetPrivateField(lodProfile, "impostorDistance", 120f);
+        SetPrivateField(lodProfile, "hlodDistance", 120f);
         SetPrivateField(lodProfile, "absoluteCullDistance", 200f);
         return lodProfile;
     }
@@ -412,6 +374,13 @@ public sealed class AuthoringValidationTests
         Assert.IsTrue(
             result.Issues.Any(issue => issue.Severity == VegetationValidationSeverity.Error && issue.Message.Contains(expectedMessageFragment, StringComparison.Ordinal)),
             $"Expected error containing '{expectedMessageFragment}', but found:{Environment.NewLine}{string.Join(Environment.NewLine, result.Issues.Select(issue => issue.Message))}");
+    }
+
+    private static void AssertNoError(VegetationValidationResult result, string unexpectedMessageFragment)
+    {
+        Assert.IsFalse(
+            result.Issues.Any(issue => issue.Severity == VegetationValidationSeverity.Error && issue.Message.Contains(unexpectedMessageFragment, StringComparison.Ordinal)),
+            $"Expected no error containing '{unexpectedMessageFragment}', but found:{Environment.NewLine}{string.Join(Environment.NewLine, result.Issues.Select(issue => issue.Message))}");
     }
 
     private static void SetPrivateField(object target, string fieldName, object? value)

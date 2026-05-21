@@ -60,12 +60,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     CreateTrunkL3Preview(previewRoot.transform, blueprint);
                     CreateSplitBranchPreview(previewRoot.transform, placements, VegetationPreviewTier.L3);
                     break;
-                case VegetationPreviewTier.TreeL3:
-                    CreateTreeL3Preview(previewRoot.transform, blueprint);
-                    break;
-                case VegetationPreviewTier.Impostor:
-                    CreateImpostorPreview(previewRoot.transform, blueprint);
-                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(previewTier), previewTier, "Unsupported vegetation preview tier.");
             }
@@ -208,22 +202,6 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             CreateMeshChild(parent, "TrunkL3", trunkL3Mesh, trunkMaterial);
         }
 
-        private static void CreateImpostorPreview(Transform parent, TreeBlueprintSO blueprint)
-        {
-            Mesh impostorMesh = blueprint.ImpostorMesh ?? throw new InvalidOperationException($"{blueprint.name} is missing impostorMesh.");
-            Material impostorMaterial = blueprint.ImpostorMaterial ??
-                                        throw new InvalidOperationException($"{blueprint.name} is missing impostorMaterial.");
-            CreateMeshChild(parent, "Impostor", impostorMesh, impostorMaterial);
-        }
-
-        private static void CreateTreeL3Preview(Transform parent, TreeBlueprintSO blueprint)
-        {
-            Mesh treeL3Mesh = blueprint.TreeL3Mesh ?? throw new InvalidOperationException($"{blueprint.name} is missing treeL3Mesh.");
-            Material treeL3Material = blueprint.ImpostorMaterial ??
-                                      throw new InvalidOperationException($"{blueprint.name} is missing impostorMaterial.");
-            CreateMeshChild(parent, "TreeL3", treeL3Mesh, treeL3Material);
-        }
-
         private static Mesh GetRequiredSplitCanopyMesh(BranchPrototypeSO prototype, VegetationPreviewTier previewTier)
         {
             return previewTier switch
@@ -231,7 +209,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 VegetationPreviewTier.L1 => prototype.BranchL1CanopyMesh ?? throw new InvalidOperationException($"{prototype.name} is missing branchL1CanopyMesh."),
                 VegetationPreviewTier.L2 => prototype.BranchL2CanopyMesh ?? throw new InvalidOperationException($"{prototype.name} is missing branchL2CanopyMesh."),
                 VegetationPreviewTier.L3 => prototype.BranchL3CanopyMesh ?? throw new InvalidOperationException($"{prototype.name} is missing branchL3CanopyMesh."),
-                _ => throw new ArgumentOutOfRangeException(nameof(previewTier), previewTier, "Preview tier must be an expanded branch split tier.")
+                _ => throw new ArgumentOutOfRangeException(nameof(previewTier), previewTier, "Preview tier must be a near-detail branch tier.")
             };
         }
 
@@ -242,7 +220,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 VegetationPreviewTier.L1 => prototype.BranchL1WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing branchL1WoodMesh."),
                 VegetationPreviewTier.L2 => prototype.BranchL2WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing branchL2WoodMesh."),
                 VegetationPreviewTier.L3 => prototype.BranchL3WoodMesh ?? throw new InvalidOperationException($"{prototype.name} is missing branchL3WoodMesh."),
-                _ => throw new ArgumentOutOfRangeException(nameof(previewTier), previewTier, "Preview tier must be an expanded branch split tier.")
+                _ => throw new ArgumentOutOfRangeException(nameof(previewTier), previewTier, "Preview tier must be a near-detail branch tier.")
             };
         }
 

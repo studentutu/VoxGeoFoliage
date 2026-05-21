@@ -4,53 +4,57 @@ Status: active
 
 ## Goal
 
-Turn the shipped baseline into a production-usable package.
+Turn the shipped baseline into a production-usable opaque foliage package.
 
-## In Scope
+## Current Production Baseline
 
-- split runtime ownership into persistent container state and pooled per-view prepared state
-- fix camera/shadow ownership instead of keeping duplicated full pipelines
-- split budgets:
-  - visible instances
-  - expanded branch work items
-  - approximate work units
-  - registered draw-slot cap
-- custom-material compatibility contract
-- wind
-- masked-quad `GPUVoxelizer` bake path
-- production shadow target:
-  - `ShadowMode.Off`
-  - `ShadowMode.CheapTree`
-  - near active `L0/L1` shadows use the same accepted color geometry
-  - farther `L2/TreeL3` shadows use cheap tree-only casters
-  - independent enlarged shadow-proxy LODs are not production behavior
+The renderer is now one compiled packet path:
 
-## Out Of Scope
+```text
+VegetationTreeAuthoring
+-> FoliageAssemblyAsset + FoliagePageAsset[]
+-> VegetationRuntimeContainer or closed SubScene provider
+-> VegetationRenderWorld
+-> page/cell CullingGroup broad phase
+-> packet budgets
+-> shader wind
+-> grouped indirect submission
+```
 
-- cross-container prioritization
-- occlusion overhaul
-- new placement systems
-- additional-light vegetation shadow atlases
-- fully correct offscreen vegetation casters
+The renderer does not maintain a parallel tree-first runtime path.
 
-## Immediate Runtime Work
+## Completed
 
-- Completed: explicit prepared-view handles landed and camera/shadow no longer share one renderer-global bound frame.
-- Completed: runtime budgets are now split into visible instances, expanded branch work items, approximate work units, and registered draw-slot cap.
-- Completed: branch count/emit now dispatches from actual generated expanded-branch work via GPU-built indirect dispatch args.
-- Completed: visible non-far color `TreeL3` baseline now fails explicitly instead of silently dropping trees.
-- Completed: prepared-frame telemetry now reports actual visible instances, generated branch work, and budget-cap-hit flags through latest async readback snapshots.
-- Completed: submission now uses the live active-slot surface from latest completed emitted-slot readback, with registered-slot fallback only during async warm-up.
-- Superseded: enabled legacy shadow promotion is near-only, but the target contract is now `ShadowMode.CheapTree`: near active `L0/L1` uses same-as-color shadow casters, farther `L2/TreeL3` uses cheap tree-only casters, and independent `ShadowProxyL0/L1` production promotion is removed.
-- Completed: branch authoring/runtime cleanup now persists only `branchL1/2/3CanopyMesh` plus `branchL1/2/3WoodMesh`; obsolete shell-node authoring/runtime contracts and sample per-node shell assets were removed.
-1. Replace `RenderMainLightShadows` / `AllowExpandedTreePromotionInShadows` with `ShadowMode.Off` and `ShadowMode.CheapTree`.
-2. Implement `CheapTree` tier behavior: same-as-color near active `L0/L1`, cheap tree-only farther `L2/TreeL3`, no impostor cast shadow by default.
-3. Remove production use of independent `ShadowProxyL0/L1` promotion and add validation that cheap tree shadow casters do not exceed the visible tier silhouette or `TreeL3` cost without benchmark approval.
-4. Tune shadow budgets separately from color against dense-forest scenes.
-5. Reduce duplicated camera/shadow GPU residency instead of keeping two full pipelines per active container.
-6. Remove slot-order bias from visible-instance clamping.
+1. Explicit prepared-view ownership landed; camera and shadow passes no longer share one renderer-global mutable frame.
+2. Global color and shadow packet budgets are owned by `VegetationRenderWorld`.
+3. Cutover compiler contract landed: `FoliageAssemblyAsset`, `FoliagePageAsset`, `FoliageRepresentationPacket`, `FoliageAssetGroup`, build reports, and `VegetationRuntimeContainer` inspector compilation.
+4. Compiler metadata landed: `PageHLOD`/`CellHLOD` always-resident instance packets that collapse trees to baked impostor meshes, `TreeL0/L1/L2` near-detail packets, static wind metadata, compiled shadow packet modes, shadow bounds, compile-required opaque input validation, resident mesh payload estimates, and near-detail byte caps.
+5. Classic-scene runtime cutover landed. `VegetationRuntimeContainer` registers generated assembly/pages with `VegetationRenderWorld`; `VegetationRendererFeature` consumes that world directly.
+6. Public shadow settings are `VegetationShadowMode.Off` and `VegetationShadowMode.CheapTree`.
+7. Closed `SubScene` bootstrap bakes compiled assembly/page references and registers/unregisters providers with `VegetationRenderWorld`.
+8. The retired tree-first runtime family, old runtime tests, independent proxy shadow authoring surfaces, and demo compute surface were physically deleted.
+9. Sample/demo authoring assets were cut over to baked impostor HLOD inputs and generated mesh settings.
+10. Authoring preview and bake controls now expose only the active branch/trunk tier workflow.
+11. Near-detail packet residency is budgeted in `VegetationRenderWorld`: visible near cells request cell-level residency under resident/upload byte budgets and fall back to HLOD when blocked.
+12. Generated page/cell aggregate HLOD mesh assets were cut out; HLOD now uses baked per-tree impostor meshes and recompilation deletes stale generated HLOD mesh assets for the container.
+13. Grouped indirect instance lookup is backend-stable: indirect args use zero `startInstance`, and `VegetationRenderWorld` binds `_VegetationInstanceDataBaseOffset` per group so DirectX does not read trunk payload records for canopy draws.
+
+## Current Blockers
+
+1. Runtime LOD selection is still distance-band based inside `VegetationRenderWorld`; screen-error and hysteresis remain production hardening.
+2. Procedural placement outputs do not yet compile directly into page providers.
+3. Externalized async near-detail payload providers for disk/Addressables-backed pages are not implemented.
+4. Dense-scene, mobile, VR, shadow, and wind validation are still pending on the compiled render-world path.
+
+## Next Tasks
+
+1. Replace distance-only packet selection with screen-error plus hysteresis and budget pressure.
+2. Add procedural placement output as compiled page providers.
+3. Add externalized async near-detail payload providers when pages move out of direct ScriptableObject references.
+4. Run production verification without HZB across 100k loaded instances, 1M streamed instances, mobile profile, VR stereo profile, shadows, and wind.
 
 ## Authority
 
 - runtime: [VegetationRuntimeArchitecture.md](VegetationRuntimeArchitecture.md)
+- redesign: [VegetationGenerationalRedesign.md](VegetationGenerationalRedesign.md)
 - shipped baseline: [Milestone1.md](Milestone1.md)

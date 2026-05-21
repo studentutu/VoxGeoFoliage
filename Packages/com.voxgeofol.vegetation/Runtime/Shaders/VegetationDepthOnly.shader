@@ -28,6 +28,8 @@ Shader "Hidden/VoxGeoFol/Vegetation/DepthOnly"
             #pragma vertex Vert
             #pragma fragment Frag
             #pragma multi_compile_instancing
+            #pragma instancing_options procedural:SetupVegetation
+            #pragma multi_compile _ _VOXGEOFOL_INDIRECT_RENDERING
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "VegetationIndirectCommon.hlsl"
@@ -35,7 +37,7 @@ Shader "Hidden/VoxGeoFol/Vegetation/DepthOnly"
             struct Attributes
             {
                 float3 positionOS : POSITION;
-                uint instanceID : SV_InstanceID;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -46,7 +48,7 @@ Shader "Hidden/VoxGeoFol/Vegetation/DepthOnly"
             Varyings Vert(Attributes input)
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
+                VegetationInstanceData instanceData = LoadVegetationInstance();
 
                 Varyings output;
                 float3 positionWS = TransformVegetationPosition(input.positionOS, instanceData);

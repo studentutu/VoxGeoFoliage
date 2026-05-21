@@ -13,42 +13,33 @@ namespace VoxGeoFol.Features.Vegetation.Authoring
     {
         [SerializeField] private Mesh? trunkMesh;
         [SerializeField] private Mesh? trunkL3Mesh;
-        [SerializeField] private Mesh? treeL3Mesh;
-        [SerializeField] private Mesh? shadowProxyMeshL0;
-        [SerializeField] private Mesh? shadowProxyMeshL1;
         [SerializeField] private Material? trunkMaterial;
         [SerializeField] private BranchPlacement[] branches = Array.Empty<BranchPlacement>();
-        [SerializeField] private string generatedImpostorMeshesRelativeFolder = string.Empty;
+        [SerializeField] private string generatedMeshesRelativeFolder = string.Empty;
         [SerializeField] private Mesh? impostorMesh;
         [SerializeField] private Material? impostorMaterial;
+        [SerializeField] private Material? hlodMaterial;
         [SerializeField] private LODProfileSO? lodProfile;
-        [SerializeField] private ImpostorBakeSettings? ImposterBakeSettings;
-        [SerializeField] private ShadowProxyBakeSettings? shadowProxyBakeSettings;
+        [SerializeField] private GeneratedMeshBakeSettings? generatedMeshBakeSettings;
         [SerializeField] private Bounds treeBounds = new Bounds(Vector3.zero, Vector3.one);
 
         public Mesh? TrunkMesh => trunkMesh;
 
         public Mesh? TrunkL3Mesh => trunkL3Mesh;
 
-        public Mesh? TreeL3Mesh => treeL3Mesh;
-
-        public Mesh? ShadowProxyMeshL0 => shadowProxyMeshL0;
-
-        public Mesh? ShadowProxyMeshL1 => shadowProxyMeshL1;
-
         public Material? TrunkMaterial => trunkMaterial;
 
         public BranchPlacement[] Branches => branches;
 
-        public string GeneratedImpostorMeshesRelativeFolder => generatedImpostorMeshesRelativeFolder;
+        public string GeneratedMeshesRelativeFolder => generatedMeshesRelativeFolder;
 
         public Mesh? ImpostorMesh => impostorMesh;
 
-        public Material? ImpostorMaterial => impostorMaterial;
+        public Material? ImpostorMaterial => impostorMaterial != null ? impostorMaterial : hlodMaterial;
 
-        public ImpostorBakeSettings ImposterSettings => ImposterBakeSettings ?? new ImpostorBakeSettings();
+        public Material? HlodMaterial => hlodMaterial;
 
-        public ShadowProxyBakeSettings ShadowProxySettings => shadowProxyBakeSettings ?? new ShadowProxyBakeSettings();
+        public GeneratedMeshBakeSettings GeneratedMeshSettings => generatedMeshBakeSettings ?? new GeneratedMeshBakeSettings();
 
         public LODProfileSO? LodProfile => lodProfile;
 

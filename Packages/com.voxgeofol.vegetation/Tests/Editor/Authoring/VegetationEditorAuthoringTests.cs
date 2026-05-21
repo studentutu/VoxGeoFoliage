@@ -13,7 +13,6 @@ public sealed class VegetationEditorAuthoringTests
 {
     private const string TestAssetRoot = "Assets/__GeneratedTests__/VegetationEditorAuthoring";
     private const string GeneratedMeshAssetRoot = TestAssetRoot + "/GeneratedMeshes";
-    private const string ExplicitImpostorMeshAssetRoot = TestAssetRoot + "/ExplicitImpostors";
     private readonly List<UnityEngine.Object> createdObjects = new List<UnityEngine.Object>();
     private readonly List<string> createdGeneratedMeshAssetPaths = new List<string>();
 
@@ -222,176 +221,6 @@ public sealed class VegetationEditorAuthoringTests
         Transform previewRoot = branchRoot.transform.GetChild(0);
         Assert.AreEqual(trunkL3Mesh, previewRoot.GetChild(0).GetComponent<MeshFilter>().sharedMesh);
         Assert.AreEqual(trunkMaterial, previewRoot.GetChild(0).GetComponent<MeshRenderer>().sharedMaterial);
-    }
-
-    [Test]
-    [Ignore("Takes too long, developer already verified in editor manually")]
-    public void ShowPreview_Impostor_CreatesSingleImpostorObject()
-    {
-        Mesh impostorMesh = CreateMeshAsset(
-            "preview_impostor.asset",
-            new[]
-            {
-                new Vector3(-1f, 0f, 0f),
-                new Vector3(1f, 2f, 0f),
-                new Vector3(-1f, 2f, 0f)
-            });
-        Material impostorMaterial = CreateMaterialAsset("preview_impostor.mat");
-
-        TreeBlueprintSO blueprint = CreateTransientScriptableObject<TreeBlueprintSO>();
-        SetPrivateField(blueprint, "impostorMesh", impostorMesh);
-        SetPrivateField(blueprint, "impostorMaterial", impostorMaterial);
-        SetPrivateField(blueprint, "branches", new[] { CreateBranchPlacement(CreateTransientScriptableObject<BranchPrototypeSO>(), Vector3.zero, Quaternion.identity, 1f) });
-
-        GameObject authoringObject = CreateTransientGameObject("Authoring");
-        GameObject branchRoot = CreateTransientGameObject("BranchRoot");
-        branchRoot.transform.SetParent(authoringObject.transform, false);
-
-        VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
-        SetPrivateField(authoring, "blueprint", blueprint);
-        SetPrivateField(authoring, "_rootForBranches", branchRoot);
-
-        VegetationEditorPreview.ShowPreview(authoring, VegetationPreviewTier.Impostor);
-
-        Assert.AreEqual(1, branchRoot.transform.childCount);
-        Transform previewRoot = branchRoot.transform.GetChild(0);
-        Assert.AreEqual(1, previewRoot.childCount);
-        Assert.AreEqual(impostorMesh, previewRoot.GetChild(0).GetComponent<MeshFilter>().sharedMesh);
-        Assert.AreEqual(impostorMaterial, previewRoot.GetChild(0).GetComponent<MeshRenderer>().sharedMaterial);
-    }
-
-    [Test]
-    [Ignore("Takes too long, developer already verified in editor manually")]
-    public void BakeImpostor_FromEditorUtility_UsesOriginalTreeMeshesWithoutBakingShells()
-    {
-        EnsureTestFolders();
-
-        Mesh woodMesh = CreateMeshAsset(
-            "bake_entry_wood.asset",
-            new[]
-            {
-                new Vector3(-0.1f, -0.4f, -0.1f),
-                new Vector3(0.1f, 0.4f, -0.1f),
-                new Vector3(-0.1f, -0.4f, 0.1f)
-            });
-        Mesh foliageMesh = CreateClosedCubeMeshAsset("bake_entry_foliage.asset", new Vector3(1.2f, 1f, 1.2f));
-        Mesh trunkMesh = CreateClosedCubeMeshAsset("bake_entry_trunk.asset", new Vector3(0.5f, 2f, 0.5f));
-        BranchPrototypeSO prototype = CreateAsset<BranchPrototypeSO>("BakeEntryPrototype.asset");
-        SetPrivateField(prototype, "woodMesh", woodMesh);
-        SetPrivateField(prototype, "foliageMesh", foliageMesh);
-
-        BranchPlacement placement = CreateBranchPlacement(
-            prototype,
-            new Vector3(0f, 1f, 0f),
-            Quaternion.identity,
-            1f);
-
-        TreeBlueprintSO blueprint = CreateAsset<TreeBlueprintSO>("BakeEntryBlueprint.asset");
-        SetPrivateField(blueprint, "trunkMesh", trunkMesh);
-        SetPrivateField(blueprint, "branches", new[] { placement });
-        SetPrivateField(blueprint, "ImposterBakeSettings", CreateFastImpostorBakeSettings());
-
-        GameObject authoringObject = CreateTransientGameObject("Authoring");
-        VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
-        SetPrivateField(authoring, "blueprint", blueprint);
-
-        VegetationTreeAuthoringEditorUtility.BakeImpostor(authoring);
-
-        Assert.IsNull(prototype.BranchL1CanopyMesh);
-        Assert.IsNull(prototype.BranchL2CanopyMesh);
-        Assert.IsNull(prototype.BranchL3CanopyMesh);
-        Assert.IsNull(prototype.BranchL1WoodMesh);
-        Assert.IsNull(prototype.BranchL2WoodMesh);
-        Assert.IsNull(prototype.BranchL3WoodMesh);
-        AssertGeneratedMeshStored(blueprint.ImpostorMesh);
-    }
-
-    [Test]
-    [Ignore("Takes too long, developer already verified in editor manually")]
-    public void BakeImpostor_FromEditorUtility_StoresMeshInBlueprintSpecifiedFolder()
-    {
-        EnsureTestFolders();
-
-        Mesh woodMesh = CreateMeshAsset(
-            "explicit_folder_wood.asset",
-            new[]
-            {
-                new Vector3(-0.1f, -0.4f, -0.1f),
-                new Vector3(0.1f, 0.4f, -0.1f),
-                new Vector3(-0.1f, -0.4f, 0.1f)
-            });
-        Mesh foliageMesh = CreateClosedCubeMeshAsset("explicit_folder_foliage.asset", new Vector3(1.2f, 1f, 1.2f));
-        Mesh trunkMesh = CreateClosedCubeMeshAsset("explicit_folder_trunk.asset", new Vector3(0.5f, 2f, 0.5f));
-
-        BranchPrototypeSO prototype = CreateAsset<BranchPrototypeSO>("ExplicitFolderPrototype.asset");
-        SetPrivateField(prototype, "woodMesh", woodMesh);
-        SetPrivateField(prototype, "foliageMesh", foliageMesh);
-
-        BranchPlacement placement = CreateBranchPlacement(
-            prototype,
-            new Vector3(0f, 1f, 0f),
-            Quaternion.identity,
-            1f);
-
-        TreeBlueprintSO blueprint = CreateAsset<TreeBlueprintSO>("ExplicitFolderBlueprint.asset");
-        SetPrivateField(blueprint, "trunkMesh", trunkMesh);
-        SetPrivateField(blueprint, "branches", new[] { placement });
-        SetPrivateField(blueprint, "generatedImpostorMeshesRelativeFolder", ExplicitImpostorMeshAssetRoot);
-        SetPrivateField(blueprint, "ImposterBakeSettings", CreateFastImpostorBakeSettings());
-
-        GameObject authoringObject = CreateTransientGameObject("Authoring");
-        VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
-        SetPrivateField(authoring, "blueprint", blueprint);
-
-        VegetationTreeAuthoringEditorUtility.BakeImpostor(authoring);
-
-        AssertGeneratedMeshStored(blueprint.ImpostorMesh, ExplicitImpostorMeshAssetRoot);
-    }
-
-    [Test]
-    [Ignore("Takes too long, developer already verified in editor manually")]
-    public void BakeShadowProxy_FromEditorUtility_AssignsGeneratedMeshesToBlueprintFields()
-    {
-        EnsureTestFolders();
-
-        Mesh woodMesh = CreateMeshAsset(
-            "shadow_proxy_wood.asset",
-            new[]
-            {
-                new Vector3(-0.1f, -0.4f, -0.1f),
-                new Vector3(0.1f, 0.4f, -0.1f),
-                new Vector3(-0.1f, -0.4f, 0.1f)
-            });
-        Mesh foliageMesh = CreateClosedCubeMeshAsset("shadow_proxy_foliage.asset", new Vector3(1.2f, 1f, 1.2f));
-        Mesh trunkMesh = CreateClosedCubeMeshAsset("shadow_proxy_trunk.asset", new Vector3(0.5f, 2f, 0.5f));
-        Mesh treeL3Mesh = CreateClosedCubeMeshAsset("shadow_proxy_tree_l3.asset", new Vector3(1.8f, 2.2f, 1.8f));
-
-        BranchPrototypeSO prototype = CreateAsset<BranchPrototypeSO>("ShadowProxyPrototype.asset");
-        SetPrivateField(prototype, "woodMesh", woodMesh);
-        SetPrivateField(prototype, "foliageMesh", foliageMesh);
-
-        BranchPlacement placement = CreateBranchPlacement(
-            prototype,
-            new Vector3(0f, 1f, 0f),
-            Quaternion.identity,
-            1f);
-
-        TreeBlueprintSO blueprint = CreateAsset<TreeBlueprintSO>("ShadowProxyBlueprint.asset");
-        SetPrivateField(blueprint, "trunkMesh", trunkMesh);
-        SetPrivateField(blueprint, "treeL3Mesh", treeL3Mesh);
-        SetPrivateField(blueprint, "branches", new[] { placement });
-        SetPrivateField(blueprint, "treeBounds", new Bounds(new Vector3(0f, 1f, 0f), new Vector3(4f, 4f, 4f)));
-        SetPrivateField(blueprint, "shadowProxyBakeSettings", CreateFastShadowProxyBakeSettings());
-
-        GameObject authoringObject = CreateTransientGameObject("Authoring");
-        VegetationTreeAuthoring authoring = authoringObject.AddComponent<VegetationTreeAuthoring>();
-        SetPrivateField(authoring, "blueprint", blueprint);
-
-        VegetationTreeAuthoringEditorUtility.BakeShadowProxyL1(authoring);
-        VegetationTreeAuthoringEditorUtility.BakeShadowProxyL0(authoring);
-
-        AssertGeneratedMeshStored(blueprint.ShadowProxyMeshL1);
-        AssertGeneratedMeshStored(blueprint.ShadowProxyMeshL0);
     }
 
     [Test]
@@ -613,22 +442,6 @@ public sealed class VegetationEditorAuthoringTests
         AssetDatabase.CreateAsset(material, assetPath);
         createdObjects.Add(material);
         return material;
-    }
-
-    private ImpostorBakeSettings CreateFastImpostorBakeSettings()
-    {
-        ImpostorBakeSettings settings = new ImpostorBakeSettings();
-        SetPrivateField(settings, "skipReduction", true);
-        SetPrivateField(settings, "skipSimplifyFallback", true);
-        return settings;
-    }
-
-    private ShadowProxyBakeSettings CreateFastShadowProxyBakeSettings()
-    {
-        ShadowProxyBakeSettings settings = new ShadowProxyBakeSettings();
-        SetPrivateField(settings, "skipReduction", true);
-        SetPrivateField(settings, "skipSimplifyFallback", true);
-        return settings;
     }
 
     private static BranchPlacement CreateBranchPlacement(

@@ -17,7 +17,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
         /// <summary>
         /// [INTEGRATION] Called from editor tooling to populate the simplified L3 trunk mesh on one tree blueprint.
         /// </summary>
-        public static void BakeTrunkL3Mesh(TreeBlueprintSO blueprint, ImpostorBakeSettings? settings = null)
+        public static void BakeTrunkL3Mesh(TreeBlueprintSO blueprint, GeneratedMeshBakeSettings? settings = null)
         {
             // Range: requires a readable source trunk mesh. Condition: every simplification candidate is clipped back to the original trunkMesh bounds so lower voxel resolutions never expand beyond the source envelope. Output: trunkL3Mesh is assigned on the blueprint asset.
             if (blueprint == null)
@@ -37,7 +37,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                 throw new InvalidOperationException($"{blueprint.name} trunkMesh must contain triangles before trunkL3Mesh baking.");
             }
 
-            ImpostorBakeSettings activeSettings = settings ?? blueprint.ImposterSettings;
+            GeneratedMeshBakeSettings activeSettings = settings ?? blueprint.GeneratedMeshSettings;
             GeneratedMeshSimplificationUtility.GeneratedMeshCandidate trunkCandidate =
                 GeneratedMeshSimplificationUtility.SelectBestVoxelMeshCandidate(
                     trunkMesh,
@@ -68,7 +68,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     blueprint,
                     $"{blueprint.name}_TrunkL3",
                     trunkCandidate.Mesh,
-                    blueprint.GeneratedImpostorMeshesRelativeFolder);
+                    blueprint.GeneratedMeshesRelativeFolder);
             serializedBlueprint.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(blueprint);
 

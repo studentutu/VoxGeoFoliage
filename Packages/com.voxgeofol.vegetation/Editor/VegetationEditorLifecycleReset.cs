@@ -62,7 +62,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
                     container.ResetRuntimeState();
                 }
 
-                VegetationActiveAuthoringContainerRuntimes.Reset();
+                VegetationRenderWorld.Shared.Reset();
             }
             catch (Exception exception)
             {

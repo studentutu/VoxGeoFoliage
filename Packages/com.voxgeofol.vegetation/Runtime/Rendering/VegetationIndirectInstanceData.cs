@@ -14,5 +14,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public uint Padding0;
         public uint Padding1;
         public uint Padding2;
+        public Vector4 Wind;
     }
 }

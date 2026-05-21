@@ -1,852 +1,193 @@
 # Vegetation Runtime Architecture
 
-Purpose: exact developer-facing bake and runtime pipeline authority.
+Purpose: current runtime ownership and render-flow authority for the vegetation package.
 
-This doc is code-first. It describes what the editor/runtime path actually does today, where the ownership and memory failures are, and what the replacement runtime shape must be. Old long prose docs are not authority.
+Status: active. Runtime rendering is compiled-page based through `VegetationRenderWorld`.
 
-## Keep This Doc Set
+## Runtime Principle
 
-- `Packages/com.voxgeofol.vegetation/README.md`
-  package consumer contract and shipped terminology
-- `DetailedDocs/VegetationRuntimeArchitecture.md`
-  exact bake + runtime pipeline, ownership, and memory authority
-- `DetailedDocs/Milestone1.md`
-  shipped baseline summary only
-- `DetailedDocs/Milestone2.md`
-  current open work only
-
-Everything else under `DetailedDocs/` is archive, redirect, or historical context only.
-
-## Read This Correctly
-
-- `Current code` means shipped editor/runtime behavior today.
-- `Required target` means the design that must replace the broken ownership model.
-- If this doc and an old design note disagree, trust this doc and the runtime/editor code.
-
-## Requirements
-
-1. Unity `6000.3` or newer.
-2. URP `17.3.0` or newer-compatible project setup.
-3. Compute-shader and indirect-draw support on the target hardware and graphics API.
-4. `VegetationRendererFeature` added to the active URP renderer. Preview via scene view or Render graph viewer.
-5. `VegetationFoliageFeatureSettings.ClassifyShader` assigned to `VegetationClassify.compute`.
-6. Opaque URP SRP-compatible shaders only.
-7. Runtime vegetation shaders compatible with the package indirect-instance contract. The bundled package shaders now include main-light shadow attenuation plus a `ShadowCaster` pass.
-
-## 1. Current Bake Pipeline
-
-### 1.1 Branch Prototype Bake
-
-Hard separation of authoring phase and runtime path. Runtime can freely use authoring phase data.
+Runtime consumes compiled packet data. It does not consume live branch authoring, create per-container renderers, or generate branch work during camera/shadow preparation.
 
 ```text
-BranchPrototypeSO
-  payload in:
-    foliageMesh
-    woodMesh
-    shellBakeSettings
-    canopy triangle budgets
-    generatedCanopyShellsRelativeFolder
--> CanopyShellGenerator.BakeCanopyShells()
-  temp payload:
-    MeshVoxelizerHierarchyBuilder.BuildHierarchies(...)
-      -> hierarchyL0[]
-      -> hierarchyL1[]
-      -> hierarchyL2[]
-    each hierarchy node carries:
-      localBounds
-      depth
-      firstChildIndex
-      childMask
-      shellL0Mesh / shellL1Mesh / shellL2Mesh
-    shell level selections:
-      selected node meshes
-      leaf-frontier triangle counts
-    generated wood tier candidates:
-      shellL1WoodCandidate
-      shellL2WoodCandidate
-    generated canopy tier meshes:
-      branchL1CanopyMesh
-      branchL2CanopyMesh
-      branchL3CanopyMesh
--> GeneratedMeshAssetUtility.PersistGeneratedMesh(...)
-  payload out on BranchPrototypeSO:
-    branchL1WoodMesh = source woodMesh
-    branchL2WoodMesh = persisted reduced wood
-    branchL3WoodMesh = persisted reduced wood
-    branchL1CanopyMesh
-    branchL2CanopyMesh
-    branchL3CanopyMesh
+compiled provider
+-> VegetationRenderWorld
+-> page/cell broad phase
+-> packet selection
+-> grouped instance upload
+-> grouped indirect args
+-> URP depth/color/shadow draws
 ```
 
-Important current contract:
+## Data Owners
 
-- Temporary voxel hierarchies exist only inside `CanopyShellGenerator` while selecting the best `L1/L2/L3` canopy meshes.
-- `BranchPrototypeSO` persists only the runtime split-tier mesh chain: `branchL1/2/3CanopyMesh` and `branchL1/2/3WoodMesh`.
-- Runtime and editor preview do not traverse per-node canopy shell hierarchies anymore.
-- The sample assets were also reduced to the same single-mesh-per-tier contract instead of shipping hundreds of stale shell-node meshes.
+| Data | Owner |
+| --- | --- |
+| Source tree/branch authoring | `VegetationTreeAuthoring`, `TreeBlueprintSO`, `BranchPrototypeSO` |
+| Generated branch/trunk meshes | editor bake tools |
+| Compiled page records | `FoliagePageAsset` |
+| Shared mesh/material/pass groups | `FoliageAssemblyAsset` |
+| Runtime provider registration | `VegetationRuntimeContainer`, `Vegetation.SubScene` bootstrap |
+| Frame culling, budgets, upload, submission | `VegetationRenderWorld` |
+| URP scheduling | `VegetationRendererFeature` |
 
-### 1.2 Tree-Wide Bake
+## Compiled Assets
+
+`FoliageAssemblyAsset` stores shared asset groups and compiler report data.
+
+`FoliagePageAsset` stores:
+
+1. page records
+2. cell records
+3. tree records
+4. static packet instances
+5. representation packets
+6. HLOD packet instances that collapse trees to shared baked impostor mesh references
+7. packet residency metadata
+8. compiled shadow modes
+9. wind metadata
+
+`FoliageRepresentationPacket` is the runtime scheduling unit. It references a contiguous static instance range and one `FoliageAssetGroup`.
+
+## Provider Registration
+
+Classic scene:
 
 ```text
-TreeBlueprintSO
-  payload in:
-    trunkMesh
-    branches[] {
-      prototype
-      localPosition
-      localRotation
-      scale
-    }
-    impostorSettings
-    generatedImpostorMeshesRelativeFolder
--> TrunkL3MeshGenerator.BakeTrunkL3Mesh()
-  temp payload:
-    SelectBestVoxelMeshCandidate(
-      source = trunkMesh,
-      clipBounds = trunkMesh.bounds)
-  payload out:
-    trunkL3Mesh
--> ImpostorMeshGenerator.BakeTreeL3Mesh()
-  temp payload:
-    CreateCombinedTreeSpaceMesh()
-      = trunkMesh
-      + each branch placement prototype.WoodMesh
-      + each branch placement prototype.FoliageMesh
-    SelectBestVoxelMeshCandidate(
-      source = combined tree mesh,
-      clipBounds = blueprint.TreeBounds)
-  payload out:
-    treeL3Mesh
--> ImpostorMeshGenerator.BakeImpostorMesh()
-  temp payload:
-    CreateCombinedTreeSpaceMesh()
-      = same source composition as TreeL3
-    SelectBestVoxelMeshCandidate(
-      source = combined tree mesh,
-      target triangle budget = 200)
-  payload out:
-    impostorMesh
--> SaveAuthoringChanges()
-  side effects:
-    EditorUtility.SetDirty(authoring)
-    EditorUtility.SetDirty(blueprint)
-    AssetDatabase.SaveAssets()
-    AssetDatabase.Refresh()
+VegetationRuntimeContainer.OnEnable()
+-> RefreshRuntimeRegistration()
+-> VegetationRenderWorld.RegisterProvider()
 ```
 
-Important current contract:
-
-- `treeL3Mesh` and `impostorMesh` are baked from trunk + original placed branch source meshes.
-- They do not consume runtime branch tier meshes.
-- `treeL3Mesh` is the intended non-far whole-tree floor.
-- `impostorMesh` is the far-only whole-tree coarse mesh.
-
-### 1.3 Container Authoring Fill
+Closed SubScene:
 
 ```text
-VegetationRuntimeContainer hierarchy
--> VegetationTreeAuthoringEditorUtility.FillRuntimeContainerAuthorings()
-  payload out:
-    registeredAuthorings[] = active VegetationTreeAuthoring references
-  side effect:
-    if runtime owner already exists -> RefreshRuntimeRegistration()
+SubSceneAuthoring baker
+-> SubSceneVegetationPageBaked buffers
+-> SubSceneVegetationBootstrapSystem
+-> VegetationRenderWorld.RegisterProvider()
+-> SubSceneVegetationRuntimeState unregisters on unload
 ```
 
-Important current contract:
+Provider registration is compiled-page only. Missing generated pages log and skip; there is no live-authoring fallback.
 
-- Container ownership is explicit and serialized.
-- Nested child containers claim their own descendants.
-- Runtime registration is snapshot-based. Transform or authoring changes do not live-sync until `RefreshRuntimeRegistration()`.
-
-## 2. Current Runtime Registration Pipeline
+## Camera Flow
 
 ```text
-VegetationRuntimeContainer.registeredAuthorings[]
--> BuildRuntimeTreeAuthorings()
-  payload out:
-    VegetationTreeAuthoringRuntime[] {
-      containerRuntimeHash
-      treeHash
-      debugName
-      blueprint
-      localToWorld
-      isActive
-      source authoring ref
-    }
--> ReplaceRuntimeOwner(...)
-  payload:
-    new AuthoringContainerRuntime(
-      containerId
-      providerKind
-      debugName
-      diagnosticsContext
-      renderLayer
-      gridOrigin
-      cellSize
-      runtimeBudget
-      authorings)
--> AuthoringContainerRuntime.Activate()
--> AuthoringContainerRuntime.RefreshRuntimeRegistration()
-  side effects:
-    ResetAuthoringRuntimeIndices()
-    registry = VegetationRuntimeRegistryBuilder.Build(authorings, runtimeBudget.MaxRegisteredDrawSlots)
-    indirectRenderer = new VegetationIndirectRenderer(registry, renderLayer)
-    reset cameraGpuDecisionPipeline
-    reset frustumGpuDecisionPipeline
+VegetationRendererFeature
+-> VegetationRenderWorld.PrepareForCamera(camera, settings)
+   -> refresh provider graph when dirty
+   -> update page/cell CullingGroup data
+   -> request visible near-detail cell residency under resident/upload byte budgets
+   -> select visible cells nearest-to-farthest under color budget
+   -> degrade each near cell through cheaper near-detail tiers before HLOD
+   -> pack grouped instance payload
+   -> write grouped indirect args
+-> submit color grouped indirect draws
+-> optionally submit dedicated depth grouped indirect draws when EnableDepthPass is enabled
 ```
 
-### 2.1 Registry Builder Flattening
+The active broad phase is page/cell `CullingGroup`. It is intentionally coarse and stable. Do not feed per-tree spheres into it.
+
+`VegetationFoliageFeatureSettings.EnableDepthPass` controls whether the dedicated vegetation depth pass is scheduled. Leave it enabled when the active URP stack needs vegetation depth before opaques, depth texture, or depth-dependent effects; disable it when the color pass depth write is sufficient.
+
+## Shadow Flow
 
 ```text
-VegetationRuntimeRegistryBuilder.Build(authorings)
--> RegisterLodProfile()
-  payload out:
-    LodProfiles[] {
-      l0Distance
-      l1Distance
-      l2Distance
-      impostorDistance
-      absoluteCullDistance
-    }
--> RegisterBlueprint()
-  payload out:
-    TreeBlueprints[] {
-      lodProfileIndex
-      branchPlacementStartIndex
-      branchPlacementCount
-      trunkFullDrawSlot
-      trunkL3DrawSlot
-      treeL3DrawSlot
-      impostorDrawSlot
-      treeL3WorkCost
-      impostorWorkCost
-      expandedTierCostL2
-      expandedTierCostL1
-      expandedTierCostL0
-    }
--> RegisterPrototype()
-  payload out:
-    BranchPrototypes[] {
-      woodDrawSlotL0
-      foliageDrawSlotL0
-      woodDrawSlotL1
-      canopyDrawSlotL1
-      woodDrawSlotL2
-      canopyDrawSlotL2
-      woodDrawSlotL3
-      canopyDrawSlotL3
-      packedLeafTint
-      localBoundsCenter
-      localBoundsExtents
-    }
--> RegisterDrawSlot(mesh, material, materialKind)
-  payload out:
-    DrawSlots[] keyed by:
-      Mesh + Material + MaterialKind
--> Build per-blueprint placements
-  payload out:
-    BlueprintBranchPlacements[] {
-      localToTree
-      treeToLocal
-      prototypeIndex
-      localBoundsCenter
-      localBoundsExtents
-      boundingSphereRadius
-    }
--> Build per-tree instances
-  payload out:
-    TreeInstances[] {
-      localToWorld
-      worldToObject
-      worldBounds
-      trunkFullWorldBounds
-      trunkL3WorldBounds
-      treeL3WorldBounds
-      impostorWorldBounds
-      sphereCenterWorld
-      boundingSphereRadius
-      blueprintIndex
-      cellIndex
-      uploadInstanceData
-    }
--> VegetationSpatialGrid.Build(...)
-  payload out:
-    SpatialGrid
--> BuildDrawSlotConservativeBounds()
-  payload out:
-    DrawSlotConservativeWorldBounds[]
--> VegetationRuntimeRegistry
-  payload out:
-    DrawSlots[]
-    DrawSlotConservativeWorldBounds[]
-    LodProfiles[]
-    TreeBlueprints[]
-    BlueprintBranchPlacements[]
-    BranchPrototypes[]
-    TreeInstances[]
-    SpatialGrid
+main light cascade set
+-> VegetationRenderWorld.PrepareForFrustums(cascadeFrustums, settings)
+   -> explicit page/cell cascade-frustum mask tests
+   -> request near-detail cell residency under resident/upload byte budgets when near shadow packets are selected
+   -> compiled shadow packet mapping
+   -> shadow work budget
+   -> one grouped instance payload shared by all cascades
+   -> one grouped indirect args surface shared by all cascades
+-> submit shadow grouped indirect draws only for cascades/groups that have selected shadow packets
 ```
 
-### 2.2 Submission Surface Build
+`VegetationShadowMode.Off` skips vegetation shadow-caster submission.
 
-```text
-VegetationRuntimeRegistry
--> VegetationIndirectRenderer(...)
-  payload out:
-    SlotResources[] {
-      drawSlot
-      conservativeWorldBounds
-      sharedArgsBufferOffset
-      forward pass index
-      depth pass index
-      shadow pass index
-      MaterialPropertyBlock {
-        _VegetationSlotIndex
-        shared buffers bound later
-      }
-    }
-```
+`VegetationShadowMode.CheapTree` submits compiled shadow packets only. Shadow selection is subordinate to compiled packet metadata and must not create an independent richer or enlarged caster representation.
 
-Important current contract:
+`VegetationRenderWorld.Prepare` carries submarkers for graph refresh, broad phase, packet selection, upload layout, instance copy, args writes, and buffer upload. Keep those markers intact; they are the runtime regression map.
 
-- One registered draw slot is one exact `Mesh + Material + MaterialKind`.
-- Submission surface is `PreparedViewHandle.ActiveSlotIndices`, not raw registry slot metadata.
-- Current shipped active-slot source is the latest completed async non-zero emitted-slot subset, with registered-slot fallback until the emitted-slot readback warms.
-- `VegetationIndirectRenderer` does not own its own GPU instance/args buffers. It binds explicit prepared-view buffers and does not let camera/shadow submission overwrite each other.
+URP owns the main-light shadow atlas. `VegetationRendererFeature` only appends vegetation casters to that atlas, so the render-graph pass must bind `mainShadowsTexture` as a raster depth attachment with read/write access. Manual unsafe `SetRenderTarget` binding is backend-fragile and has failed on DirectX as shadow writes bleeding into color output.
 
-## 3. Current Camera Color/Depth Pipeline
+Because vegetation casters are indirect draws instead of URP renderer-list entries, the shadow pass must explicitly push the current cascade view/projection matrices into shader globals before each cascade submission and restore the game camera matrices afterward. Camera matrix leakage into the shadow-caster draw makes the atlas contents follow Game View camera rotation even though Scene View may look correct. When writing those shader globals, use URP's GPU-adjusted projection convention; writing raw projection globals can flip the draw.
 
-### 3.1 URP Setup
+## Near-Detail Residency
 
-```text
-Camera
--> VegetationRendererFeature.AddRenderPasses()
-  payload in:
-    camera
-    classifyShader
-    diagnostics flag
-    shadow settings
--> DepthPass.Setup()
--> ColorPass.Setup()
-  payload stored per pass:
-    camera
-    classifyShader
-    diagnosticsEnabled
-    containerSnapshot[]
-```
+HLOD packets are always resident. Near-detail packet payloads are selected at cell granularity inside compiled pages and controlled by two render-world budgets:
 
-Important current contract:
+1. `NearDetailResidentByteBudget`
+2. `NearDetailUploadByteBudget`
 
-- Depth and color both call `PrepareViewForCamera(camera, classifyShader, diagnosticsEnabled)`.
-- The second call for the same camera and render frame reuses the cached prepared-view handle.
+Visible near cells request their cell payload before selecting `TreeL0/L1/L2` packets. Packet admission is nearest-cell first relative to the active camera using distance to compiled cell bounds, not distance to the cell center. This matters for elongated or line-shaped cells where a tree can be adjacent to the camera while the cell midpoint is still far away. The renderer selects the best distance tier when it fits, then tries cheaper near-detail tiers, then falls back to `CellHLOD` / `PageHLOD`. If the resident budget, upload budget, cell payload size, color work budget, or visible detail instance budget blocks the request, that fallback is mandatory so visible trees are degraded, not dropped. A large compiled page must not block all near detail when individual cells fit the active upload budget.
 
-### 3.2 Per-Container Prepare
+Residency is least-recently-used at cell granularity. Cells requested during the current prepare are protected from eviction; older unrequested cells are evicted until the resident budget fits.
 
-```text
-AuthoringContainerRuntime.PrepareViewForCamera(camera, classifyShader, diagnostics)
-  cache key:
-    lastPreparedRenderFrame + lastPreparedCameraInstanceId
--> EnsureRuntimeRegistration()
--> GeometryUtility.CalculateFrustumPlanes(camera)
-  payload out:
-    frustumPlanes[6]
--> TryEnsureGpuDecisionPipeline(useExplicitFrustumPipeline = false)
-  payload out:
-    cameraGpuDecisionPipeline
--> PrepareGpuResidentView(
-     observerWorldPosition = camera.transform.position,
-     frustumPlanes,
-     classifyShader,
-     diagnosticsEnabled,
-      allowExpandedTreePromotion = true,
-      useExplicitFrustumPipeline = false)
-  payload out:
-    VegetationIndirectRenderer.PreparedViewHandle
-```
+Compiled page assets are still ScriptableObject references. This is runtime residency and upload budgeting, not an externalized disk/Addressables provider yet.
 
-### 3.3 GPU Decision Chain
+Shared mesh/material groups are still referenced by the compiled assembly. HLOD must reuse baked tree impostor meshes/materials; page/cell compilation must not generate combined aggregate HLOD mesh assets and must not replay branch/trunk L3 packets for far density.
 
-```text
-VegetationGpuDecisionPipeline.PrepareResidentFrame(
-  cameraWorldPosition,
-  frustumPlanes,
-  allowExpandedTreePromotion,
-  captureTelemetry)
--> UploadDynamicFrameData
-  payload in constants:
-    _CameraWorldPosition
-    _FrustumPlanes[6]
-    _CellCount
-    _TreeCount
-    _LodProfileCount
-    _BlueprintCount
-    _PlacementCount
-    _PrototypeCount
-    _DrawSlotCount
-    _VisibleInstanceCapacity
-    _ExpandedBranchWorkItemCapacity
-    _ApproxWorkUnitCapacity
-    _AllowExpandedTierPromotion
-    _PriorityRingCount
--> ResetFrameState
-  payload out:
-    ExpandedBranchWorkItemCount = 0
-    ExpandedBranchDispatchArgs = {0, 1, 1}
-    FrameStats[0..12] = 0
--> ClassifyCells
-  payload in:
-    Cells[]
-  payload out:
-    CellVisibility[]
--> ClassifyTrees
-  payload in:
-    Trees[]
-    Blueprints[]
-    LodProfiles[]
-    CellVisibility[]
-  payload out:
-    TreeVisibility[] {
-      treeDistance
-      priorityRing
-      desiredTier
-      acceptedTier = culled
-      acceptedTierCost = 0
-      visible
-    }
--> AcceptTreeTiers
-  payload in:
-    TreeVisibility[]
-    Trees[]
-    Blueprints[]
-  temp payload:
-    PriorityRingTreeCounts[]
-    PriorityRingOffsets[]
-    PriorityOrderedVisibleTreeIndices[]
-  payload out:
-    TreeVisibility[].acceptedTier
-    TreeVisibility[].acceptedTierCost
-    FrameStats[] {
-      visibleTrees
-      acceptedTreeL3
-      promotedL2
-      promotedL1
-      promotedL0
-      rejectedPromotions
-      expandedTrees
-      expandedBranchWorkItems
-      acceptedTierCostUsage
-      baselineTreeL3Failures
-      visibleInstanceCapHits
-      expandedBranchWorkItemCapHits
-      emittedVisibleInstances
-    }
-  actual current order:
-    1. camera/color path pre-validates visible non-far `TreeL3` baseline fit and fault-disables the container explicitly if it cannot fit
-    2. nearest-first promotion TreeL3 -> L2 -> L1 -> L0 if enabled
-    3. far trees try Impostor last
--> ResetSlotCounts
-  payload out:
-    SlotRequestedInstanceCounts[]
-    SlotEmittedInstanceCounts[]
-    SlotPackedStarts[]
--> CountTrees
-  payload out:
-    SlotRequestedInstanceCounts[accepted tree draw slot]++
--> GenerateExpandedBranchWorkItems
-  only when expanded promotion is enabled
-  payload out:
-    ExpandedBranchWorkItems[] {
-      treeIndex
-      branchInstanceIndex
-      branchPlacementIndex
-      runtimeTier
-    }
-    ExpandedBranchWorkItemCount
--> CountExpandedBranches
-  dispatch item count:
-    actual generated expanded-branch work-item count
-  payload out:
-    SlotRequestedInstanceCounts[branch wood slot]++
-    SlotRequestedInstanceCounts[branch canopy slot]++
--> ClampRequestedSlotCounts
-  payload out:
-    SlotRequestedInstanceCounts[] clamped in slot order        <-- current slot-order bias
--> BuildSlotStarts
-  payload out:
-    SlotPackedStarts[]
--> EmitTrees
-  payload out:
-    VisibleInstances[]
-    SlotEmittedInstanceCounts[]
--> EmitExpandedBranches
-  dispatch item count:
-    actual generated expanded-branch work-item count
-  payload out:
-    VisibleInstances[]
-    SlotEmittedInstanceCounts[]
--> FinalizeIndirectArgs
-  payload out per slot:
-    IndirectArgs {
-      indexCountPerInstance
-      instanceCount
-      startIndexLocation
-      baseVertexLocation
-      startInstanceLocation = 0
-    }
--> SchedulePreparedFrameReadbacks
-  payload out:
-    latest prepared-frame telemetry cache
-    latest active-slot index cache
-```
+## Buffers And Submission
 
-### 3.4 Bind And Submit
+`VegetationRenderWorld` owns the runtime buffers and releases them on reset:
 
-```text
-PrepareResidentFrame(...)
--> VegetationIndirectRenderer.BindGpuResidentFrame(...)
-  payload out:
-    PreparedViewHandle {
-      instanceBuffer
-      argsBuffer
-      slotPackedStartsBuffer
-      activeSlotIndices = latest completed non-zero emitted slots
-      fallback = all registered slots until async emitted-slot readback warms
-    }
--> VegetationIndirectRenderer.Render(preparedViewHandle, passMode = Depth | Color)
-  for each active slot:
-    resolve material + pass index
-    DrawMeshInstancedIndirect(
-      mesh,
-      material,
-      argsBuffer,
-      sharedArgsBufferOffset,
-      shaderPass,
-      drawProperties)
-```
+1. shared visible packet instance buffer
+2. grouped indirect args buffers
+3. page/cell culling state
+4. provider graph caches
+5. diagnostics counters
 
-Important current contract:
+Submission is grouped by `FoliageAssetGroup`: mesh, material, submesh, pass, and shader contract.
 
-- Submission iterates the prepared-view handle's active-slot indices, not the raw registered slot table.
-- Current shipped submission uses the latest completed async non-zero emitted-slot subset, with registered-slot fallback during async warm-up.
-- Zero-instance draws are only tolerated during registered-slot fallback.
-- The renderer renders explicit prepared-view handles instead of one mutable "currently bound prepared frame" surface.
+Shader and indirect draw code must validate packet, group, pass, and instance indices before buffer reads or indirect-args writes. Invalid data drops work.
 
-## 4. Current Shadow Pipeline
+## Wind
 
-Current code status:
+The compiler writes static `FoliageWindMetadata` per packet instance. Branch, canopy, and HLOD packet bounds remain packet-owned for culling, but wind phase and anchor height come from the owning tree bounds so detached packet groups inherit trunk sway at the same world height. Branch and canopy packets must keep full trunk-following bend weight. In shader code, trunk-following displacement uses only the compiled phase plus global time. Branch flutter metadata must not be added to that shared wind-direction displacement because that makes attached branch packets sway with a larger envelope than the trunk. Canopy shaders may use branch flutter metadata only as small local vertex flutter over the already trunk-following position, with matching forward, depth, and shadow deformation. Leaf flutter amplitude, speed, spatial variation, and secondary harmonic strength are runtime `VegetationFoliageFeatureSettings` values, not compiler metadata. Runtime binds:
 
-- Shadows are implemented, but the shipped controls are not the target design.
-- Current `RenderMainLightShadows` / `AllowExpandedTreePromotionInShadows` behavior can select shadow-only tree proxy meshes for near bands.
-- That legacy proxy path is brittle because it lets shadow caster geometry diverge from the visible accepted tier.
+1. global wind direction
+2. wind strength
+3. wind frequency
+4. leaf flutter settings
+5. shared instance buffer
 
-```text
-VegetationRendererFeature.RecordShadowRenderGraph()
--> DrawMainLightShadowAtlas()
-  payload in:
-    main directional light
-    culling results
-    cascade count
-    main shadow texture
--> for each cascade:
-  -> ShadowUtils.ExtractDirectionalLightMatrix(...)
-    payload out:
-      ShadowSliceData {
-        viewMatrix
-        projectionMatrix
-        resolution
-        offsetX
-        offsetY
-      }
-  -> GeometryUtility.CalculateFrustumPlanes(
-       shadowSliceData.projectionMatrix * shadowSliceData.viewMatrix)
-    payload out:
-      shadowFrustumPlanes[6]
-  -> for each container:
-    -> AuthoringContainerRuntime.PrepareViewForFrustum(
-         observerWorldPosition = cameraData.worldSpaceCameraPos,
-         frustumPlanes = shadowFrustumPlanes,
-         classifyShader,
-         diagnosticsEnabled,
-         allowExpandedTreePromotion = shadow setting)
-      -> TryEnsureGpuDecisionPipeline(useExplicitFrustumPipeline = true)
-        payload out:
-          frustumGpuDecisionPipeline
-      -> same PrepareResidentFrame compute chain as camera path
-      -> VegetationIndirectRenderer.BindGpuResidentFrame(...)
-         payload out:
-           PreparedViewHandle
-    -> VegetationIndirectRenderer.Render(preparedViewHandle, passMode = Shadow)
-      for each active slot:
-        resolve ShadowCaster pass
-        DrawMeshInstancedIndirect(...)
-```
+Wind changes must not rebuild compiled packet payloads.
 
-Important current contract:
+## Material Contract
 
-- Shadow preparation owns a second full `VegetationGpuDecisionPipeline` per container once used.
-- Shadow and camera still share one `VegetationIndirectRenderer`, but render calls no longer share one renderer-global mutable bound frame.
-- Camera, depth, and shadow now pass explicit prepared-view handles through submission.
-- Current enabled shadow promotion is legacy behavior. It is not the required target because it can choose a shadow-only LOD family that differs from the rendered branch-expanded color representation.
+Vegetation materials must be opaque and compatible with the package indirect instance layout. Required passes:
 
-## 5. Current Resident Memory Surfaces
+1. forward
+2. depth
+3. shadow-caster
 
-### 5.1 CPU Resident Per Container
+The package shaders provide the reference contract:
 
-```text
-AuthoringContainerRuntime
-  -> VegetationRuntimeRegistry CPU arrays
-  -> VegetationIndirectRenderer SlotResources[]
-  -> camera/frustum pipeline references
-```
+1. `VegetationCanopyLit.shader`
+2. `VegetationTrunkLit.shader`
+3. `VegetationFarMeshLit.shader`
+4. `VegetationDepthOnly.shader`
+5. `VegetationIndirectCommon.hlsl`
 
-### 5.2 GPU Resident Per VegetationGpuDecisionPipeline
+Runtime must not manufacture per-slot material copies for compatibility.
 
-```text
-cellBuffer[max(1, cellCount)]
-lodBuffer[max(1, lodProfileCount)]
-blueprintBuffer[max(1, blueprintCount)]
-placementBuffer[max(1, placementCount)]
-prototypeBuffer[max(1, prototypeCount)]
-treeBuffer[max(1, treeCount)]
-treeVisibilityBuffer[max(1, treeCount)]
-expandedBranchWorkItemBuffer[expandedBranchWorkItemCapacity]
-expandedBranchWorkItemCountBuffer[1]
-expandedBranchDispatchArgsBuffer[3]
-frameStatsBuffer[13]
-priorityRingTreeCountBuffer[priorityRingCount]
-priorityRingOffsetsBuffer[priorityRingCount]
-priorityOrderedVisibleTreeIndicesBuffer[max(1, treeCount)]
-slotMetadataBuffer[max(1, drawSlotCount)]
-slotRequestedInstanceCountBuffer[max(1, drawSlotCount)]
-slotEmittedInstanceCountBuffer[max(1, drawSlotCount)]
-slotPackedStartsBuffer[max(1, drawSlotCount)]
-cellVisibilityBuffer[max(1, cellCount)]
-residentInstanceBuffer[visibleInstanceCapacity]
-residentArgsBuffer[max(1, drawSlotCount)]
-```
+`_VegetationInstanceData` must be gated by `_VOXGEOFOL_INDIRECT_RENDERING` in addition to Unity procedural instancing. Unity can select instancing/procedural variants for regular MeshRenderer/editor-preview draws on DirectX; those paths must fall back to object matrices instead of declaring an unbound SRV. `VegetationRenderWorld` enables `_VOXGEOFOL_INDIRECT_RENDERING` only around grouped indirect submission. Grouped draws must not rely on indirect-args `startInstance` for instance-buffer indexing; the render world writes zero `startInstance` and binds `_VegetationInstanceDataBaseOffset` per group so DirectX and Vulkan read the same payload records.
 
-### 5.3 Current Multipliers
+## Runtime Constraints
 
-```text
-one active container
-  -> one registry
-  -> one indirect renderer
-  -> one cameraGpuDecisionPipeline
-  -> one frustumGpuDecisionPipeline once shadow/explicit frustum is used
+1. No synchronous GPU readback in render-pass setup, camera prepare, shadow prepare, or submission.
+2. No per-container budgets.
+3. No branch-work generation in runtime prepare.
+4. No hidden live-authoring fallback.
+5. No parallel renderer bridge.
+6. No HZB dependency before the packet renderer is production-validated.
+7. Main-light directional shadows only for the current package.
 
-worst current steady state
-  -> 2 x full VegetationGpuDecisionPipeline GPU residency per container
-  -> 1 x shared indirect renderer per container with explicit prepared-view handles
-```
+## Remaining Runtime Work
 
-### 5.4 Shipped Budget Split
-
-```text
-old alias:
-  maxVisibleInstanceCapacity drove:
-    visible instance buffer size
-    expanded branch work-item capacity
-    accepted tier work budget
-    branch count dispatch size
-    branch emit dispatch size
-
-current shipped split:
-  color/shadow visible-instance budgets drive resident instance memory
-  color/shadow expanded-work-item budgets drive branch queue capacity
-  color/shadow approx-work-unit budgets drive accepted-content cost
-  registered draw-slot cap bounds registry slot metadata
-  branch count/emit dispatch now uses GPU-built indirect dispatch args from actual generated work count
-```
-
-The alias is gone. The remaining problem is duplicated per-view residency, not one integer pretending to mean five different things.
-
-## 6. Current Runtime Weak Points
-
-- Camera and shadow no longer mutate one shared submission surface, but they still pay for separate full GPU pipelines.
-- Slot clamping is slot-order biased.
-- Prepared-frame telemetry and active-slot submission are latest async readback snapshots, so the first prepared frames can fall back to registered slots and reported counts can lag the frame being rendered.
-- Memory scales with container count and with camera plus frustum pipeline duplication.
-- Shadow still defaults to the same budget shape as color unless explicitly overridden.
-
-## 7. Required Target Design
-
-### 7.1 Ownership Split
-
-```text
-RefreshRuntimeRegistration()
--> VegetationContainerStaticState
-  owns:
-    immutable CPU registry
-    immutable GPU static buffers
-    slot metadata
-    conservative slot bounds
-
-PrepareView(camera | shadow cascade)
--> VegetationPreparedViewPool.Acquire()
--> VegetationPreparedViewScratch
-  owns:
-    cell visibility
-    tree visibility
-    priority ordering
-    branch work queue
-    slot requested counts
-    slot packed starts
-    visible instances
-    indirect args
--> VegetationPreparedViewHandle
-  carries:
-    owner
-    version
-    instance buffer
-    args buffer
-    slot starts buffer
-    pass/view kind
-
-Render(handle)
--> bind handle-owned buffers
--> submit without touching unrelated prepared views
--> release handle after use
-```
-
-Required rule:
-
-- `VegetationIndirectRenderer` must stop owning one mutable bound frame for all consumers.
-- Camera and shadow need explicit prepared-view handles, not "whatever was bound last".
-
-### 7.2 Budget Split
-
-```text
-VegetationRuntimeBudget
-  ColorMaxVisibleInstances
-  ColorMaxExpandedBranchWorkItems
-  ColorMaxApproxWorkUnits
-  ShadowMaxVisibleInstances
-  ShadowMaxExpandedBranchWorkItems
-  ShadowMaxApproxWorkUnits
-  MaxRegisteredDrawSlots
-```
-
-Meaning:
-
-- visible instances = memory cap
-- expanded branch work items = queue cap
-- approx work units = quality/perf cap
-- registered draw slots = submission surface cap
-
-### 7.3 Required Prepare Pipeline
-
-```text
-PrepareView(staticState, observer, frustum, budget)
--> Reset transient view scratch
--> ClassifyCells
--> ClassifyTrees
--> AcceptBaselineTreeL3OrFail()
-  rule:
-    visible non-far color trees must fit their baseline or the container is invalid
--> PromoteNearest(TreeL3 -> L2 -> L1 -> L0)
-  rule:
-    uses work-unit budget, not visible-instance count
--> GenerateExpandedBranchWorkItems
-  rule:
-    bounded by expanded-work-item budget
--> CountTrees
--> CountExpandedBranches
-  dispatch count:
-    actual generated work-item count
--> BuildSlotStarts
--> EmitTrees
--> EmitExpandedBranches
-  dispatch count:
-    actual generated work-item count
--> FinalizeIndirectArgs
--> return prepared-view handle
-```
-
-### 7.4 Required Shadow Policy
-
-```text
-ShadowMode
-  Off
-    -> no vegetation shadow-caster submission
-
-  CheapTree
-    near active L0/L1 color tiers
-      -> same-as-color shadow casters
-      -> uses the same accepted branch/trunk representation as the color prepared view
-
-    farther accepted L2/TreeL3 tiers
-      -> cheap tree-only caster
-      -> default caster is TreeL3 or a cheaper validated TreeShadowLod
-
-    far Impostor tier
-      -> no cast shadow by default
-```
-
-Reason:
-
-- Shadows are a target feature, but they must remain subordinate to the fast opaque foliage goal.
-- Near self-shadowing is allowed only when it reuses the active visible representation, so the shadow caster cannot be larger than the rendered branch/trunk geometry.
-- Farther vegetation shadows are allowed only as cheap tree-level casters, because branch-equivalent shadows at distance conflict with the performance target.
-- The public runtime contract has two modes only: `Off` and `CheapTree`. Do not expose separate `L0/L1` shadow proxy promotion as a production option.
-- Cheap shadow policy only works if shadow and color no longer fight over one shared submission state and if the shadow prepare path avoids a second full color-equivalent decision pipeline.
-
-Required `CheapTree` tier matrix:
-
-```text
-accepted color tier L0
-  shadow caster -> same trunk + branch draw slots as color
-
-accepted color tier L1
-  shadow caster -> same trunk + branch draw slots as color
-
-accepted color tier L2
-  shadow caster -> TreeL3 or validated cheaper TreeShadowLod
-
-accepted color tier TreeL3
-  shadow caster -> TreeL3 or validated cheaper TreeShadowLod
-
-accepted color tier Impostor
-  shadow caster -> none by default
-```
-
-Required validation:
-
-- A cheap tree-only shadow caster must not have a larger bounds extent than the rendered tree tier it replaces, except for a tiny documented bake tolerance.
-- A cheap tree-only shadow caster must not exceed the `TreeL3` index count unless a target-specific benchmark explicitly approves it.
-- Any shadow caster used for same-as-color near shadows must be derived from the same accepted color tier, not from a separate shadow-only proxy mesh.
-- Shadow preparation must never promote an accepted tree to a visually richer or geometrically larger shadow tier than the color path selected for that tree.
-
-## 8. Non-Negotiable Invariants
-
-- Visible non-far color trees must never disappear silently. Minimum accepted representation is `TreeL3`.
-- `Impostor` stays far-only.
-- Promotion is nearest-first.
-- Branch work exists only for trees already accepted above `TreeL3`.
-- Slot order must not decide survival.
-- Shadows are supported through `ShadowMode.Off` and `ShadowMode.CheapTree` only.
-- `ShadowMode.CheapTree` uses same-as-color casters for near active `L0/L1` tiers and cheap tree-only casters for farther accepted tiers.
-- Shadow can be cheaper than color, but it must never cast a larger or unrelated silhouette than the accepted visible tier.
-- Shadow can be cheaper than color, but it must have explicit ownership.
-
-## 9. Immediate Implementation Order
-
-Completed:
-
-1. Split persistent container state from prepared-view scratch state.
-2. Introduce explicit prepared-view handles.
-3. Remove renderer-global bound-frame ownership.
-4. Split budgets into instances, work items, work units, and slot cap.
-5. Dispatch branch count and emit from actual generated work count.
-6. Enforce baseline-fit failure for visible non-far color trees.
-7. Add actual visible-instance count, actual generated branch-work count, and budget-cap-hit telemetry through async prepared-frame readbacks.
-8. Replace registered-slot submission with the live active-slot surface, using latest async emitted-slot readback with registered-slot fallback during warm-up.
-
-Remaining:
-
-1. Replace legacy shadow toggles with `ShadowMode.Off` and `ShadowMode.CheapTree`.
-2. Implement `CheapTree` tier selection: same-as-color near `L0/L1`, cheap tree-only farther `L2/TreeL3`, no impostor cast shadow by default.
-3. Remove production use of independent `ShadowProxyL0/L1` promotion.
-4. Keep shadow cheap by default and tune shadow budgets separately from color residency.
-5. Remove slot-order bias from visible-instance clamping.
-6. Collapse duplicated camera/frustum GPU residency into the pooled prepared-view ownership target.
+1. Screen-error LOD with hysteresis and budget pressure.
+2. Procedural placement providers compiled directly to page assets.
+3. Externalized async near-detail payload providers for disk/Addressables-backed pages.
+4. Dense scene, mobile, VR, shadow, and wind validation.

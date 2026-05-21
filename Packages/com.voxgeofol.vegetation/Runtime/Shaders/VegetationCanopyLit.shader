@@ -30,6 +30,8 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
             #pragma vertex Vert
             #pragma fragment Frag
             #pragma multi_compile_instancing
+            #pragma instancing_options procedural:SetupVegetation
+            #pragma multi_compile _ _VOXGEOFOL_INDIRECT_RENDERING
             #pragma multi_compile_fog
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
@@ -52,7 +54,7 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
                 float3 positionOS : POSITION;
                 float3 normalOS : NORMAL;
                 float2 uv : TEXCOORD0;
-                uint instanceID : SV_InstanceID;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -69,11 +71,12 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
             Varyings Vert(Attributes input)
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
+                VegetationInstanceData instanceData = LoadVegetationInstance();
 
                 Varyings output;
-                output.positionWS = TransformVegetationPosition(input.positionOS, instanceData);
                 output.normalWS = TransformVegetationNormal(input.normalOS, instanceData);
+                output.positionWS = TransformVegetationPosition(input.positionOS, instanceData);
+                output.positionWS = ApplyVegetationLeafFlutter(output.positionWS, output.normalWS, input.uv, instanceData);
                 output.positionCS = TransformWorldToHClip(output.positionWS);
                 output.uv = TRANSFORM_TEX(input.uv, _BaseMap);
                 output.tint = DecodePackedLeafTint(instanceData.packedLeafTint);
@@ -111,6 +114,8 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
             #pragma vertex ShadowVert
             #pragma fragment ShadowFrag
             #pragma multi_compile_instancing
+            #pragma instancing_options procedural:SetupVegetation
+            #pragma multi_compile _ _VOXGEOFOL_INDIRECT_RENDERING
             #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
@@ -120,7 +125,8 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
             {
                 float3 positionOS : POSITION;
                 float3 normalOS : NORMAL;
-                uint instanceID : SV_InstanceID;
+                float2 uv : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -131,10 +137,10 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
             Varyings ShadowVert(Attributes input)
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
+                VegetationInstanceData instanceData = LoadVegetationInstance();
 
                 Varyings output;
-                output.positionCS = GetVegetationShadowPositionHClip(input.positionOS, input.normalOS, instanceData);
+                output.positionCS = GetVegetationCanopyShadowPositionHClip(input.positionOS, input.normalOS, input.uv, instanceData);
                 return output;
             }
 
@@ -159,6 +165,8 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
             #pragma vertex DepthVert
             #pragma fragment DepthFrag
             #pragma multi_compile_instancing
+            #pragma instancing_options procedural:SetupVegetation
+            #pragma multi_compile _ _VOXGEOFOL_INDIRECT_RENDERING
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "VegetationIndirectCommon.hlsl"
@@ -166,7 +174,9 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
             struct Attributes
             {
                 float3 positionOS : POSITION;
-                uint instanceID : SV_InstanceID;
+                float3 normalOS : NORMAL;
+                float2 uv : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -177,10 +187,12 @@ Shader "VoxGeoFol/Vegetation/CanopyLit"
             Varyings DepthVert(Attributes input)
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
+                VegetationInstanceData instanceData = LoadVegetationInstance();
 
                 Varyings output;
                 float3 positionWS = TransformVegetationPosition(input.positionOS, instanceData);
+                float3 normalWS = TransformVegetationNormal(input.normalOS, instanceData);
+                positionWS = ApplyVegetationLeafFlutter(positionWS, normalWS, input.uv, instanceData);
                 output.positionCS = TransformWorldToHClip(positionWS);
                 return output;
             }

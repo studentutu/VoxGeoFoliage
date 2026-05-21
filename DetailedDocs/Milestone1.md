@@ -1,25 +1,13 @@
 # Milestone 1
 
-Status: shipped baseline
-
-## Landed
-
-- editor bake path for canopy, trunk, and impostor assets
-- tree-first GPU runtime path
-- `TreeL3` non-far floor and `Impostor` far-only path
-- URP indirect depth/color/shadow submission
-- snapshot-based container registration
-
-## Did Not Land
-
-- wind
-- custom-material contract
-- masked-quad `GPUVoxelizer` bake path
-- cross-container prioritization
+Status: historical shipped baseline.
 
 ## Current Use
 
-Use this file only as a shipped-baseline summary.
+Use this file only as a historical marker that the initial authoring and indirect-rendering baseline shipped before the compiled render-world cutover.
 
-Architecture authority lives in:
+Current authority lives in:
+
 - [VegetationRuntimeArchitecture.md](VegetationRuntimeArchitecture.md)
+- [VegetationGenerationalRedesign.md](VegetationGenerationalRedesign.md)
+- [Milestone2.md](Milestone2.md)

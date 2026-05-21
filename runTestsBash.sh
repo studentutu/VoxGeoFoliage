@@ -57,7 +57,7 @@ echo "Unity exit code $UNITY_EXIT_CODE"
 echo
 
 # ── 3. count <stack-trace> (opening tag = one failure) ───────────────────────────
-FAILS=$(grep -c '<stack-trace>' "$TEST_FILE")
+FAILS=$(grep -c '<stack-trace>' "$TEST_FILE" || true)
 echo " $FAILS test(s) failed"
 echo
 

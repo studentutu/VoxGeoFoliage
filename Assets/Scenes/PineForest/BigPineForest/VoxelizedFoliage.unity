@@ -172905,7 +172905,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 805065708}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1607e2747d7f37348925d2ad94f15e9f, type: 3}
   m_Name: 
@@ -179000,13 +179000,32 @@ MonoBehaviour:
   - {fileID: 1608642082}
   - {fileID: 114211208}
   - {fileID: 1317893972}
-  colorMaxVisibleInstanceCapacity: 131072
-  colorMaxExpandedBranchWorkItemCapacity: 131072
-  colorMaxApproxWorkUnitCapacity: 131072
-  shadowMaxVisibleInstanceCapacity: 65536
-  shadowMaxExpandedBranchWorkItemCapacity: 65536
-  shadowMaxApproxWorkUnitCapacity: 65536
-  maxRegisteredDrawSlots: 2048
+  compiledAssembly: {fileID: 11400000, guid: 60f9dca75702c7548add2a89060c5d49, type: 2}
+  compiledPages:
+  - {fileID: 11400000, guid: 003af26760aed6840978ebb768f07473, type: 2}
+  - {fileID: 11400000, guid: 0f7c299fadbe7614f9531792c2137d51, type: 2}
+  - {fileID: 11400000, guid: 0ffa4d286f191404183dc51029b7760e, type: 2}
+  - {fileID: 11400000, guid: 100c347ae87e711458c9ccc2e0741477, type: 2}
+  - {fileID: 11400000, guid: 1126e747ab944e448a4d307672074339, type: 2}
+  - {fileID: 11400000, guid: 129a28a151077c5489767b5b36cf417f, type: 2}
+  - {fileID: 11400000, guid: 26788595354bdb144bc06bc11b5c2a51, type: 2}
+  - {fileID: 11400000, guid: 32b572af613e467469794a0b118586eb, type: 2}
+  - {fileID: 11400000, guid: 32fcfc78e37305247b609330211b3600, type: 2}
+  - {fileID: 11400000, guid: 34b7aaf483d546e488ee7d8804e59acf, type: 2}
+  - {fileID: 11400000, guid: 3514b12d13b813f4898c1c49d2d4a877, type: 2}
+  - {fileID: 11400000, guid: 397317642daa7374793a1ffaf7966f42, type: 2}
+  - {fileID: 11400000, guid: 3fa7e19ef9be4514896dabb819e34b93, type: 2}
+  - {fileID: 11400000, guid: 82caefaca4d4ae349b9d399439363fa3, type: 2}
+  - {fileID: 11400000, guid: 8af016a2791bb454c944602b0c3bef6d, type: 2}
+  - {fileID: 11400000, guid: 8f8436871693a024ebb131011fa4456d, type: 2}
+  - {fileID: 11400000, guid: 985e15dcbe9d7774ba4d51c31282cc10, type: 2}
+  - {fileID: 11400000, guid: b4c360086fd1b6b41bbcbc015ae0b8c3, type: 2}
+  - {fileID: 11400000, guid: b78280827c55f904a95e481f6ca3003b, type: 2}
+  - {fileID: 11400000, guid: cdf118bc560e8cf4fa5ad78319b1813d, type: 2}
+  - {fileID: 11400000, guid: d21202181a32fa44eb173c6cda806528, type: 2}
+  - {fileID: 11400000, guid: da2a8ace7b508334faa8111947925e51, type: 2}
+  - {fileID: 11400000, guid: de9b7e236f9d0ea46a94bce73045a201, type: 2}
+  - {fileID: 11400000, guid: e1d4e2d9565595e4bab5b641d8518ae4, type: 2}
 --- !u!114 &805065711
 MonoBehaviour:
   m_ObjectHideFlags: 0

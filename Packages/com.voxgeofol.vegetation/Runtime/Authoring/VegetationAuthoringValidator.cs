@@ -16,7 +16,6 @@ public static class VegetationAuthoringValidator
     private const float ScaleStep = 0.25f;
     private const float ScaleTolerance = 0.0001f;
     private const float BoundsContainmentEpsilon = 0.0001f;
-    private const int RecommendedImpostorTriangleBudget = 200;
 
     /// <summary>
     /// [INTEGRATION] Validates one branch prototype before shell baking, preview, or runtime registration use it.
@@ -44,7 +43,7 @@ public static class VegetationAuthoringValidator
     }
 
     /// <summary>
-    /// [INTEGRATION] Validates one tree blueprint before preview, shell/impostor baking, or runtime gather consume it.
+    /// [INTEGRATION] Validates one tree blueprint before preview, shell baking, or runtime gather consume it.
     /// </summary>
     public static VegetationValidationResult ValidateTreeBlueprint(TreeBlueprintSO? blueprint)
     {
@@ -58,21 +57,19 @@ public static class VegetationAuthoringValidator
 
         ValidateRequiredReadableMesh(blueprint.TrunkMesh, "trunkMesh", result);
         ValidateRequiredReadableMesh(blueprint.TrunkL3Mesh, "trunkL3Mesh", result);
-        ValidateRequiredReadableMesh(blueprint.TreeL3Mesh, "treeL3Mesh", result);
+        ValidateRequiredReadableMesh(blueprint.ImpostorMesh, "impostorMesh", result);
         ValidateRequiredOpaqueMaterial(blueprint.TrunkMaterial, "trunkMaterial", result);
+        ValidateRequiredOpaqueMaterial(blueprint.ImpostorMaterial, "impostorMaterial", result);
         ValidateBranchPlacements(blueprint, result);
         result.Merge(ValidateLodProfile(blueprint.LodProfile));
-        ValidateImpostor(blueprint, result);
         ValidateTreeBounds(blueprint, result);
         ValidateTrunkL3Bounds(blueprint, result);
-        ValidateTreeL3Bounds(blueprint, result);
-        ValidateShadowProxies(blueprint, result);
 
         return result;
     }
 
     /// <summary>
-    /// [INTEGRATION] Validates one LOD profile before CPU or GPU classification flatten it into runtime buffers.
+    /// [INTEGRATION] Validates one LOD profile before compiler or render-world packet selection consumes it.
     /// </summary>
     public static VegetationValidationResult ValidateLodProfile(LODProfileSO? lodProfile)
     {
@@ -87,7 +84,7 @@ public static class VegetationAuthoringValidator
         if (lodProfile.L0Distance <= 0f ||
             lodProfile.L1Distance <= 0f ||
             lodProfile.L2Distance <= 0f ||
-            lodProfile.ImpostorDistance <= 0f ||
+            lodProfile.HlodDistance <= 0f ||
             lodProfile.AbsoluteCullDistance <= 0f)
         {
             result.AddError("LOD distances must be greater than zero.");
@@ -95,10 +92,10 @@ public static class VegetationAuthoringValidator
 
         if (!(lodProfile.L0Distance < lodProfile.L1Distance &&
               lodProfile.L1Distance < lodProfile.L2Distance &&
-              lodProfile.L2Distance < lodProfile.ImpostorDistance &&
-              lodProfile.ImpostorDistance < lodProfile.AbsoluteCullDistance))
+              lodProfile.L2Distance < lodProfile.HlodDistance &&
+              lodProfile.HlodDistance < lodProfile.AbsoluteCullDistance))
         {
-            result.AddError("LOD distances must strictly increase: l0 < l1 < l2 < impostor < absoluteCull.");
+            result.AddError("LOD distances must strictly increase: l0 < l1 < l2 < hlod < absoluteCull.");
         }
 
         return result;
@@ -257,46 +254,6 @@ public static class VegetationAuthoringValidator
         }
     }
 
-    private static void ValidateImpostor(TreeBlueprintSO blueprint, VegetationValidationResult result)
-    {
-        Mesh? impostorMesh = blueprint.ImpostorMesh;
-        Material? impostorMaterial = blueprint.ImpostorMaterial;
-        bool hasImpostorMesh = impostorMesh != null;
-        bool hasImpostorMaterial = impostorMaterial != null;
-
-        if (hasImpostorMesh != hasImpostorMaterial)
-        {
-            result.AddError("impostorMesh and impostorMaterial must both be assigned or both be omitted.");
-            return;
-        }
-
-        if (!hasImpostorMesh || impostorMesh == null || impostorMaterial == null)
-        {
-            return;
-        }
-
-        ValidateOptionalReadableMesh(impostorMesh, "impostorMesh", result);
-        if (!TryValidateOpaqueMaterial(impostorMaterial, out string reason))
-        {
-            result.AddError($"impostorMaterial must be opaque. {reason}");
-        }
-
-        if (!impostorMesh.isReadable)
-        {
-            return;
-        }
-
-        if (GetTriangleCount(impostorMesh) > RecommendedImpostorTriangleBudget)
-        {
-            result.AddError($"impostorMesh must stay at or below {RecommendedImpostorTriangleBudget} triangles.");
-        }
-
-        if (!ContainsBounds(blueprint.TreeBounds, impostorMesh.bounds))
-        {
-            result.AddError("impostorMesh bounds must stay inside treeBounds.");
-        }
-    }
-
     private static void ValidateLocalBoundsContainSourceMeshes(BranchPrototypeSO prototype, VegetationValidationResult result)
     {
         Mesh? woodMesh = prototype.WoodMesh;
@@ -374,68 +331,6 @@ public static class VegetationAuthoringValidator
         }
     }
 
-    private static void ValidateTreeL3Bounds(TreeBlueprintSO blueprint, VegetationValidationResult result)
-    {
-        Mesh? treeL3Mesh = blueprint.TreeL3Mesh;
-        Mesh? trunkMesh = blueprint.TrunkMesh;
-        if (treeL3Mesh == null || !treeL3Mesh.isReadable || trunkMesh == null || !trunkMesh.isReadable)
-        {
-            return;
-        }
-
-        if (!ContainsBounds(blueprint.TreeBounds, treeL3Mesh.bounds))
-        {
-            result.AddError("treeL3Mesh bounds must stay inside treeBounds.");
-        }
-
-        int sourceTriangleCount = ComputeAssembledSourceTreeTriangleCount(blueprint);
-
-        if (GetTriangleCount(treeL3Mesh) >= sourceTriangleCount)
-        {
-            result.AddError("treeL3Mesh triangle count must be strictly lower than the assembled source tree triangle count.");
-        }
-    }
-
-    private static void ValidateShadowProxies(TreeBlueprintSO blueprint, VegetationValidationResult result)
-    {
-        Mesh? treeL3Mesh = blueprint.TreeL3Mesh;
-        if (treeL3Mesh == null || !treeL3Mesh.isReadable)
-        {
-            return;
-        }
-
-        int sourceTriangleCount = ComputeAssembledSourceTreeTriangleCount(blueprint);
-        if (sourceTriangleCount <= 0)
-        {
-            return;
-        }
-
-        int treeL3Triangles = GetTriangleCount(treeL3Mesh);
-        ValidateShadowProxyMesh(
-            blueprint,
-            blueprint.ShadowProxyMeshL1,
-            "shadowProxyMeshL1",
-            "treeL3Mesh",
-            treeL3Triangles,
-            sourceTriangleCount,
-            result);
-
-        int l1ReferenceTriangles = blueprint.ShadowProxyMeshL1 != null && blueprint.ShadowProxyMeshL1.isReadable
-            ? GetTriangleCount(blueprint.ShadowProxyMeshL1)
-            : treeL3Triangles;
-        string l1ReferenceField = blueprint.ShadowProxyMeshL1 != null && blueprint.ShadowProxyMeshL1.isReadable
-            ? "shadowProxyMeshL1"
-            : "treeL3Mesh";
-        ValidateShadowProxyMesh(
-            blueprint,
-            blueprint.ShadowProxyMeshL0,
-            "shadowProxyMeshL0",
-            l1ReferenceField,
-            l1ReferenceTriangles,
-            sourceTriangleCount,
-            result);
-    }
-
     private static void ValidateRequiredReadableMesh(Mesh? mesh, string fieldName, VegetationValidationResult result)
     {
         if (mesh == null)
@@ -447,51 +342,6 @@ public static class VegetationAuthoringValidator
         if (!mesh.isReadable)
         {
             result.AddError($"{fieldName} must be readable.");
-        }
-    }
-
-    private static void ValidateOptionalReadableMesh(Mesh? mesh, string fieldName, VegetationValidationResult result)
-    {
-        if (mesh != null && !mesh.isReadable)
-        {
-            result.AddError($"{fieldName} must be readable.");
-        }
-    }
-
-    private static void ValidateShadowProxyMesh(
-        TreeBlueprintSO blueprint,
-        Mesh? mesh,
-        string fieldName,
-        string lowerDetailFieldName,
-        int lowerDetailTriangleCount,
-        int sourceTriangleCount,
-        VegetationValidationResult result)
-    {
-        if (mesh == null)
-        {
-            return;
-        }
-
-        ValidateOptionalReadableMesh(mesh, fieldName, result);
-        if (!mesh.isReadable)
-        {
-            return;
-        }
-
-        if (!ContainsBounds(blueprint.TreeBounds, mesh.bounds))
-        {
-            result.AddError($"{fieldName} bounds must stay inside treeBounds.");
-        }
-
-        int triangleCount = GetTriangleCount(mesh);
-        if (triangleCount >= sourceTriangleCount)
-        {
-            result.AddError($"{fieldName} triangle count must be strictly lower than the assembled source tree triangle count.");
-        }
-
-        if (triangleCount <= lowerDetailTriangleCount)
-        {
-            result.AddError($"{fieldName} triangle count must stay above {lowerDetailFieldName} triangle count.");
         }
     }
 
@@ -529,8 +379,12 @@ public static class VegetationAuthoringValidator
         }
     }
 
-    private static bool TryValidateOpaqueMaterial(Material material, out string reason)
+    /// <summary>
+    /// [INTEGRATION] Checks the package-wide opaque material contract used by authoring validation and compiled page emission.
+    /// </summary>
+    public static bool TryValidateOpaqueMaterial(Material material, out string reason)
     {
+        // Range: one material reference. Condition: rejects transparent, alpha-test, and cutout material state. Output: true when the material can enter opaque indirect vegetation packets.
         if (material.renderQueue >= (int)RenderQueue.AlphaTest)
         {
             reason = $"renderQueue {material.renderQueue} is not in the opaque range.";
@@ -571,97 +425,6 @@ public static class VegetationAuthoringValidator
     private static int GetTriangleCount(Mesh mesh)
     {
         return mesh.triangles.Length / 3;
-    }
-
-    private static int ComputeAssembledSourceTreeTriangleCount(TreeBlueprintSO blueprint)
-    {
-        Mesh? trunkMesh = blueprint.TrunkMesh;
-        if (trunkMesh == null || !trunkMesh.isReadable)
-        {
-            return 0;
-        }
-
-        int sourceTriangleCount = GetTriangleCount(trunkMesh);
-        BranchPlacement[] placements = blueprint.Branches;
-        for (int i = 0; i < placements.Length; i++)
-        {
-            BranchPrototypeSO? prototype = placements[i]?.Prototype;
-            if (prototype?.WoodMesh == null ||
-                prototype.FoliageMesh == null ||
-                !prototype.WoodMesh.isReadable ||
-                !prototype.FoliageMesh.isReadable)
-            {
-                continue;
-            }
-
-            sourceTriangleCount += GetTriangleCount(prototype.WoodMesh);
-            sourceTriangleCount += GetTriangleCount(prototype.FoliageMesh);
-        }
-
-        return sourceTriangleCount;
-    }
-
-    private static int CountBits(byte value)
-    {
-        int count = 0;
-        while (value != 0)
-        {
-            count += value & 1;
-            value >>= 1;
-        }
-
-        return count;
-    }
-
-    private static int GetExpectedChildOctant(byte childMask, int childOffset)
-    {
-        int currentChild = 0;
-        for (int octant = 0; octant < 8; octant++)
-        {
-            if ((childMask & (1 << octant)) == 0)
-            {
-                continue;
-            }
-
-            if (currentChild == childOffset)
-            {
-                return octant;
-            }
-
-            currentChild++;
-        }
-
-        throw new InvalidOperationException($"childOffset {childOffset} exceeds childMask {childMask}.");
-    }
-
-    private static bool TryGetChildOctant(Bounds parentBounds, Bounds childBounds, out int octant)
-    {
-        Vector3 parentCenter = parentBounds.center;
-        octant = 0;
-
-        if (!TryGetAxisOctantBit(parentCenter.x, childBounds.min.x, childBounds.max.x, 1, out int xBit) ||
-            !TryGetAxisOctantBit(parentCenter.y, childBounds.min.y, childBounds.max.y, 2, out int yBit) ||
-            !TryGetAxisOctantBit(parentCenter.z, childBounds.min.z, childBounds.max.z, 4, out int zBit))
-        {
-            return false;
-        }
-
-        octant = xBit | yBit | zBit;
-        return true;
-    }
-
-    private static bool TryGetAxisOctantBit(float axisCenter, float childMin, float childMax, int axisBit, out int value)
-    {
-        bool isLowerHalf = childMax <= axisCenter + BoundsContainmentEpsilon;
-        bool isUpperHalf = childMin >= axisCenter - BoundsContainmentEpsilon;
-        if (isLowerHalf == isUpperHalf)
-        {
-            value = 0;
-            return false;
-        }
-
-        value = isUpperHalf ? axisBit : 0;
-        return true;
     }
 
     private static bool IsScaleOnQuarterStep(float scale)

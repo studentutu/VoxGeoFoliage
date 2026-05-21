@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using Unity.Collections;
 using UnityEngine;
 using Unity.Profiling;
@@ -12,11 +11,11 @@ using UnityEngine.Rendering.Universal;
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// [INTEGRATION] URP feature that schedules the vegetation shadow, depth, and color indirect passes.
+    /// [INTEGRATION] URP feature that renders the global compiled-page vegetation world.
     /// </summary>
     public sealed class VegetationRendererFeature : ScriptableRendererFeature
     {
-        [Tooltip("Shared runtime settings for all vegetation containers rendered by this URP renderer feature.")]
+        [Tooltip("Shared runtime settings for the compiled vegetation render world.")]
         [SerializeField] private VegetationFoliageFeatureSettings settings = new VegetationFoliageFeatureSettings();
 
         private VegetationRenderPass? depthPass;
@@ -61,34 +60,23 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             try
             {
                 Camera camera = renderingData.cameraData.camera;
-                if (camera == null || !ShouldRenderCamera(camera.cameraType))
+                if (camera == null || !ShouldRenderCamera(camera.cameraType) || !VegetationRenderWorld.Shared.HasProviders)
                 {
                     return;
                 }
 
-                shadowPass.Setup(
-                    camera,
-                    settings.ClassifyShader,
-                    settings.EnableDiagnostics,
-                    settings.AllowExpandedTreePromotionInShadows);
-                depthPass.Setup(
-                    camera,
-                    settings.ClassifyShader,
-                    settings.EnableDiagnostics,
-                    settings.AllowExpandedTreePromotionInShadows);
-                colorPass.Setup(
-                    camera,
-                    settings.ClassifyShader,
-                    settings.EnableDiagnostics,
-                    settings.AllowExpandedTreePromotionInShadows);
-                if (settings.RenderMainLightShadows &&
+                shadowPass.Setup(camera, settings);
+                depthPass.Setup(camera, settings);
+                colorPass.Setup(camera, settings);
+
+                if (settings.ShadowMode == VegetationShadowMode.CheapTree &&
                     shadowPass.HasWork &&
-                    ShouldRenderMainLightShadows(ref renderingData))
+                    HasMainLightShadowAtlas(ref renderingData))
                 {
                     renderer.EnqueuePass(shadowPass);
                 }
 
-                if (depthPass.HasWork)
+                if (settings.EnableDepthPass && depthPass.HasWork)
                 {
                     renderer.EnqueuePass(depthPass);
                 }
@@ -114,7 +102,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             };
         }
 
-        private static bool ShouldRenderMainLightShadows(ref RenderingData renderingData)
+        private static bool HasMainLightShadowAtlas(ref RenderingData renderingData)
         {
             int mainLightIndex = renderingData.lightData.mainLightIndex;
             if (mainLightIndex < 0)
@@ -162,42 +150,29 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             private static readonly ProfilingSampler ShadowPassSampler =
                 new ProfilingSampler("VoxGeoFol.Vegetation.ShadowPass");
 
-            private static readonly ProfilerMarker SetupMarker =
-                new ProfilerMarker("VoxGeoFol.VegetationRenderPass.Setup");
+            private static readonly ProfilerMarker DrawRasterMarker =
+                new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawRaster");
 
-            private static readonly ProfilerMarker DrawContainersCommandBufferMarker =
-                new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawContainers.CommandBuffer");
+            private static readonly ProfilerMarker DrawCommandBufferMarker =
+                new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawCommandBuffer");
 
-            private static readonly ProfilerMarker DrawContainersRasterMarker =
-                new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawContainers.Raster");
-
-            private static readonly ProfilerMarker DrawShadowCommandBufferMarker =
-                new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawShadow.CommandBuffer");
+            private static readonly ProfilerMarker DrawShadowMarker =
+                new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawShadow");
 
             private static readonly int UnityWorldToCameraId = Shader.PropertyToID("unity_WorldToCamera");
             private static readonly int UnityCameraToWorldId = Shader.PropertyToID("unity_CameraToWorld");
             private static readonly int WorldSpaceCameraPosId = Shader.PropertyToID("_WorldSpaceCameraPos");
+            private static readonly int ShadowBiasId = Shader.PropertyToID("_ShadowBias");
+            private static readonly int LightDirectionId = Shader.PropertyToID("_LightDirection");
+            private static readonly int LightPositionId = Shader.PropertyToID("_LightPosition");
             private const string CastingPunctualLightShadowKeyword = "_CASTING_PUNCTUAL_LIGHT_SHADOW";
 
             private readonly VegetationRenderPassMode passMode;
-            private readonly List<AuthoringContainerRuntime> containers = new List<AuthoringContainerRuntime>();
-            private AuthoringContainerRuntime[] containerSnapshot = Array.Empty<AuthoringContainerRuntime>();
-            private bool[] preparedContainerMask = Array.Empty<bool>();
-            private bool[] renderedContainerMask = Array.Empty<bool>();
             private readonly Plane[] shadowFrustumPlanes = new Plane[6];
+            private readonly Plane[] shadowCascadeFrustumPlanes = new Plane[24];
+            private readonly ShadowSliceData[] shadowCascadeSlices = new ShadowSliceData[4];
             private Camera? camera;
-            private ComputeShader? classifyShader;
-            private bool diagnosticsEnabled;
-            private bool allowExpandedTreePromotionInShadows;
-            private int containerSnapshotCount;
-            private int lastSetupCameraInstanceId = -1;
-            private int lastSetupContainerCount = -1;
-            private int lastSetupShaderInstanceId = -1;
-            private int lastExecutionCameraInstanceId = -1;
-            private int lastExecutionActiveContainerCount = -1;
-            private int lastExecutionPreparedContainerCount = -1;
-            private int lastExecutionRenderedContainerCount = -1;
-            private int lastExecutionMissingRendererCount = -1;
+            private VegetationFoliageFeatureSettings? settings;
             private bool passFaulted;
 
             public VegetationRenderPass(VegetationRenderPassMode passMode)
@@ -211,66 +186,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 };
             }
 
-            public bool HasWork => !passFaulted && camera != null && containerSnapshotCount > 0;
+            public bool HasWork => !passFaulted && camera != null && settings != null && VegetationRenderWorld.Shared.HasProviders;
 
-            public void Setup(
-                Camera targetCamera,
-                ComputeShader? targetClassifyShader,
-                bool targetDiagnosticsEnabled,
-                bool targetAllowExpandedTreePromotionInShadows)
+            public void Setup(Camera targetCamera, VegetationFoliageFeatureSettings targetSettings)
             {
-                if (passFaulted)
-                {
-                    return;
-                }
-
-                try
-                {
-                    using (SetupMarker.Auto())
-                    {
-                        camera = targetCamera;
-                        classifyShader = targetClassifyShader;
-                        diagnosticsEnabled = targetDiagnosticsEnabled;
-                        allowExpandedTreePromotionInShadows = targetAllowExpandedTreePromotionInShadows;
-                        VegetationActiveAuthoringContainerRuntimes.GetActive(containers);
-                        EnsureContainerSnapshotCapacity(containers.Count);
-                        int previousSnapshotCount = containerSnapshotCount;
-                        containerSnapshotCount = containers.Count;
-                        for (int i = 0; i < containerSnapshotCount; i++)
-                        {
-                            containerSnapshot[i] = containers[i];
-                        }
-
-                        for (int i = containerSnapshotCount; i < previousSnapshotCount; i++)
-                        {
-                            containerSnapshot[i] = null!;
-                        }
-
-                        if (!diagnosticsEnabled)
-                        {
-                            return;
-                        }
-
-                        int cameraInstanceId = targetCamera.GetInstanceID();
-                        int shaderInstanceId = targetClassifyShader != null ? targetClassifyShader.GetInstanceID() : 0;
-                        if (cameraInstanceId == lastSetupCameraInstanceId &&
-                            containers.Count == lastSetupContainerCount &&
-                            shaderInstanceId == lastSetupShaderInstanceId)
-                        {
-                            return;
-                        }
-
-                        lastSetupCameraInstanceId = cameraInstanceId;
-                        lastSetupContainerCount = containers.Count;
-                        lastSetupShaderInstanceId = shaderInstanceId;
-                        UnityEngine.Debug.Log(
-                            $"VegetationRenderPass setup pass={passMode} camera={targetCamera.name} containers={containers.Count} classifyShader={(targetClassifyShader != null ? targetClassifyShader.name : "<none>")} diagnostics={targetDiagnosticsEnabled}");
-                    }
-                }
-                catch (Exception exception)
-                {
-                    MarkPassFault(exception);
-                }
+                camera = targetCamera;
+                settings = targetSettings;
             }
 
 #if !UNITY_6000_2_OR_NEWER
@@ -278,7 +199,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 #pragma warning disable CS0618
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
-                if (!HasWork || camera == null || passMode == VegetationRenderPassMode.Shadow)
+                if (!HasWork || camera == null || settings == null || passMode == VegetationRenderPassMode.Shadow)
                 {
                     return;
                 }
@@ -288,7 +209,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     : "Vegetation Color Pass");
                 try
                 {
-                    DrawContainers(containerSnapshot, containerSnapshotCount, camera, classifyShader, diagnosticsEnabled, passMode, commandBuffer);
+                    DrawWorld(camera, settings, passMode, commandBuffer);
                     context.ExecuteCommandBuffer(commandBuffer);
                 }
                 catch (Exception exception)
@@ -307,7 +228,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
             {
-                if (!HasWork || camera == null)
+                if (!HasWork || camera == null || settings == null)
                 {
                     return;
                 }
@@ -329,11 +250,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     {
                         passData.RenderPass = this;
                         passData.Camera = camera;
-                        passData.ClassifyShader = classifyShader;
-                        passData.DiagnosticsEnabled = diagnosticsEnabled;
+                        passData.Settings = settings;
                         passData.PassMode = passMode;
-                        passData.Containers = containerSnapshot;
-                        passData.ContainerCount = containerSnapshotCount;
 
                         if (passMode == VegetationRenderPassMode.Depth)
                         {
@@ -350,6 +268,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         }
 
                         builder.AllowPassCulling(false);
+                        builder.AllowGlobalStateModification(true);
                         builder.SetRenderFunc<PassData>(ExecuteRasterPass);
                     }
                 }
@@ -367,7 +286,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 UniversalShadowData shadowData = frameData.Get<UniversalShadowData>();
                 UniversalRenderingData renderingData = frameData.Get<UniversalRenderingData>();
 
-                if (cameraData.xrRendering ||
+                if (settings == null ||
+                    settings.ShadowMode == VegetationShadowMode.Off ||
+                    cameraData.xrRendering ||
                     !shadowData.supportsMainLightShadows ||
                     lightData.mainLightIndex < 0 ||
                     !resourceData.mainShadowsTexture.IsValid())
@@ -375,7 +296,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     return;
                 }
 
-                using (var builder = renderGraph.AddUnsafePass<ShadowPassData>(
+                using (var builder = renderGraph.AddRasterRenderPass<ShadowPassData>(
                            "Vegetation Shadow Pass",
                            out ShadowPassData passData,
                            ShadowPassSampler))
@@ -386,14 +307,9 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     passData.RenderingData = renderingData;
                     passData.LightData = lightData;
                     passData.ShadowData = shadowData;
-                    passData.ClassifyShader = classifyShader;
-                    passData.DiagnosticsEnabled = diagnosticsEnabled;
-                    passData.AllowExpandedTreePromotionInShadows = allowExpandedTreePromotionInShadows;
-                    passData.Containers = containerSnapshot;
-                    passData.ContainerCount = containerSnapshotCount;
-                    passData.MainShadowTexture = resourceData.mainShadowsTexture;
+                    passData.Settings = settings;
 
-                    builder.UseTexture(resourceData.mainShadowsTexture, AccessFlags.Write);
+                    builder.SetRenderAttachmentDepth(resourceData.mainShadowsTexture, AccessFlags.ReadWrite);
                     builder.AllowPassCulling(false);
                     builder.AllowGlobalStateModification(true);
                     builder.SetRenderFunc<ShadowPassData>(ExecuteShadowPass);
@@ -404,14 +320,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             {
                 try
                 {
-                    data.RenderPass.DrawContainers(
-                        data.Containers,
-                        data.ContainerCount,
-                        data.Camera,
-                        data.ClassifyShader,
-                        data.DiagnosticsEnabled,
-                        data.PassMode,
-                        context.cmd);
+                    data.RenderPass.DrawWorld(data.Camera, data.Settings, data.PassMode, context.cmd);
                 }
                 catch (Exception exception)
                 {
@@ -419,7 +328,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
             }
 
-            private static void ExecuteShadowPass(ShadowPassData data, UnsafeGraphContext context)
+            private static void ExecuteShadowPass(ShadowPassData data, RasterGraphContext context)
             {
                 try
                 {
@@ -431,63 +340,47 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 }
             }
 
-            private void DrawContainers(
-                IReadOnlyList<AuthoringContainerRuntime> containers,
-                int containerCount,
-                Camera camera,
-                ComputeShader? classifyShader,
-                bool diagnosticsEnabled,
-                VegetationRenderPassMode passMode,
+            private void DrawWorld(
+                Camera targetCamera,
+                VegetationFoliageFeatureSettings targetSettings,
+                VegetationRenderPassMode targetPassMode,
                 CommandBuffer commandBuffer)
             {
-                using (DrawContainersCommandBufferMarker.Auto())
+                using (DrawCommandBufferMarker.Auto())
                 {
-                    int activeContainerCount = 0;
-                    int preparedContainerCount = 0;
-                    int renderedContainerCount = 0;
-                    int missingRendererCount = 0;
-                    for (int containerIndex = 0; containerIndex < containerCount; containerIndex++)
+                    if (VegetationRenderWorld.Shared.PrepareForCamera(targetCamera, targetPassMode, targetSettings))
                     {
-                        AuthoringContainerRuntime container = containers[containerIndex];
-                        if (container == null)
-                        {
-                            continue;
-                        }
-
-                        activeContainerCount++;
-                        try
-                        {
-                            VegetationIndirectRenderer.PreparedViewHandle? preparedView =
-                                container.PrepareViewForCamera(camera, classifyShader, diagnosticsEnabled);
-                            if (preparedView == null)
-                            {
-                                continue;
-                            }
-
-                            preparedContainerCount++;
-                            if (container.IndirectRenderer == null)
-                            {
-                                missingRendererCount++;
-                                continue;
-                            }
-
-                            container.IndirectRenderer.Render(commandBuffer, camera, preparedView, passMode, diagnosticsEnabled);
-                            renderedContainerCount++;
-                        }
-                        catch (Exception exception)
-                        {
-                            container.MarkRenderRuntimeFault($"{passMode.ToString().ToLowerInvariant()}-render", exception);
-                        }
+                        VegetationRenderWorld.Shared.Render(
+                            commandBuffer,
+                            targetCamera,
+                            targetPassMode,
+                            targetSettings.EnableDiagnostics);
                     }
-
-                    LogExecutionDiagnostics(camera, passMode, activeContainerCount, preparedContainerCount,
-                        renderedContainerCount, missingRendererCount, diagnosticsEnabled);
                 }
             }
 
-            private void DrawMainLightShadowAtlas(ShadowPassData data, UnsafeGraphContext context)
+            private void DrawWorld(
+                Camera targetCamera,
+                VegetationFoliageFeatureSettings targetSettings,
+                VegetationRenderPassMode targetPassMode,
+                IRasterCommandBuffer commandBuffer)
             {
-                using (DrawShadowCommandBufferMarker.Auto())
+                using (DrawRasterMarker.Auto())
+                {
+                    if (VegetationRenderWorld.Shared.PrepareForCamera(targetCamera, targetPassMode, targetSettings))
+                    {
+                        VegetationRenderWorld.Shared.Render(
+                            commandBuffer,
+                            targetCamera,
+                            targetPassMode,
+                            targetSettings.EnableDiagnostics);
+                    }
+                }
+            }
+
+            private void DrawMainLightShadowAtlas(ShadowPassData data, RasterGraphContext context)
+            {
+                using (DrawShadowMarker.Auto())
                 {
                     NativeArray<VisibleLight> visibleLights = data.LightData.visibleLights;
                     if (!visibleLights.IsCreated ||
@@ -507,34 +400,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         return;
                     }
 
-                    EnsurePreparedContainerMaskCapacity(data.ContainerCount);
-                    int activeContainerCount = 0;
-                    int preparedContainerCount = 0;
-                    int renderedContainerCount = 0;
-                    int missingRendererCount = 0;
-                    for (int containerIndex = 0; containerIndex < data.ContainerCount; containerIndex++)
-                    {
-                        preparedContainerMask[containerIndex] = false;
-                        renderedContainerMask[containerIndex] = false;
-                        if (data.Containers[containerIndex] != null)
-                        {
-                            activeContainerCount++;
-                        }
-                    }
-
-                    if (activeContainerCount == 0)
-                    {
-                        LogExecutionDiagnostics(
-                            data.Camera,
-                            VegetationRenderPassMode.Shadow,
-                            activeContainerCount,
-                            preparedContainerCount,
-                            renderedContainerCount,
-                            missingRendererCount,
-                            data.DiagnosticsEnabled);
-                        return;
-                    }
-
                     CullingResults cullResults = data.RenderingData.cullResults;
                     int cascadeCount = Mathf.Clamp(data.ShadowData.mainLightShadowCascadesCount, 1, 4);
                     int renderTargetWidth = data.ShadowData.mainLightShadowmapWidth;
@@ -546,14 +411,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         renderTargetHeight,
                         cascadeCount);
 
-                    UnsafeCommandBuffer unsafeCommandBuffer = context.cmd;
-                    CommandBuffer nativeCommandBuffer = CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);
-                    unsafeCommandBuffer.SetRenderTarget(data.MainShadowTexture, 0, CubemapFace.Unknown, -1);
+                    RasterCommandBuffer commandBuffer = context.cmd;
 
                     try
                     {
-                        ApplyCameraGlobals(nativeCommandBuffer, data.CameraData);
-                        unsafeCommandBuffer.DisableShaderKeyword(CastingPunctualLightShadowKeyword);
+                        ApplyCameraPosition(commandBuffer, data.CameraData);
+                        commandBuffer.DisableShaderKeyword(CastingPunctualLightShadowKeyword);
+                        int preparedCascadeCount = 0;
                         for (int cascadeIndex = 0; cascadeIndex < cascadeCount; cascadeIndex++)
                         {
                             if (!ShadowUtils.ExtractDirectionalLightMatrix(
@@ -574,96 +438,93 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                             GeometryUtility.CalculateFrustumPlanes(
                                 shadowSliceData.projectionMatrix * shadowSliceData.viewMatrix,
                                 shadowFrustumPlanes);
+                            CopyFrustumPlanes(shadowFrustumPlanes, shadowCascadeFrustumPlanes, preparedCascadeCount * 6);
+                            shadowCascadeSlices[preparedCascadeCount] = shadowSliceData;
+                            preparedCascadeCount++;
+                        }
+
+                        if (preparedCascadeCount <= 0 ||
+                            !VegetationRenderWorld.Shared.PrepareForFrustums(
+                                data.CameraData.worldSpaceCameraPos,
+                                shadowCascadeFrustumPlanes,
+                                preparedCascadeCount,
+                                data.Settings))
+                        {
+                            return;
+                        }
+
+                        for (int cascadeIndex = 0; cascadeIndex < preparedCascadeCount; cascadeIndex++)
+                        {
+                            if (!VegetationRenderWorld.Shared.HasPreparedShadowFrustum(cascadeIndex))
+                            {
+                                continue;
+                            }
+
+                            ShadowSliceData shadowSliceData = shadowCascadeSlices[cascadeIndex];
                             Vector4 shadowBias = ShadowUtils.GetShadowBias(
                                 ref shadowLight,
                                 data.LightData.mainLightIndex,
                                 data.ShadowData,
                                 shadowSliceData.projectionMatrix,
                                 shadowSliceData.resolution);
-                            ShadowUtils.SetupShadowCasterConstantBuffer(nativeCommandBuffer, ref shadowLight, shadowBias);
-                            nativeCommandBuffer.SetGlobalDepthBias(1.0f, 2.5f);
-                            nativeCommandBuffer.SetViewport(new Rect(
+                            SetupShadowCasterConstants(commandBuffer, ref shadowLight, shadowBias);
+                            commandBuffer.SetGlobalDepthBias(1.0f, 2.5f);
+                            commandBuffer.SetViewport(new Rect(
                                 shadowSliceData.offsetX,
                                 shadowSliceData.offsetY,
                                 shadowSliceData.resolution,
                                 shadowSliceData.resolution));
-                            nativeCommandBuffer.SetViewProjectionMatrices(
+                            ApplyShadowViewProjectionMatrices(
+                                commandBuffer,
                                 shadowSliceData.viewMatrix,
                                 shadowSliceData.projectionMatrix);
 
-                            for (int containerIndex = 0; containerIndex < data.ContainerCount; containerIndex++)
-                            {
-                                AuthoringContainerRuntime container = data.Containers[containerIndex];
-                                if (container == null)
-                                {
-                                    continue;
-                                }
+                            VegetationRenderWorld.Shared.Render(
+                                commandBuffer,
+                                data.Camera,
+                                VegetationRenderPassMode.Shadow,
+                                data.Settings.EnableDiagnostics,
+                                cascadeIndex);
 
-                                try
-                                {
-                                    VegetationIndirectRenderer.PreparedViewHandle? preparedView =
-                                        container.PrepareViewForFrustum(
-                                            data.CameraData.worldSpaceCameraPos,
-                                            shadowFrustumPlanes,
-                                            data.ClassifyShader,
-                                            data.DiagnosticsEnabled,
-                                            data.AllowExpandedTreePromotionInShadows);
-                                    if (preparedView == null)
-                                    {
-                                        continue;
-                                    }
-
-                                    if (!preparedContainerMask[containerIndex])
-                                    {
-                                        preparedContainerMask[containerIndex] = true;
-                                        preparedContainerCount++;
-                                    }
-
-                                    if (container.IndirectRenderer == null)
-                                    {
-                                        missingRendererCount++;
-                                        continue;
-                                    }
-
-                                    container.IndirectRenderer!.Render(
-                                        nativeCommandBuffer,
-                                        data.Camera,
-                                        preparedView,
-                                        VegetationRenderPassMode.Shadow,
-                                        data.DiagnosticsEnabled);
-                                    if (!renderedContainerMask[containerIndex])
-                                    {
-                                        renderedContainerMask[containerIndex] = true;
-                                        renderedContainerCount++;
-                                    }
-                                }
-                                catch (Exception exception)
-                                {
-                                    container.MarkRenderRuntimeFault("shadow-render", exception);
-                                }
-                            }
-
-                            nativeCommandBuffer.DisableScissorRect();
-                            nativeCommandBuffer.SetGlobalDepthBias(0f, 0f);
+                            commandBuffer.DisableScissorRect();
+                            commandBuffer.SetGlobalDepthBias(0f, 0f);
                         }
                     }
                     finally
                     {
-                        RestoreCameraMatrices(nativeCommandBuffer, data.CameraData);
+                        commandBuffer.SetGlobalDepthBias(0f, 0f);
+                        RestoreCameraMatrices(commandBuffer, data.CameraData);
                     }
-
-                    LogExecutionDiagnostics(
-                        data.Camera,
-                        VegetationRenderPassMode.Shadow,
-                        activeContainerCount,
-                        preparedContainerCount,
-                        renderedContainerCount,
-                        missingRendererCount,
-                        data.DiagnosticsEnabled);
                 }
             }
 
-            private void RestoreCameraMatrices(CommandBuffer commandBuffer, UniversalCameraData cameraData)
+            private static void CopyFrustumPlanes(Plane[] source, Plane[] destination, int destinationOffset)
+            {
+                for (int i = 0; i < 6; i++)
+                {
+                    destination[destinationOffset + i] = source[i];
+                }
+            }
+
+            private static void SetupShadowCasterConstants(
+                RasterCommandBuffer commandBuffer,
+                ref VisibleLight shadowLight,
+                Vector4 shadowBias)
+            {
+                commandBuffer.SetGlobalVector(ShadowBiasId, shadowBias);
+
+                Vector3 lightDirection = -shadowLight.localToWorldMatrix.GetColumn(2);
+                commandBuffer.SetGlobalVector(
+                    LightDirectionId,
+                    new Vector4(lightDirection.x, lightDirection.y, lightDirection.z, 0f));
+
+                Vector3 lightPosition = shadowLight.localToWorldMatrix.GetColumn(3);
+                commandBuffer.SetGlobalVector(
+                    LightPositionId,
+                    new Vector4(lightPosition.x, lightPosition.y, lightPosition.z, 1f));
+            }
+
+            private static void RestoreCameraMatrices(RasterCommandBuffer commandBuffer, UniversalCameraData cameraData)
             {
                 Matrix4x4 viewMatrix = cameraData.GetViewMatrix();
                 Matrix4x4 projectionMatrix = cameraData.GetProjectionMatrix();
@@ -675,161 +536,20 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 commandBuffer.SetGlobalMatrix(UnityCameraToWorldId, worldToCameraMatrix.inverse);
             }
 
-            private void ApplyCameraGlobals(CommandBuffer commandBuffer, UniversalCameraData cameraData)
+            private static void ApplyCameraPosition(RasterCommandBuffer commandBuffer, UniversalCameraData cameraData)
             {
                 commandBuffer.SetGlobalVector(WorldSpaceCameraPosId, cameraData.worldSpaceCameraPos);
-
-                Matrix4x4 viewMatrix = cameraData.GetViewMatrix();
-                Matrix4x4 worldToCameraMatrix = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * viewMatrix;
-                commandBuffer.SetGlobalMatrix(UnityWorldToCameraId, worldToCameraMatrix);
-                commandBuffer.SetGlobalMatrix(UnityCameraToWorldId, worldToCameraMatrix.inverse);
             }
 
-            private void DrawContainers(
-                IReadOnlyList<AuthoringContainerRuntime> containers,
-                int containerCount,
-                Camera camera,
-                ComputeShader? classifyShader,
-                bool diagnosticsEnabled,
-                VegetationRenderPassMode passMode,
-                IRasterCommandBuffer commandBuffer)
+            private static void ApplyShadowViewProjectionMatrices(
+                RasterCommandBuffer commandBuffer,
+                Matrix4x4 viewMatrix,
+                Matrix4x4 projectionMatrix)
             {
-                using (DrawContainersRasterMarker.Auto())
-                {
-                    int activeContainerCount = 0;
-                    int preparedContainerCount = 0;
-                    int renderedContainerCount = 0;
-                    int missingRendererCount = 0;
-                    for (int containerIndex = 0; containerIndex < containerCount; containerIndex++)
-                    {
-                        AuthoringContainerRuntime container = containers[containerIndex];
-                        if (container == null)
-                        {
-                            continue;
-                        }
-
-                        activeContainerCount++;
-                        try
-                        {
-                            VegetationIndirectRenderer.PreparedViewHandle? preparedView =
-                                container.PrepareViewForCamera(camera, classifyShader, diagnosticsEnabled);
-                            if (preparedView == null)
-                            {
-                                continue;
-                            }
-
-                            preparedContainerCount++;
-                            if (container.IndirectRenderer == null)
-                            {
-                                missingRendererCount++;
-                                continue;
-                            }
-
-                            container.IndirectRenderer.Render(commandBuffer, camera, preparedView, passMode, diagnosticsEnabled);
-                            renderedContainerCount++;
-                        }
-                        catch (Exception exception)
-                        {
-                            container.MarkRenderRuntimeFault($"{passMode.ToString().ToLowerInvariant()}-render", exception);
-                        }
-                    }
-
-                    LogExecutionDiagnostics(camera, passMode, activeContainerCount, preparedContainerCount,
-                        renderedContainerCount, missingRendererCount, diagnosticsEnabled);
-                }
-            }
-
-            private void LogExecutionDiagnostics(
-                Camera camera,
-                VegetationRenderPassMode passMode,
-                int activeContainerCount,
-                int preparedContainerCount,
-                int renderedContainerCount,
-                int missingRendererCount,
-                bool diagnosticsEnabled)
-            {
-                if (!diagnosticsEnabled)
-                {
-                    return;
-                }
-
-                int cameraInstanceId = camera.GetInstanceID();
-                if (cameraInstanceId == lastExecutionCameraInstanceId &&
-                    activeContainerCount == lastExecutionActiveContainerCount &&
-                    preparedContainerCount == lastExecutionPreparedContainerCount &&
-                    renderedContainerCount == lastExecutionRenderedContainerCount &&
-                    missingRendererCount == lastExecutionMissingRendererCount)
-                {
-                    return;
-                }
-
-                lastExecutionCameraInstanceId = cameraInstanceId;
-                lastExecutionActiveContainerCount = activeContainerCount;
-                lastExecutionPreparedContainerCount = preparedContainerCount;
-                lastExecutionRenderedContainerCount = renderedContainerCount;
-                lastExecutionMissingRendererCount = missingRendererCount;
-
-                string summary =
-                    $"VegetationRenderPass execute pass={passMode} camera={camera.name} activeContainers={activeContainerCount} preparedContainers={preparedContainerCount} renderedContainers={renderedContainerCount} missingRenderers={missingRendererCount}";
-
-                if (renderedContainerCount == 0)
-                {
-                    UnityEngine.Debug.LogWarning(summary);
-                }
-                else
-                {
-                    UnityEngine.Debug.Log(summary);
-                }
-            }
-
-            private void EnsureContainerSnapshotCapacity(int requiredCount)
-            {
-                if (containerSnapshot.Length >= requiredCount)
-                {
-                    return;
-                }
-
-                int newCapacity = Mathf.Max(1, containerSnapshot.Length);
-                while (newCapacity < requiredCount)
-                {
-                    newCapacity <<= 1;
-                }
-
-                containerSnapshot = new AuthoringContainerRuntime[newCapacity];
-            }
-
-            private void EnsurePreparedContainerMaskCapacity(int requiredCount)
-            {
-                if (preparedContainerMask.Length >= requiredCount)
-                {
-                    EnsureRenderedContainerMaskCapacity(requiredCount);
-                    return;
-                }
-
-                int newCapacity = Mathf.Max(1, preparedContainerMask.Length);
-                while (newCapacity < requiredCount)
-                {
-                    newCapacity <<= 1;
-                }
-
-                preparedContainerMask = new bool[newCapacity];
-                EnsureRenderedContainerMaskCapacity(requiredCount);
-            }
-
-            private void EnsureRenderedContainerMaskCapacity(int requiredCount)
-            {
-                if (renderedContainerMask.Length >= requiredCount)
-                {
-                    return;
-                }
-
-                int newCapacity = Mathf.Max(1, renderedContainerMask.Length);
-                while (newCapacity < requiredCount)
-                {
-                    newCapacity <<= 1;
-                }
-
-                renderedContainerMask = new bool[newCapacity];
+                commandBuffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
+                // Match URP custom-camera convention: shader globals get the GPU-adjusted projection, not the raw projection.
+                Matrix4x4 gpuProjectionMatrix = GL.GetGPUProjectionMatrix(projectionMatrix, true);
+                RenderingUtils.SetViewAndProjectionMatrices(commandBuffer, viewMatrix, gpuProjectionMatrix, false);
             }
 
             private void MarkPassFault(Exception exception)
@@ -849,11 +569,8 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             {
                 public VegetationRenderPass RenderPass = null!;
                 public Camera Camera = null!;
-                public ComputeShader? ClassifyShader;
-                public bool DiagnosticsEnabled;
+                public VegetationFoliageFeatureSettings Settings = null!;
                 public VegetationRenderPassMode PassMode;
-                public AuthoringContainerRuntime[] Containers = Array.Empty<AuthoringContainerRuntime>();
-                public int ContainerCount;
             }
 
             private sealed class ShadowPassData
@@ -864,12 +581,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 public UniversalRenderingData RenderingData = null!;
                 public UniversalLightData LightData = null!;
                 public UniversalShadowData ShadowData = null!;
-                public ComputeShader? ClassifyShader;
-                public bool DiagnosticsEnabled;
-                public bool AllowExpandedTreePromotionInShadows;
-                public AuthoringContainerRuntime[] Containers = Array.Empty<AuthoringContainerRuntime>();
-                public int ContainerCount;
-                public TextureHandle MainShadowTexture;
+                public VegetationFoliageFeatureSettings Settings = null!;
             }
         }
     }

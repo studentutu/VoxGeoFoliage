@@ -3,8 +3,8 @@
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// Exact runtime shader family required by one draw slot.
-    /// Material kind is part of draw-slot identity even when mesh and material asset references match.
+    /// Exact runtime shader family required by one compiled asset group.
+    /// Material kind is part of asset-group identity even when mesh and material asset references match.
     /// </summary>
     public enum VegetationRenderMaterialKind
     {

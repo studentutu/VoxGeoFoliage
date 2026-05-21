@@ -30,6 +30,8 @@ Shader "VoxGeoFol/Vegetation/TrunkLit"
             #pragma vertex Vert
             #pragma fragment Frag
             #pragma multi_compile_instancing
+            #pragma instancing_options procedural:SetupVegetation
+            #pragma multi_compile _ _VOXGEOFOL_INDIRECT_RENDERING
             #pragma multi_compile_fog
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
@@ -52,7 +54,7 @@ Shader "VoxGeoFol/Vegetation/TrunkLit"
                 float3 positionOS : POSITION;
                 float3 normalOS : NORMAL;
                 float2 uv : TEXCOORD0;
-                uint instanceID : SV_InstanceID;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -67,7 +69,7 @@ Shader "VoxGeoFol/Vegetation/TrunkLit"
             Varyings Vert(Attributes input)
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
+                VegetationInstanceData instanceData = LoadVegetationInstance();
 
                 Varyings output;
                 float3 positionWS = TransformVegetationPosition(input.positionOS, instanceData);
@@ -107,6 +109,8 @@ Shader "VoxGeoFol/Vegetation/TrunkLit"
             #pragma vertex ShadowVert
             #pragma fragment ShadowFrag
             #pragma multi_compile_instancing
+            #pragma instancing_options procedural:SetupVegetation
+            #pragma multi_compile _ _VOXGEOFOL_INDIRECT_RENDERING
             #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
@@ -116,7 +120,7 @@ Shader "VoxGeoFol/Vegetation/TrunkLit"
             {
                 float3 positionOS : POSITION;
                 float3 normalOS : NORMAL;
-                uint instanceID : SV_InstanceID;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -127,7 +131,7 @@ Shader "VoxGeoFol/Vegetation/TrunkLit"
             Varyings ShadowVert(Attributes input)
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
+                VegetationInstanceData instanceData = LoadVegetationInstance();
 
                 Varyings output;
                 output.positionCS = GetVegetationShadowPositionHClip(input.positionOS, input.normalOS, instanceData);
@@ -155,6 +159,8 @@ Shader "VoxGeoFol/Vegetation/TrunkLit"
             #pragma vertex DepthVert
             #pragma fragment DepthFrag
             #pragma multi_compile_instancing
+            #pragma instancing_options procedural:SetupVegetation
+            #pragma multi_compile _ _VOXGEOFOL_INDIRECT_RENDERING
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "VegetationIndirectCommon.hlsl"
@@ -162,7 +168,7 @@ Shader "VoxGeoFol/Vegetation/TrunkLit"
             struct Attributes
             {
                 float3 positionOS : POSITION;
-                uint instanceID : SV_InstanceID;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -173,7 +179,7 @@ Shader "VoxGeoFol/Vegetation/TrunkLit"
             Varyings DepthVert(Attributes input)
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                VegetationInstanceData instanceData = LoadVegetationInstance(input.instanceID);
+                VegetationInstanceData instanceData = LoadVegetationInstance();
 
                 Varyings output;
                 float3 positionWS = TransformVegetationPosition(input.positionOS, instanceData);

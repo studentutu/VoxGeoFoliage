@@ -17,12 +17,24 @@ MonoBehaviour:
     DepthPassEvent: 250
     ColorPassEvent: 300
     ShadowPassEvent: 100
-    RenderMainLightShadows: 1
-    AllowExpandedTreePromotionInShadows: 1
+    ShadowMode: 1
+    EnableDepthPass: 1
+    NearDetailDistance: 49
+    ColorWorkBudget: 131072
+    ShadowWorkBudget: 65536
+    MaxVisiblePacketInstances: 131072
+    NearDetailResidentByteBudget: 67108864
+    NearDetailUploadByteBudget: 8388608
+    WindStrength: 2.85
+    WindFrequency: 2.51
+    WindDirection: {x: 1, y: 0, z: 0.35}
+    LeafFlutterStrength: 0.04
+    LeafFlutterFrequencyMultiplier: 2.9
+    LeafFlutterSpatialScale: 4.05
+    LeafFlutterSecondaryStrength: 1.36
     RenderGameCameras: 1
     RenderSceneViewCameras: 1
     EnableDiagnostics: 0
-    ClassifyShader: {fileID: 7200000, guid: 32ba8aa36e08ac740b444e38723d3153, type: 3}
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0

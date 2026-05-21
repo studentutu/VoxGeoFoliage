@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Entities;
 using VoxGeoFol.Features.Vegetation.Rendering;
@@ -9,7 +8,7 @@ using VoxGeoFol.Features.Vegetation.Rendering;
 namespace VoxGeoFol.Features.Vegetation.SubScene
 {
     /// <summary>
-    /// [INTEGRATION] Bakes one sibling vegetation runtime container into runtime-safe SubScene bootstrap data.
+    /// [INTEGRATION] Bakes one sibling vegetation runtime container into compiled-page SubScene provider data.
     /// </summary>
     public sealed class SubSceneAuthoringBaker : Baker<SubSceneAuthoring>
     {
@@ -24,38 +23,32 @@ namespace VoxGeoFol.Features.Vegetation.SubScene
                                                    throw new InvalidOperationException(
                                                        $"{nameof(SubSceneAuthoring)} requires {nameof(VegetationRuntimeContainer)} on the same GameObject.");
 
-            List<VegetationTreeAuthoringRuntime> runtimeTrees = new List<VegetationTreeAuthoringRuntime>();
-            container.BuildRuntimeTreeAuthorings(runtimeTrees);
-            VegetationRuntimeBudget runtimeBudget = container.RuntimeBudget;
+            FoliageAssemblyAsset assemblyAsset = container.CompiledAssembly ??
+                                                 throw new InvalidOperationException(
+                                                     $"{nameof(SubSceneAuthoring)} on '{container.name}' requires compiled foliage assembly data.");
+            if (container.CompiledPages.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(SubSceneAuthoring)} on '{container.name}' requires at least one compiled foliage page.");
+            }
 
             Entity entity = GetEntity(TransformUsageFlags.None);
             AddComponent(entity, new SubSceneVegetationContainerBaked
             {
                 ContainerIdHash = container.ContainerIdHash,
                 DebugName = new FixedString64Bytes(container.name),
-                GridOrigin = container.GridOrigin,
-                CellSize = container.CellSize,
-                RenderLayer = container.RenderLayer,
-                ColorMaxVisibleInstances = runtimeBudget.ColorBudget.MaxVisibleInstances,
-                ColorMaxExpandedBranchWorkItems = runtimeBudget.ColorBudget.MaxExpandedBranchWorkItems,
-                ColorMaxApproxWorkUnits = runtimeBudget.ColorBudget.MaxApproxWorkUnits,
-                ShadowMaxVisibleInstances = runtimeBudget.ShadowBudget.MaxVisibleInstances,
-                ShadowMaxExpandedBranchWorkItems = runtimeBudget.ShadowBudget.MaxExpandedBranchWorkItems,
-                ShadowMaxApproxWorkUnits = runtimeBudget.ShadowBudget.MaxApproxWorkUnits,
-                MaxRegisteredDrawSlots = runtimeBudget.MaxRegisteredDrawSlots
+                CompiledAssembly = assemblyAsset
             });
 
-            DynamicBuffer<SubSceneVegetationTreeBaked> treeBuffer = AddBuffer<SubSceneVegetationTreeBaked>(entity);
-            for (int i = 0; i < runtimeTrees.Count; i++)
+            DynamicBuffer<SubSceneVegetationPageBaked> pageBuffer = AddBuffer<SubSceneVegetationPageBaked>(entity);
+            for (int i = 0; i < container.CompiledPages.Count; i++)
             {
-                VegetationTreeAuthoringRuntime runtimeTree = runtimeTrees[i];
-                treeBuffer.Add(new SubSceneVegetationTreeBaked
+                FoliagePageAsset page = container.CompiledPages[i] ??
+                                        throw new InvalidOperationException(
+                                            $"{nameof(SubSceneAuthoring)} on '{container.name}' has a null compiled page at index {i}.");
+                pageBuffer.Add(new SubSceneVegetationPageBaked
                 {
-                    StableTreeIdHash = runtimeTree.StableTreeIdHash,
-                    DebugName = new FixedString64Bytes(runtimeTree.DebugName),
-                    LocalToWorld = runtimeTree.LocalToWorld,
-                    Blueprint = runtimeTree.Blueprint,
-                    IsActive = runtimeTree.IsActive ? (byte)1 : (byte)0
+                    Page = page
                 });
             }
         }

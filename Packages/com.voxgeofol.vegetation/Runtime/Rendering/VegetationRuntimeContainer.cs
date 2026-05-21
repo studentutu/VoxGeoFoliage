@@ -3,75 +3,32 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Serialization;
 using VoxGeoFol.Features.Vegetation.Authoring;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
     /// <summary>
-    /// [INTEGRATION] Classic-scene lifecycle provider that converts serialized vegetation authorings into one runtime owner.
+    /// [INTEGRATION] Classic-scene compiled-page provider for the global vegetation render world.
     /// </summary>
     [ExecuteAlways]
     [DisallowMultipleComponent]
     public sealed class VegetationRuntimeContainer : MonoBehaviour
     {
-        // shared instance payload is about 144 bytes per visible instance
-        // so 131072 is roughly 18 MB just for the packed instance buffer
-        // Don’t raise it blindly.
-        // this is a chunk of data for a single container!
-        private const int DefaultMaxVisibleInstanceCapacity = 131072;
-        private const int DefaultMaxExpandedBranchWorkItemCapacity = 131072;
-        private const int DefaultMaxApproxWorkUnitCapacity = 131072;
-        private const int DefaultMaxRegisteredDrawSlots = 4096;
-
-        [Tooltip("World-space origin of the frozen spatial grid built during runtime registration.")]
+        [Tooltip("World-space origin used by the editor compiler when assigning generated foliage pages to cells.")]
         [SerializeField] private Vector3 gridOrigin = Vector3.zero;
 
-        [Tooltip("World-space cell size of the frozen spatial grid. Changes require RefreshRuntimeRegistration().")]
+        [Tooltip("World-space cell size used by the editor compiler when assigning generated foliage pages to cells.")]
         [SerializeField] private Vector3 cellSize = new Vector3(32f, 32f, 32f);
 
         [Tooltip("Explicit authoring list owned by this container. Rebuild it with Fill Registered Authorings after hierarchy ownership changes.")]
         [SerializeField]
         private List<VegetationTreeAuthoring> registeredAuthorings = new List<VegetationTreeAuthoring>();
 
-        [Min(1)]
-        [Tooltip("Color/depth path hard cap for GPU-visible vegetation instances packed into the shared runtime buffer each frame. Overflow is clamped instead of reallocating scene-scale buffers. Shared instance payload is approximately 144 bytes per visible instance.")]
-        [SerializeField]
-        [FormerlySerializedAs("maxVisibleInstanceCapacity")]
-        private int colorMaxVisibleInstanceCapacity = DefaultMaxVisibleInstanceCapacity;
+        [Tooltip("Compiled foliage assembly generated from this container. Runtime rendering consumes this asset, not live tree authorings.")]
+        [SerializeField] private FoliageAssemblyAsset? compiledAssembly;
 
-        [Min(1)]
-        [Tooltip("Color/depth path hard cap for generated expanded-branch work items. This bounds promoted-tree branch queue independently of visible instance memory.")]
-        [SerializeField]
-        private int colorMaxExpandedBranchWorkItemCapacity = DefaultMaxExpandedBranchWorkItemCapacity;
-
-        [Min(1)]
-        [Tooltip("Color/depth path approximate accepted-content work-unit budget. This caps tree-tier survival cost independently of visible instance memory.")]
-        [SerializeField]
-        private int colorMaxApproxWorkUnitCapacity = DefaultMaxApproxWorkUnitCapacity;
-
-        [Min(1)]
-        [Tooltip("Shadow path hard cap for GPU-visible vegetation instances packed into the shared runtime buffer each frame.")]
-        [SerializeField]
-        private int shadowMaxVisibleInstanceCapacity = DefaultMaxVisibleInstanceCapacity;
-
-        [Min(1)]
-        [Tooltip("Shadow path hard cap for generated expanded-branch work items.")]
-        [SerializeField]
-        private int shadowMaxExpandedBranchWorkItemCapacity = DefaultMaxExpandedBranchWorkItemCapacity;
-
-        [Min(1)]
-        [Tooltip("Shadow path approximate accepted-content work-unit budget.")]
-        [SerializeField]
-        private int shadowMaxApproxWorkUnitCapacity = DefaultMaxApproxWorkUnitCapacity;
-
-        [Min(1)]
-        [Tooltip("Hard cap for registered draw slots in this container. Registration fails explicitly instead of creating unbounded slot metadata.")]
-        [SerializeField]
-        private int maxRegisteredDrawSlots = DefaultMaxRegisteredDrawSlots;
-
-        private readonly List<VegetationTreeAuthoringRuntime> runtimeAuthorings = new List<VegetationTreeAuthoringRuntime>();
-        private AuthoringContainerRuntime? runtimeOwner;
+        [Tooltip("Compiled foliage pages generated from this container. Runtime rendering consumes these pages, not live tree authorings.")]
+        [SerializeField] private List<FoliagePageAsset> compiledPages = new List<FoliagePageAsset>();
 
         public Vector3 GridOrigin => gridOrigin;
 
@@ -79,35 +36,16 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         public IReadOnlyList<VegetationTreeAuthoring> RegisteredAuthorings => registeredAuthorings;
 
-        public int MaxVisibleInstanceCapacity => Mathf.Max(1, colorMaxVisibleInstanceCapacity);
+        public FoliageAssemblyAsset? CompiledAssembly => compiledAssembly;
 
-        public VegetationRuntimeBudget RuntimeBudget => new VegetationRuntimeBudget(
-            new VegetationViewRuntimeBudget(
-                colorMaxVisibleInstanceCapacity,
-                colorMaxExpandedBranchWorkItemCapacity,
-                colorMaxApproxWorkUnitCapacity),
-            new VegetationViewRuntimeBudget(
-                shadowMaxVisibleInstanceCapacity,
-                shadowMaxExpandedBranchWorkItemCapacity,
-                shadowMaxApproxWorkUnitCapacity),
-            maxRegisteredDrawSlots);
-
-        public int RenderLayer => gameObject.layer;
+        public IReadOnlyList<FoliagePageAsset> CompiledPages => compiledPages;
 
         public Hash128 ContainerIdHash => VegetationRuntimeIdentityUtility.BuildContainerIdHash(gameObject);
 
         public string ContainerId => ContainerIdHash.ToString();
 
-        public VegetationRuntimeRegistry? Registry => runtimeOwner?.Registry;
-
-        public VegetationIndirectRenderer? IndirectRenderer => runtimeOwner?.IndirectRenderer;
-
-        public bool HasPreparedFrame => runtimeOwner != null && runtimeOwner.HasPreparedFrame;
-
-        public AuthoringContainerRuntime? RuntimeOwner => runtimeOwner;
-
         /// <summary>
-        /// [INTEGRATION] Converts serialized authorings into runtime-safe tree records shared by classic-scene and SubScene providers.
+        /// [INTEGRATION] Converts serialized authorings into compiler-safe tree records. Runtime rendering does not consume these records.
         /// </summary>
         public void BuildRuntimeTreeAuthorings(List<VegetationTreeAuthoringRuntime> target)
         {
@@ -144,7 +82,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                 TreeBlueprintSO blueprint = authoring.Blueprint ??
                                             throw new InvalidOperationException(
-                                                $"{authoring.name} is missing blueprint and cannot enter runtime registration.");
+                                                $"{authoring.name} is missing blueprint and cannot enter compiled foliage output.");
 
                 target.Add(new VegetationTreeAuthoringRuntime(
                     VegetationRuntimeIdentityUtility.BuildTreeIdHash(containerIdHash, i),
@@ -157,35 +95,27 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         }
 
         /// <summary>
-        /// [INTEGRATION] Rebuilds the classic-scene runtime owner from the configured serialized authorings list.
+        /// [INTEGRATION] Registers this container's compiled page assets with the global render world.
         /// </summary>
         public void RefreshRuntimeRegistration()
         {
-            runtimeAuthorings.Clear();
-            BuildRuntimeTreeAuthorings(runtimeAuthorings);
-            ReplaceRuntimeOwner(runtimeAuthorings.ToArray());
+            if (compiledAssembly == null || compiledPages.Count == 0)
+            {
+                VegetationRenderWorld.Shared.UnregisterProvider(ContainerId);
+                Debug.LogWarning(
+                    $"VegetationRuntimeContainer '{name}' has no compiled foliage pages. Run the compiled page command before Play Mode.");
+                return;
+            }
+
+            VegetationRenderWorld.Shared.RegisterProvider(ContainerId, name, compiledAssembly, compiledPages);
         }
 
         /// <summary>
-        /// [INTEGRATION] Clears runtime-only registration state and releases the classic-scene runtime owner.
+        /// [INTEGRATION] Clears this container's compiled page provider registration.
         /// </summary>
         public void ResetRuntimeState()
         {
-            DisposeRuntimeOwner();
-        }
-
-        /// <summary>
-        /// [INTEGRATION] Forwards classic-scene camera preparation to the shared runtime owner.
-        /// </summary>
-        public bool PrepareFrameForCamera(Camera camera, ComputeShader? classifyShader, bool diagnosticsEnabled)
-        {
-            if (camera == null)
-            {
-                return false;
-            }
-
-            EnsureRuntimeOwner();
-            return runtimeOwner != null && runtimeOwner.PrepareFrameForCamera(camera, classifyShader, diagnosticsEnabled);
+            VegetationRenderWorld.Shared.UnregisterProvider(ContainerId);
         }
 
         private void OnEnable()
@@ -195,46 +125,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private void OnDisable()
         {
-            DisposeRuntimeOwner();
-        }
-
-        private void EnsureRuntimeOwner()
-        {
-            if (runtimeOwner != null)
-            {
-                return;
-            }
-
-            RefreshRuntimeRegistration();
+            ResetRuntimeState();
         }
 
         private bool IsOwnedByContainer(Transform authoringTransform)
         {
             return authoringTransform == transform || authoringTransform.IsChildOf(transform);
-        }
-
-        private void ReplaceRuntimeOwner(VegetationTreeAuthoringRuntime[] authoringSnapshot)
-        {
-            DisposeRuntimeOwner();
-            AuthoringContainerRuntime newRuntimeOwner = new AuthoringContainerRuntime(
-                ContainerId,
-                VegetationRuntimeProviderKind.ClassicScene,
-                name,
-                this,
-                RenderLayer,
-                gridOrigin,
-                cellSize,
-                RuntimeBudget,
-                authoringSnapshot);
-            runtimeOwner = newRuntimeOwner;
-            newRuntimeOwner.Activate();
-            newRuntimeOwner.RefreshRuntimeRegistration();
-        }
-
-        private void DisposeRuntimeOwner()
-        {
-            runtimeOwner?.Dispose();
-            runtimeOwner = null;
         }
     }
 }

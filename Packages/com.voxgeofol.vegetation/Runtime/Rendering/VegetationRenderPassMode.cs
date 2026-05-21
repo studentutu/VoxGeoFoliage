@@ -2,7 +2,7 @@
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
-    internal enum VegetationRenderPassMode
+    public enum VegetationRenderPassMode
     {
         Depth = 0,
         Color = 1,
