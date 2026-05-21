@@ -33,7 +33,7 @@ MonoBehaviour:
     LeafFlutterSpatialScale: 4.05
     LeafFlutterSecondaryStrength: 1.36
     RenderGameCameras: 1
-    RenderSceneViewCameras: 1
+    RenderSceneViewCameras: 0
     EnableDiagnostics: 0
 --- !u!114 &11400000
 MonoBehaviour:
@@ -86,7 +86,7 @@ MonoBehaviour:
     zFailOperation: 0
   m_ShadowTransparentReceive: 1
   m_RenderingMode: 2
-  m_DepthPrimingMode: 2
+  m_DepthPrimingMode: 1
   m_CopyDepthMode: 0
   m_DepthAttachmentFormat: 0
   m_DepthTextureFormat: 0
