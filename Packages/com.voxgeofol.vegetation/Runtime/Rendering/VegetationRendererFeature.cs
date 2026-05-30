@@ -70,6 +70,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         return;
                     }
 
+                    bool batchRendererActive = VegetationRenderWorld.Shared.RefreshBatchRenderer(settings, camera.GetInstanceID());
+                    if (batchRendererActive)
+                    {
+                        return;
+                    }
+
                     shadowPass.Setup(camera, settings);
                     depthPass.Setup(camera, settings);
                     colorPass.Setup(camera, settings);

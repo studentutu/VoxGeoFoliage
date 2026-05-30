@@ -34,10 +34,10 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
   - custom material
   - shader compatibility
 - Read:
-  - [Package README](../Packages/com.voxgeofol.vegetation/README.md) - package consumer contract, compiled page asset flow, render-world lifecycle, grouped packet submission, settings, and limitations
-  - [VegetationRuntimeArchitecture](../DetailedDocs/VegetationRuntimeArchitecture.md) - current runtime architecture reference for compiled providers, render-world ownership, packet submission, and shadow flow
-  - [VegetationGenerationalRedesign](../DetailedDocs/VegetationGenerationalRedesign.md) - current hard-cutover authority for the non-HZB production baseline. Classic-scene and SubScene providers now flow through `VegetationRenderWorld`; remaining work is procedural providers, screen-error LOD, externalized async payload providers, and production validation
-  - [fixShadows](../DetailedDocs/fixShadows.md) - shadow-specific notes; treat the render-world `CheapTree` packet path as the current production direction
+  - [Package README](../Packages/com.voxgeofol.vegetation/README.md) - package consumer contract, compiled page asset flow, render-world lifecycle, BRG packet submission, settings, and limitations
+  - [VegetationRuntimeArchitecture](../DetailedDocs/VegetationRuntimeArchitecture.md) - current runtime architecture reference for compiled providers, render-world ownership, BRG packet submission, fallback grouped-indirect submission, and shadow flow
+  - [VegetationGenerationalRedesign](../DetailedDocs/VegetationGenerationalRedesign.md) - current hard-cutover authority for the non-HZB production baseline: BRG on supported raw-buffer APIs, RenderGraph grouped-indirect on Direct3D12 or fallback setup, with remaining work on D3D12 RenderGraph performance and jobified BRG culling
+  - [fixShadows](../DetailedDocs/fixShadows.md) - shadow-specific notes for `CheapTree`: BRG light culling on supported APIs, grouped-indirect shadow injection on Direct3D12/fallback setup
   - [projectrules](projectrules.md) - current SubScene provider/runtime ownership rules until a dedicated SubScene doc exists
   - [Milestone2](../DetailedDocs/Milestone2.md) - current milestone status and open work only
   - [Milestone1](../DetailedDocs/Milestone1.md) - shipped baseline summary only

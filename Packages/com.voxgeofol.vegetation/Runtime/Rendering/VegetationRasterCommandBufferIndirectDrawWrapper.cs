@@ -1,6 +1,5 @@
 #nullable enable
 
-using System;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -21,6 +20,16 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public void ClearCommandBuffer()
         {
             commandBuffer = null;
+        }
+
+        public void SetGlobalBuffer(int nameId, GraphicsBuffer buffer)
+        {
+            if (commandBuffer == null || buffer == null)
+            {
+                return;
+            }
+
+            commandBuffer.SetGlobalBuffer(nameId, buffer);
         }
 
         public void DrawMeshInstancedIndirect(

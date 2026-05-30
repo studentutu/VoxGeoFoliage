@@ -14,8 +14,15 @@ struct VegetationInstanceData
     float4 wind;
 };
 
-#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED) && defined(_VOXGEOFOL_INDIRECT_RENDERING)
+#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED) && !defined(UNITY_DOTS_INSTANCING_ENABLED)
 #define VOXGEOFOL_USE_INDIRECT_INSTANCE_BUFFER 1
+#endif
+
+#if defined(UNITY_DOTS_INSTANCING_ENABLED)
+UNITY_DOTS_INSTANCING_START(VoxGeoFolVegetationInstanceMetadata)
+    UNITY_DOTS_INSTANCED_PROP(uint, _VegetationPackedLeafTint)
+    UNITY_DOTS_INSTANCED_PROP(float4, _VegetationWind)
+UNITY_DOTS_INSTANCING_END(VoxGeoFolVegetationInstanceMetadata)
 #endif
 
 #if defined(VOXGEOFOL_USE_INDIRECT_INSTANCE_BUFFER)
@@ -36,7 +43,17 @@ void SetupVegetation()
 
 VegetationInstanceData LoadVegetationInstance()
 {
-#if defined(VOXGEOFOL_USE_INDIRECT_INSTANCE_BUFFER)
+#if defined(UNITY_DOTS_INSTANCING_ENABLED)
+    VegetationInstanceData instanceData;
+    instanceData.objectToWorld = GetObjectToWorldMatrix();
+    instanceData.worldToObject = GetWorldToObjectMatrix();
+    instanceData.packedLeafTint = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_CUSTOM_DEFAULT(uint, _VegetationPackedLeafTint, 16777215u);
+    instanceData.padding0 = 0u;
+    instanceData.padding1 = 0u;
+    instanceData.padding2 = 0u;
+    instanceData.wind = UNITY_ACCESS_DOTS_INSTANCED_PROP_WITH_CUSTOM_DEFAULT(float4, _VegetationWind, float4(0.0f, 0.0f, 0.0f, 0.0f));
+    return instanceData;
+#elif defined(VOXGEOFOL_USE_INDIRECT_INSTANCE_BUFFER)
     return _VegetationInstanceData[(uint)_VegetationInstanceDataBaseOffset + unity_InstanceID];
 #else
     VegetationInstanceData instanceData;

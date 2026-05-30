@@ -28,8 +28,8 @@ Shader "Hidden/VoxGeoFol/Vegetation/DepthOnly"
             #pragma vertex Vert
             #pragma fragment Frag
             #pragma multi_compile_instancing
+            #pragma multi_compile _ DOTS_INSTANCING_ON
             #pragma instancing_options procedural:SetupVegetation
-            #pragma multi_compile _ _VOXGEOFOL_INDIRECT_RENDERING
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "VegetationIndirectCommon.hlsl"

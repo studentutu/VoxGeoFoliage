@@ -203,6 +203,7 @@ flowchart TD
 - Run [runParsetests.sh](runParsetests.sh):
   - Ensure [Unity Editor compiler errors](CI/CompileErrorsAfterUnityRun.txt) is empty (no compilation errors while running Unity Editor).
   - See output of [runParsetests.sh](runParsetests.sh) to check if there are any failed tests, it will also enumerate them if failed tests exists.
+- When crashes in editor occur, see C:\Users\admin\AppData\Local\Unity\Editor (editor.log for the last opened editor log).
 
 ## When finished with task/job
 

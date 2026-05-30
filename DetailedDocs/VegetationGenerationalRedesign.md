@@ -2,7 +2,7 @@
 
 Purpose: current authority for the foliage redesign after the hard cutover.
 
-Status: completed for the requested cutover scope. The active path is a single compiled packet renderer with opaque geometry, page/cell culling, global budgets, shadow packet selection, shader wind, grouped indirect submission, classic-scene providers, and closed SubScene providers. The retired tree-first renderer and its demo compute surface are no longer active package code.
+Status: completed for the requested cutover scope. The active path is a single compiled packet renderer with opaque geometry, page/cell culling, global budgets, shadow packet selection, shader wind, BatchRendererGroup submission on supported raw-buffer graphics APIs, RenderGraph grouped-indirect submission on Direct3D12 and unsupported/faulted BRG setup, classic-scene providers, and closed SubScene providers. The retired tree-first renderer and its demo compute surface are no longer active package code.
 
 ## Target
 
@@ -25,13 +25,17 @@ VegetationTreeAuthoring
 -> FoliageAssemblyAsset + FoliagePageAsset[]
 -> VegetationRuntimeContainer or SubScene compiled provider
 -> VegetationRenderWorld
--> CullingGroup page/cell broad phase
+-> BatchRendererGroup batches by compiled FoliageAssetGroup on supported non-D3D12 APIs
+-> RenderGraph grouped-indirect passes on Direct3D12 and unsupported/faulted BRG APIs
+-> page/cell split-frustum broad phase
 -> packet selection under color/shadow budgets
 -> shader wind binding
--> grouped indirect submission by FoliageAssetGroup
+-> BRG or grouped indirect draw command output
 ```
 
-Grouped submission uses one shared instance buffer, but the indirect args keep `startInstance` at zero. `VegetationRenderWorld` binds `_VegetationInstanceDataBaseOffset` per `FoliageAssetGroup`, and the shader indexes `_VegetationInstanceData` from that explicit base. This keeps canopy tint/transform lookup deterministic across DirectX and Vulkan backends.
+BRG submission uses one batch per compiled `FoliageAssetGroup`. Each batch owns its own `GraphicsBuffer` containing built-in per-instance matrices plus `_VegetationPackedLeafTint` and `_VegetationWind`. The grouped-indirect RenderGraph path remains fallback-only for unsupported or faulted BRG initialization and keeps zero `startInstance` plus `_VegetationInstanceDataBaseOffset` for backend-stable lookup.
+
+Direct3D12 on Unity `6000.3.15f1` is on the RenderGraph grouped-indirect backend. The previous custom BRG attempts proved the failing path: Unity enters native `InjectShadowDrawCommands` immediately after vegetation BRG batch registration, before our culling callback publishes any draw-command IDs, and still crashes when BRG light views and registered `ShadowCaster` passes are disabled. The supported D3D12 path is therefore RenderGraph grouped-indirect color/depth/shadow submission. Performance work should reduce prepare/upload cost in that path instead of adding more D3D12 BRG workarounds.
 
 Ownership is intentionally narrow:
 
@@ -40,8 +44,21 @@ Ownership is intentionally narrow:
 | Authoring references | `VegetationRuntimeContainer` |
 | Compiled pages | `FoliagePageAsset` |
 | Shared asset groups | `FoliageAssemblyAsset` |
-| Culling, budgets, frame selection, buffers, submission | `VegetationRenderWorld` |
-| URP scheduling | `VegetationRendererFeature` |
+| Culling, budgets, frame selection, BRG batches, fallback buffers/submission | `VegetationRenderWorld` |
+| URP integration and fallback scheduling | `VegetationRendererFeature` |
+
+## Performance Regression Root Cause
+
+The redesign achieved the data cutover, but the runtime backend stayed on custom RenderGraph passes. `VegetationRendererFeature` executed `PrepareForCamera` / `PrepareForFrustums` inside render pass execution, then repacked selected instances and called `GraphicsBuffer.SetData` on the main thread. That made URP's render graph wait on our feature instead of letting Unity batch/cull the vegetation through its renderer-owned path.
+
+The design mistake was treating BRG as a later experiment even though the compiled pages were already shaped like BRG batches. The correct production path on supported APIs is now:
+
+1. compiled asset group -> one BRG batch
+2. batch-owned instance data buffer -> matrices, packed tint, wind
+3. BRG culling callback -> page/cell split visibility and packet selection
+4. BRG draw commands -> Unity/URP owns submission
+
+The remaining weak point is that packet selection inside the BRG culling callback is still immediate CPU work, not Burst/jobified command generation. The callback now reads a main-thread-built immutable culling snapshot, compacts visible instance ranges before publishing draw commands, clears Unity's custom culling result slot, and retired BRG generations are deferred before disposal, so the next performance hardening target is jobified selection and draw-command generation rather than another live runtime-data bridge.
 | Closed SubScene registration | `Vegetation.SubScene` bootstrap/state |
 
 ## Runtime Packets
@@ -81,7 +98,7 @@ Runtime must not rebuild wind metadata per frame.
 
 ## Culling And Budgets
 
-The production baseline intentionally uses Unity `CullingGroup` for coarse camera page/cell visibility and one batched page/cell cascade-frustum pass for main-light shadows. Shadow cascades must share one selected packet payload instead of repacking static instances per cascade.
+The production baseline uses BRG `BatchCullingContext` split planes for coarse page/cell visibility on supported raw-buffer BRG APIs. The RenderGraph grouped-indirect path uses Unity `CullingGroup` for camera broad phase and one batched page/cell cascade-frustum pass for main-light shadows when BRG cannot initialize, fault-disables, or runs on Direct3D12. Shadow cascades must share one selected packet policy instead of repacking static instances per cascade.
 
 Rejected baseline choices:
 
@@ -167,9 +184,9 @@ There is no compatibility toggle and no bridge renderer to maintain.
 
 ## External Design Notes
 
-Unity `CullingGroup` is a good fit for page/cell visibility because it is coarse, stable, and CPU-visible without forcing per-pixel occlusion into the baseline. It should remain a broad phase, not a detailed tree selection engine.
+Unity `CullingGroup` remains acceptable only for the fallback grouped-indirect camera path. The production BRG path must use `BatchCullingContext` split planes so camera and light visibility are emitted through Unity's renderer-owned culling/submission flow.
 
-The useful idea from `unityHISM` is not a direct BRG copy. The useful pieces are the data-shape concepts: compact chunk blobs, fixed sub-batch windows, culling-owned command emission, and command compaction. Those map cleanly to compiled pages, packet ranges, and grouped indirect args. They do not justify restoring multiple renderer paths.
+The useful idea from `unityHISM` is the data shape: compact chunk blobs, fixed sub-batch windows, culling-owned command emission, and command compaction. Those map cleanly to compiled pages, packet ranges, and BRG batches. They do not justify restoring multiple renderer paths.
 
 ## Current Verification Contract
 
@@ -183,6 +200,7 @@ The cutover is considered intact only when all of these stay true:
 6. authoring validation tests prove baked impostor inputs and current LOD order are enforced
 7. Unity full compile is clean after file additions/deletions
 8. Rider MSBuild compile is clean after solution regeneration
+9. active BRG path initializes successfully on supported raw-buffer BRG graphics APIs, while Direct3D12 uses the RenderGraph grouped-indirect backend without registering vegetation BRG batches
 
 ## Remaining Production Work
 
@@ -190,12 +208,13 @@ This redesign cutover is complete, but the package is not fully production-prove
 
 Required next work:
 
-1. screen-error LOD with hysteresis and budget pressure
-2. procedural placement output as compiled page providers
-3. externalized async near-detail payload providers for disk/Addressables-backed pages
-4. dense forest validation at 100k loaded instances and 1M streamed instances
-5. mobile and VR validation
-6. main-light shadow stress tests with wind enabled
-7. explicit compatible-material validation for project-local shaders
+1. Burst/jobified BRG culling and draw-command generation
+2. screen-error LOD with hysteresis and budget pressure
+3. procedural placement output as compiled page providers
+4. externalized async near-detail payload providers for disk/Addressables-backed pages
+5. dense forest validation at 100k loaded instances and 1M streamed instances
+6. mobile and VR validation
+7. main-light shadow stress tests with wind enabled
+8. explicit compatible-material validation for project-local shaders
 
 Do not spend effort restoring retired renderer surfaces. The only acceptable forward path is strengthening the compiled packet renderer.

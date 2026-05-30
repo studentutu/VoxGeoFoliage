@@ -11,12 +11,16 @@ VegetationTreeAuthoring
 -> FoliageAssemblyAsset + FoliagePageAsset[]
 -> VegetationRuntimeContainer or SubScene compiled provider
 -> VegetationRenderWorld
--> page/cell CullingGroup broad phase
+-> BatchRendererGroup batches by FoliageAssetGroup on supported non-D3D12 APIs
+-> RenderGraph grouped-indirect passes on Direct3D12 and unsupported/faulted BRG APIs
+-> page/cell broad phase
 -> compiled packet selection under active budgets
--> CheapTree shadow packets
+-> CheapTree shadow packets through BRG light culling or RenderGraph shadow atlas append
 -> shader wind
--> grouped indirect submission
+-> BRG or grouped indirect draw commands
 ```
+
+Direct3D12 uses the RenderGraph grouped-indirect backend. Unity `6000.3.15f1` crashes in native `InjectShadowDrawCommands` when the custom vegetation `BatchRendererGroup` is present, even when BRG light views are disabled and the registered materials expose no `ShadowCaster` pass. The D3D12 path therefore stays inside URP RenderGraph raster passes for color/depth/shadow instead of registering custom BRG batches. The shader contract keeps `_VegetationInstanceData` out of BRG/DOTS variants and binds it explicitly for grouped-indirect draws.
 
 The renderer is opaque-only. It does not support alpha clip, transparency, masked foliage, runtime material cloning, or `LODGroup`.
 
@@ -34,9 +38,9 @@ The renderer is opaque-only. It does not support alpha clip, transparency, maske
 
 1. Unity `6000.3` or newer.
 2. URP `17.3.0` or newer-compatible project setup.
-3. Indirect draw and structured graphics buffer support on the target hardware/API.
+3. `BatchRendererGroup` support with `BatchRendererGroup.BufferTarget == RawBuffer` on the target hardware/API for the BRG backend. Direct3D12 uses the RenderGraph grouped-indirect backend instead.
 4. `VegetationRendererFeature` added to the active URP renderer.
-5. Opaque URP-compatible vegetation materials using the package indirect-instance contract for forward/depth/shadow/wind.
+5. Opaque URP-compatible vegetation materials using the package BRG/DOTS instance contract for forward/depth/shadow/wind.
 6. Generated `FoliageAssemblyAsset` and `FoliagePageAsset[]` assigned to each active `VegetationRuntimeContainer`.
 7. For closed SubScenes, `SubSceneAuthoring` must sit on the same GameObject as the compiled `VegetationRuntimeContainer`.
 
@@ -103,7 +107,7 @@ The compiler does not generate per-page or per-cell aggregate HLOD mesh assets a
 
 ## Shader Compatibility
 
-Package vegetation shaders support both compiled indirect draws and regular editor preview MeshRenderers. `_VegetationInstanceData` is declared only when Unity procedural instancing and `_VOXGEOFOL_INDIRECT_RENDERING` are both enabled. `VegetationRenderWorld` enables that keyword only around grouped indirect draws; regular MeshRenderer/editor-preview variants use the object transform and do not require that buffer binding. Grouped indirect draws keep indirect-args `startInstance` at zero and pass `_VegetationInstanceDataBaseOffset` per draw, so shader instance-buffer lookup does not depend on backend-specific base-instance behavior.
+Package vegetation shaders support BRG/DOTS instancing, the legacy grouped-indirect fallback, and regular editor preview MeshRenderers. BRG batches provide `unity_ObjectToWorld`, `unity_WorldToObject`, `_VegetationPackedLeafTint`, and `_VegetationWind` metadata in each batch-owned `GraphicsBuffer`. `_VegetationInstanceData` is declared only for Unity procedural-instancing variants that are not DOTS/BRG variants. `VegetationRenderWorld` binds that buffer through command-buffer global state and the per-draw property block for fallback grouped-indirect draws; regular MeshRenderer/editor-preview and BRG/DOTS variants use object/BRG metadata and do not require that SRV.
 
 ## Key Settings
 
@@ -135,10 +139,10 @@ Package vegetation shaders support both compiled indirect draws and regular edit
 | Term | Status | Purpose |
 | --- | --- | --- |
 | `VegetationRuntimeContainer` | Active provider | Holds authoring references for compilation and generated compiled page references for runtime registration. |
-| `VegetationRenderWorld` | Active runtime owner | Owns providers, page/cell culling, packet selection, active budgets, wind binding, grouped indirect buffers, and diagnostics. |
+| `VegetationRenderWorld` | Active runtime owner | Owns providers, BRG batch resources, page/cell culling, packet selection, active budgets, wind binding, fallback grouped-indirect buffers, and diagnostics. |
 | `FoliageAssemblyAsset` | Active compiled input | Shared asset groups and build report for one compiled provider. |
 | `FoliagePageAsset` | Active compiled input | Page-local cells, trees, HLOD packets, near-detail packets, static instances, and metadata. |
-| `FoliageAssetGroup` | Active submission group | Exact mesh/material/pass identity used for grouped indirect draws. |
+| `FoliageAssetGroup` | Active submission group | Exact mesh/material/pass identity used for BRG batches and fallback grouped-indirect draws. |
 | `FoliageRepresentationPacket` | Active scheduling unit | Draw-ready packet selected by page/cell visibility, LOD distance, and active budgets. |
 | `FoliagePacketResidency` | Active metadata | Distinguishes always-resident HLOD packets from near-detail packets controlled by render-world resident/upload budgets. |
 | `FoliageWindMetadata` | Active metadata | Static per-instance wind phase/weights/anchor consumed by shaders. |
@@ -178,37 +182,49 @@ SubSceneAuthoring baker
 
 ```text
 VegetationRendererFeature
--> VegetationRenderWorld.PrepareForCamera()
-   -> CullingGroup page/cell broad phase
-   -> request near-detail cell residency under resident/upload byte budgets
-   -> packet selection under color budget
-   -> shared instance buffer + grouped indirect args
--> color grouped indirect draws
--> optional dedicated depth grouped indirect draws
+-> VegetationRenderWorld.RefreshBatchRenderer()
+   -> supported non-D3D12 raw-buffer APIs create/update one BRG batch per compiled FoliageAssetGroup
+   -> Direct3D12, unsupported APIs, or faulted BRG setup return false
+-> supported BRG APIs: Unity BRG camera culling callback
+   -> page/cell split-frustum broad phase
+   -> packet selection under color budget using callback-local scratch
+   -> visible instance index list + BRG direct draw commands
+-> Direct3D12/fallback: RenderGraph depth/color raster passes
+   -> page/cell CullingGroup broad phase
+   -> grouped DrawMeshInstancedIndirect calls
 ```
+
+If BRG setup fails, the active graphics API does not expose the required raw-buffer batch target, or the active graphics API is Direct3D12, `RefreshBatchRenderer()` returns false and `VegetationRendererFeature` schedules the grouped-indirect RenderGraph color/depth passes instead.
 
 ### Main-Light Shadows
 
 ```text
-VegetationRendererFeature shadow pass
--> batched main-light cascade frustums
--> VegetationRenderWorld.PrepareForFrustums()
+supported BRG APIs: Unity BRG light culling callback
+-> active main-light split frustums
+   -> page/cell split-frustum masks
+   -> callback-local packet selection without mutating render-world residency/upload state
    -> compiled shadow packet mapping
-   -> request near-detail cell residency under resident/upload byte budgets when near shadow packets are selected
    -> shadow work budget
-   -> grouped indirect args
--> shadow grouped indirect draws only for cascades/groups with selected packets
+   -> visible instance index list + split visibility masks
+-> URP renders BRG shadow caster batches
+Direct3D12/fallback: RenderGraph shadow raster pass
+-> mainShadowsTexture depth attachment with ReadWrite access
+   -> explicit cascade frustum masks
+   -> grouped DrawMeshInstancedIndirect calls
 ```
+
+When BRG cannot initialize or the active graphics API is Direct3D12, shadows use the grouped-indirect RenderGraph shadow pass that appends into URP's main shadow atlas through the raster depth attachment path.
 
 ## Important Limitations
 
-1. Near-detail residency is budgeted and request-loaded inside `VegetationRenderWorld`, but compiled page assets and shared mesh/material groups are still ScriptableObject references. Externalized async disk/Addressables payload providers are not implemented.
+1. Near-detail residency is budgeted and request-loaded inside `VegetationRenderWorld` only for the grouped-indirect fallback upload path. The BRG path uploads compiled instance data into batch-owned buffers at graph rebuild time and culls/selects from that resident data. Compiled page assets and shared mesh/material groups are still ScriptableObject references. Externalized async disk/Addressables payload providers are not implemented.
 2. LOD selection is still distance-based in the render world. Screen-error and hysteresis remain future production hardening.
 3. Additional-light vegetation shadows are not supported.
 4. Offscreen shadow caster policy is still conservative and main-light only.
 5. Runtime editing is not live. Recompile page assets and refresh registration after authoring or transform changes.
 6. HZB occlusion is intentionally not part of the baseline.
-7. BRG is not the production backend. It can only be tested later over the same compiled packet data.
+7. The grouped-indirect RenderGraph path is the Direct3D12 backend and the fallback for graphics APIs where the BRG raw-buffer backend cannot initialize or fault-disables. Optimize this path for D3D12 performance instead of reintroducing D3D12 custom BRG workarounds.
+8. BRG culling currently runs packet selection on the callback thread and returns immediate draw-command output. It uses callback-local scratch over a main-thread-built immutable culling snapshot, validates packet instance ranges before writing visible instance IDs, compacts visible instance ranges before publishing draw commands, clears Unity's custom culling result slot, does not read live page ScriptableObjects or mutable world lists, and does not mutate shared near-detail residency/upload state. Retired BRG generations are kept alive briefly before native resource disposal so Unity renderer jobs can drain. Stale generated pages should still be rebuilt instead of relying on runtime drops. Burst/jobified command generation is still the next hardening step.
 
 ## Missing Features
 
@@ -228,10 +244,10 @@ VegetationRendererFeature shadow pass
 
 ## Supported Devices
 
-1. Desktop and laptop GPUs that run Unity 6 URP with indirect draws and structured buffers.
+1. Desktop and laptop GPUs that run Unity 6 URP with BRG raw-buffer instance data.
 2. Console-class targets with the same feature support.
 3. Higher-end mobile and handheld targets after profiling validates budgets.
-4. Not targeted: WebGL, graphics APIs without indirect draws, and very low-end mobile hardware.
+4. Not targeted: WebGL, graphics APIs without BRG raw-buffer support, and very low-end mobile hardware.
 
 ## License
 

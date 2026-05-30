@@ -30,8 +30,8 @@ Shader "VoxGeoFol/Vegetation/FarMeshLit"
             #pragma vertex Vert
             #pragma fragment Frag
             #pragma multi_compile_instancing
+            #pragma multi_compile _ DOTS_INSTANCING_ON
             #pragma instancing_options procedural:SetupVegetation
-            #pragma multi_compile _ _VOXGEOFOL_INDIRECT_RENDERING
             #pragma multi_compile_fog
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
@@ -109,8 +109,8 @@ Shader "VoxGeoFol/Vegetation/FarMeshLit"
             #pragma vertex ShadowVert
             #pragma fragment ShadowFrag
             #pragma multi_compile_instancing
+            #pragma multi_compile _ DOTS_INSTANCING_ON
             #pragma instancing_options procedural:SetupVegetation
-            #pragma multi_compile _ _VOXGEOFOL_INDIRECT_RENDERING
             #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
@@ -159,8 +159,8 @@ Shader "VoxGeoFol/Vegetation/FarMeshLit"
             #pragma vertex DepthVert
             #pragma fragment DepthFrag
             #pragma multi_compile_instancing
+            #pragma multi_compile _ DOTS_INSTANCING_ON
             #pragma instancing_options procedural:SetupVegetation
-            #pragma multi_compile _ _VOXGEOFOL_INDIRECT_RENDERING
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "VegetationIndirectCommon.hlsl"

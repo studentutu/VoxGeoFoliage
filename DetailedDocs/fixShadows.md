@@ -2,7 +2,7 @@
 
 Purpose: current shadow contract for the compiled vegetation renderer.
 
-Status: active. Shadow rendering is owned by `VegetationRenderWorld` and scheduled by `VegetationRendererFeature`.
+Status: active. Shadow rendering is owned by `VegetationRenderWorld` through the BRG light culling callback on supported raw-buffer BRG APIs. On Direct3D12 Unity `6000.3.15f1`, vegetation uses the RenderGraph grouped-indirect shadow pass because native `InjectShadowDrawCommands` crashes when custom vegetation BRG batches are registered, before vegetation BRG light-culling output exists.
 
 ## Contract
 
@@ -25,20 +25,20 @@ This fixes the original class of bugs where an enabled shadow path could cast fr
 
 ```text
 main light cascade frustum set
--> VegetationRenderWorld.PrepareForFrustums()
-   -> page/cell cascade-frustum mask tests
+-> Unity BRG light culling callback
+   -> page/cell split-frustum mask tests from BatchCullingContext
    -> compiled shadow packet mapping
    -> shadow work budget
-   -> one grouped instance payload shared by all cascades
-   -> one grouped indirect args surface shared by all cascades
--> grouped indirect shadow draws only for cascades/groups that have selected shadow packets
+   -> visible instance index output
+   -> split visibility masks on BRG draw commands
+-> URP submits BRG shadow caster draws only for visible splits/groups
 ```
 
-The shadow path uses explicit frustum/bounds tests for cascades. Camera `CullingGroup` broad phase remains camera-owned; shadow cascades are prepared directly from compiled page/cell bounds, but cascades are batched into one page/cell selection pass and must not repack static instances per cascade. Cascades and groups with no selected packets are skipped at submission time.
+The production shadow path uses BRG split frustums for page/cell bounds tests on supported raw-buffer BRG APIs. The grouped-indirect RenderGraph path uses explicit cascade-frustum masks and one shared selected packet payload when BRG cannot initialize, fault-disables, or runs on Direct3D12. Cascades and groups with no selected packets are skipped through split visibility masks or fallback cascade masks.
 
-The vegetation shadow pass augments URP's main-light shadow atlas. It must run as a render-graph raster pass with `resourceData.mainShadowsTexture` bound through `SetRenderAttachmentDepth(..., AccessFlags.ReadWrite)`. Do not use an unsafe pass plus manual `SetRenderTarget` for the shadow atlas; DirectX backends can treat that as invalid render target state and leak shadow writes into the color path while Vulkan may appear to tolerate it.
+The fallback vegetation shadow pass augments URP's main-light shadow atlas. It must run as a render-graph raster pass with `resourceData.mainShadowsTexture` bound through `SetRenderAttachmentDepth(..., AccessFlags.ReadWrite)`. Do not use an unsafe pass plus manual `SetRenderTarget` for the shadow atlas; DirectX backends can treat that as invalid render target state and leak shadow writes into the color path while Vulkan may appear to tolerate it. The BRG path must not manually bind the atlas at all.
 
-Indirect vegetation shadow draws do not go through URP renderer lists, so each cascade draw must explicitly bind the cascade shadow-slice view/projection shader globals before submitting `DrawMeshInstancedIndirect`. Do not rely on the game camera state left by URP after the main shadow pass; that makes caster projection camera-relative and causes vegetation shadows in Game View/builds to drift or rotate with camera motion. Shader globals must use URP's GPU-adjusted projection convention, not the raw projection matrix, or geometry can flip. Restore the camera view/projection globals after the vegetation shadow atlas append pass.
+Fallback indirect vegetation shadow draws do not go through URP renderer lists, so each cascade draw must explicitly bind the cascade shadow-slice view/projection shader globals before submitting `DrawMeshInstancedIndirect`. Do not rely on the game camera state left by URP after the main shadow pass; that makes caster projection camera-relative and causes vegetation shadows in Game View/builds to drift or rotate with camera motion. Shader globals must use URP's GPU-adjusted projection convention, not the raw projection matrix, or geometry can flip. Restore the camera view/projection globals after the vegetation shadow atlas append pass.
 
 ## Budgeting
 
@@ -69,5 +69,5 @@ Shadow cutover is intact when:
 1. active renderer settings expose only `Off` and `CheapTree`
 2. shadow submission runs through `VegetationRenderWorld`
 3. no active package compute dispatch drives vegetation shadow selection
-4. grouped shadow args are emitted by compiled packet groups
+4. BRG shadow commands are emitted by compiled packet groups on supported raw-buffer BRG APIs, while Direct3D12 and unsupported/faulted BRG setup use grouped RenderGraph shadow args
 5. focused render-world tests cover HLOD fallback and `CheapTree` packet selection

@@ -288,7 +288,7 @@ public sealed class FoliageCompiledAssetCompilerTests
     }
 
     [Test]
-    public void ShaderContract_InstanceBufferIsOnlyDeclaredForIndirectInstancedVariants()
+    public void ShaderContract_InstanceBufferIsOnlyDeclaredForProceduralNonDotsVariants()
     {
         string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
         string shaderCommonPath = Path.Combine(
@@ -297,8 +297,10 @@ public sealed class FoliageCompiledAssetCompilerTests
         string shaderText = File.ReadAllText(shaderCommonPath).Replace("\r\n", "\n");
 
         StringAssert.Contains(
-            "#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED) && defined(_VOXGEOFOL_INDIRECT_RENDERING)",
+            "#if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED) && !defined(UNITY_DOTS_INSTANCING_ENABLED)",
             shaderText);
+        StringAssert.DoesNotContain("_VOXGEOFOL_INDIRECT_RENDERING", shaderText);
+        StringAssert.Contains("UNITY_DOTS_INSTANCED_PROP(uint, _VegetationPackedLeafTint)", shaderText);
         StringAssert.Contains("StructuredBuffer<VegetationInstanceData> _VegetationInstanceData;", shaderText);
         StringAssert.Contains("void SetupVegetation()", shaderText);
         StringAssert.Contains("instanceData.objectToWorld = GetObjectToWorldMatrix();", shaderText);
@@ -320,7 +322,11 @@ public sealed class FoliageCompiledAssetCompilerTests
                 shaderRelativePaths[i]);
             Assert.AreEqual(
                 CountSubstring(passShaderText, "#pragma multi_compile_instancing"),
-                CountSubstring(passShaderText, "#pragma multi_compile _ _VOXGEOFOL_INDIRECT_RENDERING"),
+                CountSubstring(passShaderText, "#pragma multi_compile _ DOTS_INSTANCING_ON"),
+                shaderRelativePaths[i]);
+            Assert.AreEqual(
+                0,
+                CountSubstring(passShaderText, "_VOXGEOFOL_INDIRECT_RENDERING"),
                 shaderRelativePaths[i]);
         }
     }
