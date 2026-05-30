@@ -45,7 +45,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             FoliageRepresentationPacket[] compiledPackets,
             FoliageCompilerBuildReport report)
         {
-            // Range: accepts one page of prevalidated static data. Condition: instance ranges are already contiguous by asset group. Output: immutable page asset consumed by later cutover runtime code.
+            // Range: accepts one page of prevalidated static data. Condition: instance ranges are already contiguous by asset group. Output: immutable page asset consumed by runtime rendering.
             pageId = compiledPageId ?? string.Empty;
             worldBounds = compiledWorldBounds;
             cells = compiledCells ?? Array.Empty<FoliagePageCell>();

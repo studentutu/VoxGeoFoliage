@@ -1,6 +1,6 @@
 # Milestone 2
 
-Status: active
+Status: active. The compiled renderer is complete; this milestone now tracks production hardening.
 
 ## Goal
 
@@ -31,9 +31,9 @@ The renderer does not maintain a parallel tree-first runtime path.
 
 1. Explicit prepared-view ownership landed; camera and shadow passes no longer share one renderer-global mutable frame.
 2. Global color and shadow packet budgets are owned by `VegetationRenderWorld`.
-3. Cutover compiler contract landed: `FoliageAssemblyAsset`, `FoliagePageAsset`, `FoliageRepresentationPacket`, `FoliageAssetGroup`, build reports, and `VegetationRuntimeContainer` inspector compilation.
+3. Compiler contract landed: `FoliageAssemblyAsset`, `FoliagePageAsset`, `FoliageRepresentationPacket`, `FoliageAssetGroup`, build reports, and `VegetationRuntimeContainer` inspector compilation.
 4. Compiler metadata landed: `PageHLOD`/`CellHLOD` always-resident instance packets that collapse trees to baked impostor meshes, `TreeL0/L1/L2` near-detail packets, static wind metadata, compiled shadow packet modes, shadow bounds, compile-required opaque input validation, resident mesh payload estimates, and near-detail byte caps.
-5. Classic-scene runtime cutover landed. `VegetationRuntimeContainer` registers generated assembly/pages with `VegetationRenderWorld`; `VegetationRendererFeature` consumes that world directly.
+5. Classic-scene runtime registration landed. `VegetationRuntimeContainer` registers generated assembly/pages with `VegetationRenderWorld`; `VegetationRendererFeature` consumes that world directly.
 6. Public shadow settings are `VegetationShadowMode.Off` and `VegetationShadowMode.CheapTree`.
 7. Closed `SubScene` bootstrap bakes compiled assembly/page references and registers/unregisters providers with `VegetationRenderWorld`.
 8. The retired tree-first runtime family, old runtime tests, independent proxy shadow authoring surfaces, and demo compute surface were physically deleted.

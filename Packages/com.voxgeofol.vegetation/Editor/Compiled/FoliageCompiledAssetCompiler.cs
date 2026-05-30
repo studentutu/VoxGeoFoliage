@@ -82,7 +82,7 @@ namespace VoxGeoFol.Features.Vegetation.Editor
             string outputFolder,
             FoliageCompilerSettings settings)
         {
-            // Range: accepts a selected container and a generated output folder. Condition: asset paths are stable and stale page assets for this container prefix are removed. Output: refreshed assembly and page assets ready for later cutover runtime loading.
+            // Range: accepts a selected container and a generated output folder. Condition: asset paths are stable and stale page assets for this container prefix are removed. Output: refreshed assembly and page assets ready for runtime registration.
             if (container == null)
             {
                 throw new ArgumentNullException(nameof(container));

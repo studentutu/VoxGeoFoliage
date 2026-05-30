@@ -107,7 +107,7 @@ The compiler does not generate per-page or per-cell aggregate HLOD mesh assets a
 
 ## Shader Compatibility
 
-Package vegetation shaders support BRG/DOTS instancing, the legacy grouped-indirect fallback, and regular editor preview MeshRenderers. BRG batches provide `unity_ObjectToWorld`, `unity_WorldToObject`, `_VegetationPackedLeafTint`, and `_VegetationWind` metadata in each batch-owned `GraphicsBuffer`. `_VegetationInstanceData` is declared only for Unity procedural-instancing variants that are not DOTS/BRG variants. `VegetationRenderWorld` binds that buffer through command-buffer global state and the per-draw property block for fallback grouped-indirect draws; regular MeshRenderer/editor-preview and BRG/DOTS variants use object/BRG metadata and do not require that SRV.
+Package vegetation shaders support BRG/DOTS instancing, the grouped-indirect fallback, and regular editor preview MeshRenderers. BRG batches provide `unity_ObjectToWorld`, `unity_WorldToObject`, `_VegetationPackedLeafTint`, and `_VegetationWind` metadata in each batch-owned `GraphicsBuffer`. `_VegetationInstanceData` is declared only for Unity procedural-instancing variants that are not DOTS/BRG variants. `VegetationRenderWorld` binds that buffer through command-buffer global state and the per-draw property block for fallback grouped-indirect draws; regular MeshRenderer/editor-preview and BRG/DOTS variants use object/BRG metadata and do not require that SRV.
 
 ## Key Settings
 

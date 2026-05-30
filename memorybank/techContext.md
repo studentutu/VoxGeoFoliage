@@ -97,7 +97,6 @@ Repo-used libraries and plugins:
 - URP feature hard constraint: never call `ComputeBuffer.GetData`, `GraphicsBuffer.GetData`, or any blocking GPU-readback wait from render-pass setup, camera/frustum prepare, or submission callbacks. The dense-forest device-removal crash came from hot-path readbacks inside URP-driven repeated preparation.
 - URP feature hard constraint: never restore one mutable per-container resident frame across camera and shadow consumers. The render world prepares camera frames per camera/settings and prepares one grouped shadow frame for all valid main-light cascades, then submits that shared frame only into cascades/groups with selected shadow packets.
 - GPU admission hard constraint: never reintroduce a single-thread repeated full-tree rescan kernel for nearest-first promotion. URP can prepare the same container multiple times per frame, so O(N^2) acceptance work multiplies into a real runtime failure.
-- Recent dense-forest D3D12 failures point to device-removal risk, not just raw local-VRAM exhaustion; investigate retained runtime allocations, indirect-args/state lifetime, signed indirect-args fields such as `BaseVertexLocation`, and shader/buffer index safety before assuming the fix is only lowering visible-instance capacity.
 - Budgets are global to `VegetationRenderWorld`, not per container. Multiple active containers/SubScenes register pages into the same provider graph and share one prepared instance/args surface.
 - The current scripting toolchain tops out at `LangVersion 9.0`; use block-scoped namespaces, not file-scoped namespaces.
 - Use message-bus or singleton when cross communication is needed (prefer message bus with explicit sender and data).
@@ -106,4 +105,4 @@ Repo-used libraries and plugins:
 - Existing vegetation EditMode bake tests keep bake settings explicit per fixture instead of relying on authoring defaults
 - Use Universal Render Pipeline compatible shaders.
 - Shader wind is shipped for the compiled render-world path through compiled `FoliageWindMetadata` plus global wind constants. Recompile generated page assets after wind metadata compiler changes.
-- Cutover 2 compiled page assets are active classic-scene and SubScene renderer input. Do not add compatibility toggles or runtime bridges around the deleted tree-first path.
+- Compiled page assets are active classic-scene and SubScene renderer input. Do not add compatibility toggles or runtime bridges around deleted renderer paths.

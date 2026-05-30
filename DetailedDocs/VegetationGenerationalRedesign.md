@@ -1,8 +1,8 @@
 # Vegetation Generational Redesign
 
-Purpose: current authority for the foliage redesign after the hard cutover.
+Purpose: redesign authority for the compiled foliage runtime.
 
-Status: completed for the requested cutover scope. The active path is a single compiled packet renderer with opaque geometry, page/cell culling, global budgets, shadow packet selection, shader wind, BatchRendererGroup submission on supported raw-buffer graphics APIs, RenderGraph grouped-indirect submission on Direct3D12 and unsupported/faulted BRG setup, classic-scene providers, and closed SubScene providers. The retired tree-first renderer and its demo compute surface are no longer active package code.
+Status: completed baseline. The active path is a single compiled packet renderer with opaque geometry, page/cell culling, global budgets, shadow packet selection, shader wind, BatchRendererGroup submission on supported raw-buffer graphics APIs, RenderGraph grouped-indirect submission on Direct3D12 and unsupported/faulted BRG setup, classic-scene providers, and closed SubScene providers.
 
 ## Target
 
@@ -49,7 +49,7 @@ Ownership is intentionally narrow:
 
 ## Performance Regression Root Cause
 
-The redesign achieved the data cutover, but the runtime backend stayed on custom RenderGraph passes. `VegetationRendererFeature` executed `PrepareForCamera` / `PrepareForFrustums` inside render pass execution, then repacked selected instances and called `GraphicsBuffer.SetData` on the main thread. That made URP's render graph wait on our feature instead of letting Unity batch/cull the vegetation through its renderer-owned path.
+The initial compiled-page backend stayed on custom RenderGraph passes. `VegetationRendererFeature` executed `PrepareForCamera` / `PrepareForFrustums` inside render pass execution, then repacked selected instances and called `GraphicsBuffer.SetData` on the main thread. That made URP's render graph wait on our feature instead of letting Unity batch/cull the vegetation through its renderer-owned path.
 
 The design mistake was treating BRG as a later experiment even though the compiled pages were already shaped like BRG batches. The correct production path on supported APIs is now:
 
@@ -168,7 +168,7 @@ The compiler must not bake page/cell HLOD mesh assets by combining all trees in 
 
 ## Deleted Surfaces
 
-The hard cutover removed the old renderer family instead of keeping a parallel migration path.
+The old renderer family was removed instead of keeping a parallel migration path.
 
 Deleted categories:
 
@@ -190,7 +190,7 @@ The useful idea from `unityHISM` is the data shape: compact chunk blobs, fixed s
 
 ## Current Verification Contract
 
-The cutover is considered intact only when all of these stay true:
+The compiled renderer baseline is considered intact only when all of these stay true:
 
 1. active package code has no retired renderer classes, shader properties, compute dispatch, or shadow proxy pass controls
 2. active package has no `.compute`, `.cginc`, or `.hlsl` files outside the shipped shader contract
@@ -204,7 +204,7 @@ The cutover is considered intact only when all of these stay true:
 
 ## Remaining Production Work
 
-This redesign cutover is complete, but the package is not fully production-proven yet.
+This redesign baseline is complete, but the package is not fully production-proven yet.
 
 Required next work:
 
