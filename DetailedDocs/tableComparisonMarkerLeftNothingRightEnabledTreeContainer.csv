@@ -1,0 +1,679 @@
+Marker Name;Left Median;Right Median;Diff;Abs Diff;Count Left;Count Right;Count Delta
+UniversalRenderPipeline.RenderSingleCameraInternal: Main Camera;1.43;29.79;28.35;28.35;1254;909;-345
+ExecuteRenderGraph;1.41;29.74;28.33;28.33;1254;909;-345
+RenderLoop;3.67;30.99;27.32;27.32;4684;840;-3844
+PlayerLoop;2.30;29.04;26.74;26.74;1881;1467;-414
+UpdateScene;0.73;26.86;26.12;26.12;627;489;-138
+TimeUpdate.WaitForLastPresentationAndUpdateTime;0.01;25.79;25.78;25.78;627;489;-138
+GfxDeviceD3D12.WaitForLastPresentation;0.00;25.78;25.78;25.78;627;489;-138
+GfxDeviceD3D12.WaitForLastPresentation.WaitForGPU;2.64;25.78;23.13;23.13;5;489;484
+Gfx.WaitForGfxCommandsFromMainThread;0.93;-;-0.93;0.93;3433;-;-3433
+Semaphore.WaitForSignal;1.00;0.10;-0.90;0.90;6045;2384;-3661
+RenderPlayModeViewCameras;1.52;2.17;0.65;0.65;627;489;-138
+UnityEngine.CoreModule.dll!UnityEngine.Rendering::RenderPipelineManager.DoRenderLoop_Internal() [Invoke];1.48;2.13;0.65;0.65;627;489;-138
+Inl_RenderCameraStack;1.42;2.07;0.65;0.65;627;489;-138
+Inl_UniversalRenderTotal;1.45;2.10;0.65;0.65;627;489;-138
+Inl_UniversalRenderPipeline.RenderSingleCameraInternal: Main Camera;0.96;1.29;0.34;0.34;627;489;-138
+EditorLoop;2.18;1.87;-0.32;0.32;2508;1956;-552
+Vegetation RenderGraph Prepare;-;0.30;0.30;0.30;-;2727;2727
+Default World Unity.Entities.FixedStepSimulationSystemGroup;0.00;0.25;0.25;0.25;627;489;-138
+Inl_ExecuteRenderGraph;0.26;0.51;0.25;0.25;627;489;-138
+SimulationSystemGroup;0.05;0.30;0.25;0.25;627;489;-138
+Default World Unity.Entities.SimulationSystemGroup;0.05;0.29;0.25;0.25;627;489;-138
+UnityEngine.CoreModule.dll!::UpdateFunction.Invoke() [Invoke];0.41;0.64;0.23;0.23;5016;3912;-1104
+GfxDeviceD3D12.WaitForGPU;0.78;0.56;-0.22;0.22;612;458;-154
+Inl_ScriptableRenderContext.Submit;0.36;0.55;0.19;0.19;627;489;-138
+Inl_Vegetation RenderGraph Prepare;-;0.14;0.14;0.14;-;1467;1467
+BufferD3D12.UpdateInternal;0.11;0.25;0.14;0.14;10659;8820;-1839
+GPUResidentDrawer.UpdateSelection;0.10;-;-0.10;0.10;2;-;-2
+VoxGeoFol.Vegetation.ShadowPass;-;0.09;0.09;0.09;-;909;909
+Inl_RecordRenderGraph;0.27;0.35;0.08;0.08;627;489;-138
+Inl_On Record Render Graph;0.26;0.34;0.08;0.08;627;489;-138
+VoxGeoFol.VegetationRenderPass.RecordRenderGraph;-;0.08;0.08;0.08;-;1467;1467
+Gfx.RequestAsyncReadbackData;0.37;0.44;0.07;0.07;42;27;-15
+CreateCommittedResourceWithTag;0.35;0.42;0.07;0.07;42;27;-15
+Default World Unity.Physics.Systems.PhysicsSystemGroup;0.15;0.21;0.06;0.06;178;916;738
+VoxGeoFol.VegetationRenderPass.RecordShadowRenderGraph;-;0.06;0.06;0.06;-;489;489
+Vegetation Color Pass;-;0.05;0.05;0.05;-;909;909
+Inl_VoxGeoFol.Vegetation.ShadowPass;-;0.04;0.04;0.04;-;489;489
+VoxGeoFol.VegetationRenderPass.ExecuteShadowPass;-;0.04;0.04;0.04;-;489;489
+VoxGeoFol.VegetationRenderPass.DrawShadow;-;0.04;0.04;0.04;-;489;489
+Vegetation Depth Pass;-;0.03;0.03;0.03;-;909;909
+VoxGeoFol.VegetationRenderWorld.Render;-;0.03;0.03;0.03;-;2934;2934
+VoxGeoFol.VegetationRenderPass.Shadow.SubmitCascades;-;0.03;0.03;0.03;-;489;489
+VoxGeoFol.VegetationRenderPass.Shadow.SubmitCascade;-;0.03;0.03;0.03;-;1956;1956
+VoxGeoFol.VegetationRenderWorld.Render.DrawGroups;-;0.03;0.03;0.03;-;2934;2934
+Graphics.Blit;0.06;0.08;0.03;0.03;126;93;-33
+Default World Unity.Physics.Systems.PhysicsInitializeGroup;0.05;0.08;0.03;0.03;178;916;738
+Default World Unity.Physics.Systems.PhysicsInitializeGroupInternal;0.05;0.07;0.02;0.02;178;916;738
+VoxGeoFol.VegetationRenderWorld.Prepare;-;0.02;0.02;0.02;-;1467;1467
+InstanceOcclusionTest;0.24;0.21;-0.02;0.02;3762;2727;-1035
+VoxGeoFol.VegetationRenderPass.Shadow.ExtractCascades;-;0.02;0.02;0.02;-;489;489
+Gfx.DrawDynamic;0.02;0.04;0.02;0.02;42;27;-15
+Draw Main Light Shadowmap;0.14;0.12;-0.02;0.02;1254;909;-345
+MainLightShadow;0.14;0.12;-0.02;0.02;1254;909;-345
+JobHandle.Complete;0.03;0.05;0.02;0.02;7783;16371;8588
+Gfx.UpdateAsyncReadbackData;0.02;0.00;-0.02;0.02;42;54;12
+UnityEngine.CoreModule.dll!UnityEngine.Rendering::BatchRendererGroup.InvokeOnPerformCulling() [Invoke];0.15;0.13;-0.02;0.02;2508;1956;-552
+VoxGeoFol.VegetationRenderPass.Shadow.PrepareRenderWorld;-;0.02;0.02;0.02;-;489;489
+EnsureValidOcclusionTestResults;0.06;0.04;-0.02;0.02;1254;909;-345
+Default World Unity.Physics.Systems.PhysicsBuildWorldGroup;0.03;0.05;0.01;0.01;178;916;738
+CopyDepth;0.08;0.06;-0.01;0.01;2508;1818;-690
+SSAO;0.08;0.07;-0.01;0.01;1254;909;-345
+InputSystemPlayerLoopRunnerInitializationSystem;0.00;0.02;0.01;0.01;627;489;-138
+Default World Unity.Physics.Systems.PhysicsSimulationGroup;0.05;0.06;0.01;0.01;178;916;738
+VoxGeoFol.VegetationRenderWorld.Prepare.BroadPhase;-;0.01;0.01;0.01;-;978;978
+VoxGeoFol.VegetationRenderPass.ExecuteRasterPass;-;0.01;0.01;0.01;-;978;978
+Monobehaviour.OnMouse_;0.03;0.04;0.01;0.01;627;489;-138
+UpdateOccluders;0.25;0.23;-0.01;0.01;2508;1818;-690
+PreUpdate.SendMouseEvents;0.03;0.04;0.01;0.01;627;489;-138
+Idle;0.06;0.05;-0.01;0.01;1;3;2
+UnityEngine.InputLegacyModule.dll!UnityEngine::SendMouseEvents.DoSendMouseEvents() [Invoke];0.03;0.04;0.01;0.01;627;489;-138
+DrawScreenSpaceUI;0.01;0.03;0.01;0.01;2508;1818;-690
+BufferD3D12.InitializeResource;0.24;0.23;-0.01;0.01;6270;4200;-2070
+PreUpdate.NewInputUpdate;0.01;0.02;0.01;0.01;627;489;-138
+CullScriptable;0.20;0.19;-0.01;0.01;627;489;-138
+VoxGeoFol.VegetationRenderPass.DrawRaster;-;0.01;0.01;0.01;-;978;978
+SceneCulling;0.17;0.16;-0.01;0.01;627;489;-138
+CopyColor;0.04;0.03;-0.01;0.01;2508;1818;-690
+VoxGeoFol.VegetationRenderPass.Draw.Submit;-;0.01;0.01;0.01;-;978;978
+Camera.RenderSkybox;0.03;0.02;-0.01;0.01;1254;909;-345
+Default World Unity.Physics.Systems.ExportPhysicsWorld;0.02;0.02;0.01;0.01;178;916;738
+Inl_NRPRGComp_ExecuteInitializeResources;0.02;0.03;0.01;0.01;18183;17115;-1068
+BufferD3D12.CreateBufferResource;0.21;0.20;-0.01;0.01;6270;4200;-2070
+DrawSkybox;0.03;0.02;-0.01;0.01;1254;909;-345
+CreateResourceWithTag;0.20;0.19;-0.01;0.01;6270;4200;-2070
+VoxGeoFol.VegetationRenderPass.Draw.PrepareCamera;-;0.01;0.01;0.01;-;978;978
+Default World Unity.Physics.Systems.BuildPhysicsWorldDependencyResolver;0.01;0.02;0.01;0.01;178;916;738
+Inl_Vegetation Depth Pass;-;0.01;0.01;0.01;-;489;489
+RenderLoop.ScheduleDraw;0.05;0.05;-0.01;0.01;6897;5379;-1518
+LowLevelPhysics2D.PhysicsWorld.SimulateBatch;0.00;0.01;0.01;0.01;775;1252;477
+Inl_NRPRGComp_ExecuteBeginRenderpassCommand;0.03;0.03;0.01;0.01;5643;5379;-264
+Default World Unity.Physics.Systems.IntegrityCheckSystem;0.02;0.02;0.01;0.01;178;916;738
+Shadows.ExtractCasters;-;0.01;0.01;0.01;-;1;1
+EarlyUpdate.PhysicsResetInterpolatedTransformPosition;0.00;0.01;0.01;0.01;627;489;-138
+Inl_NRPRGComp_ExecuteDestroyResources;0.02;0.02;0.01;0.01;18183;17115;-1068
+UnityEngine.InputModule.dll!UnityEngineInternal.Input::NativeInputSystem.NotifyUpdate() [Invoke];0.00;0.01;0.01;0.01;627;489;-138
+Default World Unity.Physics.Systems.EnsureUniqueColliderSystem;0.02;0.03;0.01;0.01;356;1832;1476
+Default World Unity.Physics.Systems.BeforePhysicsSystemGroup;0.02;0.02;0.01;0.01;178;916;738
+RuntimeContentSystem;0.03;0.02;-0.01;0.01;627;489;-138
+InputUpdate;0.00;0.01;0.01;0.01;627;489;-138
+VoxGeoFol.VegetationRenderWorld.Prepare.EnsureGraph;-;0.01;0.01;0.01;-;1467;1467
+Shadows.PrepareDrawShadows;0.02;0.02;0.01;0.01;1254;978;-276
+UnityEngine.InputModule.dll!UnityEngineInternal.Input::NativeInputSystem.NotifyBeforeUpdate() [Invoke];0.00;0.01;0.01;0.01;627;489;-138
+Default World Unity.Entities.PresentationSystemGroup;0.10;0.10;-0.01;0.01;627;489;-138
+Setup Camera Properties;0.02;0.02;-0.01;0.01;2508;1818;-690
+Default World Unity.Entities.EndFixedStepSimulationEntityCommandBufferSystem;0.01;0.02;0.01;0.01;178;916;738
+Default World Unity.Physics.Systems.BuildPhysicsWorld;0.01;0.02;0.01;0.01;178;916;738
+VoxGeoFol.VegetationRenderWorld.Prepare.SelectPackets;-;0.01;0.01;0.01;-;489;489
+Shadows.ExecuteDrawShadows;0.05;0.04;0.00;0.00;2508;1956;-552
+Inl_Vegetation Color Pass;-;0.00;0.00;0.00;-;489;489
+Inl_Forward+ Upload;0.01;0.01;0.00;0.00;627;489;-138
+Shadows.ScheduleRenderJobs;0.02;0.02;0.00;0.00;2508;1956;-552
+VoxGeoFol.VegetationRendererFeature.AddRenderPasses;0.00;0.01;0.00;0.00;627;489;-138
+PresentationSystemGroup;0.10;0.10;0.00;0.00;627;489;-138
+BlitFinalToBackBuffer;0.02;0.01;0.00;0.00;1254;909;-345
+CullShadowCastersScriptable;0.05;0.05;0.00;0.00;627;489;-138
+Inl_ScriptableRenderer.AddRenderPasses;0.01;0.01;0.00;0.00;627;489;-138
+Inl_Setup Light Constants;0.04;0.04;0.00;0.00;627;489;-138
+Inl_Setup Forward Lights;0.04;0.04;0.00;0.00;627;489;-138
+Profiler.RequestScreenshot;0.02;0.02;0.00;0.00;42;33;-9
+GPUResidentDrawer;0.10;0.10;0.00;0.00;627;489;-138
+FixedUpdate.Physics2DFixedUpdate;0.01;0.01;0.00;0.00;148;763;615
+Update.ScriptRunBehaviourUpdate;0.02;0.02;0.00;0.00;627;489;-138
+BehaviourUpdate;0.02;0.02;0.00;0.00;627;489;-138
+FixedUpdate.PhysicsFixedUpdate;0.01;0.01;0.00;0.00;148;763;615
+Inl_ComputeHashRenderGraph;0.02;0.02;0.00;0.00;627;489;-138
+Default World Unity.Scenes.Editor.LiveConversionEditorSystemGroup;0.02;0.02;0.00;0.00;627;489;-138
+Default World Unity.Physics.Systems.PhysicsCreateBodyPairsGroup;0.02;0.02;0.00;0.00;178;916;738
+Default World Unity.Entities.CompanionGameObjectUpdateTransformSystem;0.01;0.01;0.00;0.00;627;489;-138
+PostUpdateScreenManagerAndInput;0.00;0.01;0.00;0.00;627;489;-138
+Default World Unity.Physics.Systems.BroadphaseSystem;0.02;0.02;0.00;0.00;178;916;738
+Profiler.FlushCounters;0.01;0.01;0.00;0.00;627;489;-138
+Default World Unity.Physics.Systems.PhysicsCreateContactsGroup;0.01;0.01;0.00;0.00;178;916;738
+Inl_Forward+ Setup;0.03;0.03;0.00;0.00;627;489;-138
+UnityEngine.IMGUIModule.dll!UnityEngine::GUIUtility.SetSkin() [Invoke];0.02;0.01;0.00;0.00;627;489;-138
+Inl_UniversalRenderPipeline.CreateCameraData;0.01;0.01;0.00;0.00;627;489;-138
+EndRenderQueueExtraction;0.01;0.01;0.00;0.00;1254;978;-276
+Default World Unity.Physics.Systems.NarrowphaseSystem;0.01;0.01;0.00;0.00;178;916;738
+Inl_UniversalRenderPipeline.ComputeShadowCasterCullingInfos;0.03;0.03;0.00;0.00;627;489;-138
+Gfx.SetRenderTarget;0.02;0.02;0.00;0.00;5685;3807;-1878
+Default World Unity.Physics.Systems.PhysicsCreateJacobiansGroup;0.01;0.01;0.00;0.00;178;916;738
+DrawDepthNormalPrepass;0.07;0.07;0.00;0.00;2508;1818;-690
+FixedUpdate.NewInputFixedUpdate;0.00;0.00;0.00;0.00;148;763;615
+UnsafeUtility.Malloc;0.00;0.00;0.00;0.00;805;1405;600
+PreLateUpdate.UIElementsUpdatePanels;0.01;0.01;0.00;0.00;627;489;-138
+RenderingCommandBuffer.PrepareKeywords;0.00;0.00;0.00;0.00;4389;12225;7836
+DrawOpaqueObjects;0.03;0.03;0.00;0.00;1254;909;-345
+Inl_UniversalRenderPipeline.InitializeAdditionalCameraData;0.01;0.01;0.00;0.00;627;489;-138
+Unity.RenderPipelines.Core.Runtime.dll!UnityEngine.Rendering::DebugUpdater.Update() [Invoke];0.01;0.01;0.00;0.00;627;489;-138
+Physics.PrepareSimulationStage;0.00;0.01;0.00;0.00;148;763;615
+PhysicsIntegrityCheckJobs:RecordDynamicBodyIntegrity (Burst);-;0.00;0.00;0.00;-;6;6
+Default World Unity.Physics.Systems.PhysicsSolveAndIntegrateGroup;0.01;0.01;0.00;0.00;178;916;738
+UpdateReflectionProbeAtlas;0.01;0.01;0.00;0.00;1254;909;-345
+GPUResidentDrawer.ProcessRenderers;0.01;0.01;0.00;0.00;1254;978;-276
+RegisterMaterialsAndMeshes;0.03;0.03;0.00;0.00;627;489;-138
+Default World Unity.Scenes.Editor.EditorSubSceneLiveConversionSystem;0.01;0.02;0.00;0.00;627;489;-138
+LowLevelPhysics2D.PhysicsWorld.Simulate;0.01;0.01;0.00;0.00;148;763;615
+PreUpdate.PhysicsUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.RegisterMaterialsAndMeshesSystem;0.03;0.03;0.00;0.00;627;489;-138
+GpuRecorder.FrameTick;0.03;0.03;0.00;0.00;627;420;-207
+Setup Forward Lights;0.02;0.01;0.00;0.00;1254;909;-345
+Default World Unity.Scenes.SceneSystemGroup;0.02;0.02;0.00;0.00;627;489;-138
+Default World VoxGeoFol.Features.Vegetation.SubScene.SubSceneVegetationBootstrapSystem;0.01;0.01;0.00;0.00;627;489;-138
+UnityEngine.CoreModule.dll!UnityEngine::UnitySynchronizationContext.ExecuteTasks() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+Update.ScriptRunDelayedTasks;0.00;0.01;0.00;0.00;627;489;-138
+EditorResources.Load;0.01;0.01;0.00;0.00;627;489;-138
+Default World Unity.Physics.Systems.CreateJacobiansSystem;0.01;0.01;0.00;0.00;178;916;738
+UnityEngine.InputModule.dll!UnityEngineInternal.Input::NativeInputSystem.ShouldRunUpdate() [Invoke];0.00;0.01;0.00;0.00;1402;1741;339
+ExportPhysicsWorld:CheckDynamicBodyIntegrity (Burst);-;0.00;0.00;0.00;-;19;19
+UnityEngine.UIElementsModule.dll!UnityEngine.UIElements::UIElementsRuntimeUtilityNative.UpdatePanels() [Invoke];0.00;0.01;0.00;0.00;627;489;-138
+Default World Unity.Physics.Systems.SolveAndIntegrateSystem;0.01;0.01;0.00;0.00;178;916;738
+Physics.SyncTransforms;0.00;0.00;0.00;0.00;148;763;615
+ObjectDispatcher.CollectInstancesAndTransforms;0.02;0.02;0.00;0.00;2508;1956;-552
+Inl_UpdateVolumeFramework;0.01;0.01;0.00;0.00;627;489;-138
+mscorlib.dll!System::Action`8.Invoke() [Invoke];0.01;0.01;0.00;0.00;1254;978;-276
+Initialization.UpdateCameraMotionVectors;0.00;0.00;0.00;0.00;627;489;-138
+InstanceDataSystem:QueryRendererGroupInstancesJob (Burst);0.00;-;0.00;0.00;2;-;-2
+Inl_CopyDepth;0.02;0.02;0.00;0.00;1254;978;-276
+GPUResidentDrawer.DispatchChanges;0.05;0.04;0.00;0.00;627;489;-138
+Inl_BlitFinalToBackBuffer;0.01;0.01;0.00;0.00;627;489;-138
+Material.SetPassFast;0.01;0.00;0.00;0.00;627;489;-138
+Profiler.FlushCountersWithFlushOnEndOfFrame;0.01;0.01;0.00;0.00;627;489;-138
+VoxGeoFol.VegetationRenderPass.Shadow.Validate;-;0.00;0.00;0.00;-;489;489
+Default World Unity.Rendering.EntitiesGraphicsSystem;0.02;0.02;0.00;0.00;627;489;-138
+Default World Unity.Rendering.MatrixPreviousInitializationSystem;0.01;0.01;0.00;0.00;627;489;-138
+Default World Unity.Scenes.ResolveSceneReferenceSystem;0.01;0.01;0.00;0.00;627;489;-138
+WaitForRenderJobs;0.00;0.01;0.00;0.00;6270;4545;-1725
+EarlyUpdate.RendererNotifyInvisible;0.00;0.00;0.00;0.00;627;489;-138
+PreUpdate.Physics2DUpdate;0.00;0.00;0.00;0.00;627;489;-138
+VoxGeoFol.VegetationRenderPass.Shadow.RestoreCamera;-;0.00;0.00;0.00;-;489;489
+ExportPhysicsWorld:CheckTotalBodyAndColliderIntegrity (Burst);-;0.00;0.00;0.00;-;23;23
+Inl_InstanceOcclusionTest;0.03;0.03;0.00;0.00;1881;1467;-414
+AssetDatabase.GetGUIDFromAssetPathV2;0.01;0.01;0.00;0.00;1254;978;-276
+Inl_UniversalRenderPipeline.SetupPerCameraShaderConstants;0.01;0.01;0.00;0.00;627;489;-138
+Profiler.CollectPhysicsStats;0.01;0.01;0.00;0.00;148;489;341
+ObjectDispatcher.DispatchTypeChanges;0.02;0.02;0.00;0.00;3135;2445;-690
+Default World Unity.Entities.UpdateWorldTimeSystem;0.01;0.01;0.00;0.00;627;489;-138
+Shadows.CullDirectionalShadowCasters;0.01;0.01;0.00;0.00;627;489;-138
+UnsafeUtility.Free;0.00;0.00;0.00;0.00;805;1405;600
+InputSystem.onBeforeUpdate;0.00;0.00;0.00;0.00;627;489;-138
+RenderLoop.CleanupNodeQueue;0.00;0.00;0.00;0.00;5016;3912;-1104
+InitializationSystemGroup;0.10;0.10;0.00;0.00;627;489;-138
+Inl_UpdateOccluders;0.02;0.02;0.00;0.00;1254;978;-276
+ParticleSystem.Update;0.00;0.01;0.00;0.00;627;489;-138
+LateBehaviourUpdate;0.00;0.00;0.00;0.00;627;489;-138
+GPUResidentDrawer.TransformMeshRenderers;0.01;0.00;0.00;0.00;627;489;-138
+TransformChangeSystem;0.00;0.00;0.00;0.00;6235;7453;1218
+PreLateUpdate.EndGraphicsJobsAfterScriptUpdate;0.00;0.00;0.00;0.00;627;489;-138
+PreLateUpdate.ScriptRunBehaviourLateUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Profiler.CollectLegacyStats;0.00;0.00;0.00;0.00;627;489;-138
+LowLevelPhysics2D.PhysicsWorld.PreSimulate;0.00;0.00;0.00;0.00;148;763;615
+Default World Unity.Physics.GraphicsIntegration.RecordMostRecentFixedTime;0.01;0.01;0.00;0.00;178;916;738
+PrepareSceneNodes;0.01;0.00;0.00;0.00;627;489;-138
+EndGraphicsJobs;0.00;0.00;0.00;0.00;1881;1467;-414
+Update.DirectorUpdate;0.00;0.00;0.00;0.00;627;489;-138
+PhysicsIntegrityCheckJobs:RecordColliderIntegrity (Burst);-;0.00;0.00;0.00;-;6;6
+PreLateUpdate.ParticleSystemBeginUpdateAll;0.01;0.01;0.00;0.00;627;489;-138
+VolumeManager.Update;0.01;0.01;0.00;0.00;627;489;-138
+Inl_UniversalRenderPipeline.InitializeStackedCameraData;0.00;0.00;0.00;0.00;627;489;-138
+PlayerConnection.Poll;0.03;0.03;0.00;0.00;1254;978;-276
+EarlyUpdate.PollPlayerConnection;0.02;0.02;0.00;0.00;627;489;-138
+Gfx.EndAsyncJobFrame;0.01;0.01;0.00;0.00;3135;2445;-690
+Inl_RenderPipeline.BeginCameraRendering;0.01;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.Systems.AfterPhysicsSystemGroup;0.00;0.00;0.00;0.00;178;916;738
+EarlyUpdate.UpdateMainGameViewRect;0.00;0.00;0.00;0.00;627;489;-138
+CullSceneDynamicObjects;0.00;-;0.00;0.00;3;-;-3
+ExportPhysicsWorld:CheckColliderIntegrity (Burst);-;0.00;0.00;0.00;-;22;22
+PreUpdate.InputForUIUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Inl_UniversalRenderPipeline.CreateRenderingData;0.02;0.02;0.00;0.00;627;489;-138
+UnityEngine.CoreModule.dll!UnityEngine.Rendering::BatchRendererGroup.InvokeOnFinishedCulling() [Invoke];0.03;0.03;0.00;0.00;2508;1956;-552
+Default World Unity.Rendering.StructuralChangePresentationSystemGroup;0.01;0.01;0.00;0.00;627;489;-138
+UnityEngine.InputForUIModule.dll!UnityEngine.InputForUI::EventProvider.NotifyUpdate() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+Profiler.FlushRenderCounters;0.00;0.00;0.00;0.00;627;420;-207
+Initialization.AsyncUploadTimeSlicedUpdate;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.UpdateInputManager;0.00;0.00;0.00;0.00;627;489;-138
+PreLateUpdate.AccessibilityUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.MatrixPreviousSystem;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.Physics2DEarlyUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Inl_DrawOpaqueObjects;0.00;0.00;0.00;0.00;627;489;-138
+InstanceDataSystem:UpdateSelectedInstancesJob (Burst);0.00;-;0.00;0.00;2;-;-2
+EditorConnection.CheckForIncomingConnections;0.01;0.01;0.00;0.00;627;489;-138
+Inl_ScriptableRenderer.SetupCullingParameters;0.01;0.01;0.00;0.00;627;489;-138
+afterCullingOutputReady.Invoke;0.01;0.01;0.00;0.00;1254;978;-276
+UpdateFilterSettings;0.00;0.00;0.00;0.00;627;489;-138
+Inl_CopyColor;0.00;0.01;0.00;0.00;1254;978;-276
+ReflectionProbes.Update;0.00;0.00;0.00;0.00;1254;909;-345
+D3D12ScratchAllocator.ReclaimMemory;0.01;0.01;0.00;0.00;29469;22260;-7209
+Default World Unity.Entities.InitializationSystemGroup;0.10;0.10;0.00;0.00;627;489;-138
+OnPerformCulling;0.00;0.00;0.00;0.00;1254;978;-276
+GUI.Repaint;0.01;0.01;0.00;0.00;1254;909;-345
+Inl_UniversalRenderPipeline.SetupPerFrameShaderConstants;0.00;0.00;0.00;0.00;627;489;-138
+PlayerCleanupCachedData;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.PlayerCleanupCachedData;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.ProfilerEndFrame;0.00;0.00;0.00;0.00;627;489;-138
+Physics.CalculateChangedColliderTransforms;0.00;0.00;0.00;0.00;148;763;615
+EarlyUpdate.ClearIntermediateRenderers;0.00;0.00;0.00;0.00;627;489;-138
+UnityEngine.Physics2DModule.dll!UnityEngine.LowLevelPhysics2D::PhysicsEvents.InvokePreSimulate() [Invoke];0.00;0.00;0.00;0.00;148;763;615
+Initialization.SynchronizeInputs;0.00;0.00;0.00;0.00;627;489;-138
+PreUpdate.IMGUISendQueuedEvents;0.00;0.00;0.00;0.00;627;489;-138
+Physics.Raycast;0.01;0.01;0.00;0.00;627;489;-138
+Inl_UniversalRenderPipeline.CreateShadowData;0.01;0.01;0.00;0.00;627;489;-138
+GPUResidentDrawer.ClassifyMaterials;0.01;0.01;0.00;0.00;627;489;-138
+D3D12ClientScratchAllocator.ReclaimMemory;0.01;0.01;0.00;0.00;29469;22260;-7209
+PrepareSceneCullingParameters;0.01;0.00;0.00;0.00;627;489;-138
+UnityEngine.CoreModule.dll!UnityEngine.Experimental.Rendering::ScriptableRuntimeReflectionSystemWrapper.Internal_ScriptableRuntimeReflectionSystemWrapper_TickRealtimeProbes() [Invoke];0.01;0.01;0.00;0.00;627;489;-138
+mscorlib.dll!System::Action`6.Invoke() [Invoke];0.01;0.01;0.00;0.00;3135;2445;-690
+Cleanup Unused Cached Data;0.00;0.00;0.00;0.00;627;489;-138
+FixedUpdate.AudioFixedUpdate;0.00;0.00;0.00;0.00;148;763;615
+Physics.RunSimulationStage;0.00;0.00;0.00;0.00;148;763;615
+BeginRenderQueueExtraction;0.01;0.01;0.00;0.00;1254;978;-276
+CullResults.CreateSharedRendererScene;0.01;0.01;0.00;0.00;627;489;-138
+Default World Unity.Physics.Systems.InjectTemporalCoherenceDataSystem;0.00;0.00;0.00;0.00;178;916;738
+UnityEngine.AccessibilityModule.dll!UnityEngine.Accessibility::AccessibilityManager.Internal_Update() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+PreUpdate.AIUpdate;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.ScriptRunDelayedStartupFrame;0.00;0.00;0.00;0.00;627;489;-138
+TimeManager.Update;0.00;0.00;0.00;0.00;627;489;-138
+Profiler.SerializeStats;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.LightProbeUpdateSystem;0.00;0.00;0.00;0.00;627;489;-138
+Draw DBuffer;0.00;0.00;0.00;0.00;1254;909;-345
+PreUpdate.WindUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Physics.Simulate;0.00;0.00;0.00;0.00;148;763;615
+SpeedTreeWindManager.Update;0.00;0.00;0.00;0.00;627;489;-138
+Compute.Dispatch;0.02;0.02;0.00;0.00;8151;7824;-327
+PostLateUpdate.UpdateAudio;0.01;0.01;0.00;0.00;627;489;-138
+Inl_Setup Camera Properties;0.01;0.01;0.00;0.00;1254;978;-276
+Inl_Draw Main Light Shadowmap;0.01;0.01;0.00;0.00;627;489;-138
+ObjectDispatcher.FilterInstancesAndCreateScriptingArray;0.01;0.01;0.00;0.00;3135;2445;-690
+UpdatePreFrame;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.ProcessRemoteInput;0.00;0.01;0.00;0.00;627;489;-138
+FrameEvents.OnBeforeRenderCallback;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.UpdateAllRenderers;0.00;0.00;0.00;0.00;627;489;-138
+Inl_Setup Main Shadowmap;0.00;0.00;0.00;0.00;627;489;-138
+Inl_Forward+ Complete;0.00;0.00;0.00;0.00;627;489;-138
+Inl_DrawDepthNormalPrepass;0.00;0.00;0.00;0.00;1254;978;-276
+Find dependency chain;0.00;0.00;0.00;0.00;1878;1482;-396
+CullSceneDynamicObjectsCombineJob;0.00;-;0.00;0.00;3;-;-3
+Inl_Sort Render Passes;0.00;0.00;0.00;0.00;627;489;-138
+FillQuadIndexBuffer;0.00;0.00;0.00;0.00;42;27;-15
+Inl_DrawScreenSpaceUI;0.00;0.00;0.00;0.00;1254;978;-276
+EntityCommandBuffer.Dispose;0.00;0.00;0.00;0.00;178;916;738
+Graphics.DrawProcedural;0.00;0.00;0.00;0.00;4389;3423;-966
+CoroutinesDelayedCalls;0.00;0.00;0.00;0.00;2656;2719;63
+Default World Unity.Rendering.HybridLightBakingDataSystem;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.UpdatePresentationSystemGroup;0.00;0.01;0.00;0.00;627;489;-138
+ProcessRemoteInput;0.00;0.01;0.00;0.00;627;489;-138
+Physics2D.Simulate;0.00;0.00;0.00;0.00;148;763;615
+Inl_RenderPipeline.EndCameraRendering;0.01;0.01;0.00;0.00;627;489;-138
+Default World Unity.Physics.Authoring.PhysicsDebugDisplayGroup;0.01;0.01;0.00;0.00;627;489;-138
+UnityEngine.IMGUIModule.dll!UnityEngine::Event.Internal_MakeMasterEventCurrent() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+UpdatePreloading;0.00;0.00;0.00;0.00;627;489;-138
+PxScene.simulate;0.00;0.00;0.00;0.00;148;763;615
+Inl_ScriptableRenderer.InternalFinishRenderingCommon;0.00;0.00;0.00;0.00;627;489;-138
+UIElements.CollectLayoutNodes;0.00;0.00;0.00;0.00;627;489;-138
+UIR.Free;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.Systems.PhysicsAnalyticsSystem;0.00;0.00;0.00;0.00;178;916;738
+Default World Unity.Physics.Systems.ColliderBlobCleanupSystem;0.00;0.00;0.00;0.00;178;916;738
+suspendPointHook.Invoke;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.UpdateCanvasRectTransform;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.UpdateStreamingManager;0.00;0.00;0.00;0.00;627;489;-138
+FixedUpdate.PhysicsClothFixedUpdate;0.00;0.00;0.00;0.00;148;763;615
+Audio.FMODSystemUpdate;0.01;0.01;0.00;0.00;627;489;-138
+PostLateUpdate.MemoryFrameMaintenance;0.00;0.00;0.00;0.00;627;489;-138
+Inl_UpdateReflectionProbeAtlas;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Entities.CompanionGameObjectUpdateSystem;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.Systems.PhysicsSimulationPickerSystem;0.00;0.00;0.00;0.00;178;916;738
+DrawTransparentObjects;0.00;0.00;0.00;0.00;1254;909;-345
+Default World Unity.Scenes.SceneSectionStreamingSystem;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.UpdatePreloading;0.00;0.00;0.00;0.00;627;489;-138
+Loading.UpdatePreloading;0.00;0.00;0.00;0.00;627;489;-138
+AudioManager.FixedUpdate;0.00;0.00;0.00;0.00;148;763;615
+Application.Integrate Assets in Background;0.00;0.00;0.00;0.00;627;489;-138
+ComputeStats;0.00;0.00;0.00;0.00;627;489;-138
+Shadows.CullingCallbacks;0.00;0.00;0.00;0.00;627;489;-138
+LowLevelPhysics2D.DrawWorld.UpdateLifetimes;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.Systems.InvalidatedTemporalCoherenceCleanupSystem;0.00;0.00;0.00;0.00;178;916;738
+Default World Unity.Physics.Systems.InjectTemporalCoherenceDataLastResortSystem;0.00;0.00;0.00;0.00;178;916;738
+Default World Unity.Physics.Authoring.DisplayBroadphaseAabbsSystem;0.00;0.00;0.00;0.00;627;489;-138
+RenderTexture.GarbageCollectTemporary;0.00;0.00;0.00;0.00;1254;978;-276
+AudioManager.Update;0.01;0.01;0.00;0.00;627;489;-138
+WaitForJobGroupID;0.01;0.01;0.00;0.00;1878;1482;-396
+Default World Unity.Entities.LateSimulationSystemGroup;0.01;0.01;0.00;0.00;627;489;-138
+Inl_MainLightShadow;0.01;0.01;0.00;0.00;627;489;-138
+Inl_ScriptableRenderer.SetPerCameraShaderVariables;0.01;0.01;0.00;0.00;1254;978;-276
+EditorConnection.PollAllCustomMessages;0.01;0.01;0.00;0.00;627;489;-138
+Default World Unity.Transforms.TransformSystemGroup;0.01;0.00;0.00;0.00;627;489;-138
+BatchRendererGroup.UpdateMetadataCache;0.00;0.00;0.00;0.00;2508;1956;-552
+ScheduleShadowSplitMasksComputation;0.00;0.00;0.00;0.00;627;489;-138
+Profiler.ScreenshotUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.UpdateHybridChunksStructure;0.00;0.00;0.00;0.00;627;489;-138
+Inl_RenderPipeline.BeginContextRendering;0.00;0.00;0.00;0.00;627;489;-138
+LowLevelPhysics2D.DrawWorld.CompileDrawResults;0.00;0.00;0.00;0.00;627;489;-138
+AddCustomActiveLocalLights;0.00;0.00;0.00;0.00;627;489;-138
+FindBrightestDirectionalLight;0.00;0.00;0.00;0.00;1254;978;-276
+PreLateUpdate.Physics2DLateUpdate;0.00;0.00;0.00;0.00;627;489;-138
+AddDirectionalLights;0.00;0.00;0.00;0.00;627;489;-138
+LOD.ComputeLOD;0.00;0.00;0.00;0.00;1254;978;-276
+FindActiveLights;0.00;0.00;0.00;0.00;627;489;-138
+Physics2D.CollectProfileInfo;0.00;0.00;0.00;0.00;627;489;-138
+Inl_VFX Process Camera;0.00;0.00;0.00;0.00;627;489;-138
+UnityEngine.CoreModule.dll!UnityEngine::Application.InvokeOnBeforeRender() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+Inl_Setup Additional Shadows;0.00;0.00;0.00;0.00;627;489;-138
+Renderers.OncePerFrameUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.ManageSHPropertiesSystem;0.00;0.00;0.00;0.00;627;489;-138
+Inl_Draw DBuffer;0.00;0.00;0.00;0.00;627;489;-138
+Profiler.FlushMemoryCounters;0.00;0.00;0.00;0.00;627;489;-138
+LowLevelPhysics2D.PhysicsWorld.PostSimulate;0.00;0.00;0.00;0.00;148;763;615
+Default World Unity.Physics.GraphicsIntegration.BufferInterpolatedRigidBodiesMotion;0.00;0.00;0.00;0.00;178;916;738
+Default World Unity.Entities.EndSimulationEntityCommandBufferSystem;0.00;0.00;0.00;0.00;627;489;-138
+Inl_DrawTransparentObjects;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.VFXUpdate;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.ShaderHandleErrors;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.GraphicsIntegration.CopyPhysicsVelocityToSmoothing;0.00;0.00;0.00;0.00;178;916;738
+PreUpdate.UpdateVideo;0.00;0.00;0.00;0.00;627;489;-138
+CullObjectsWithoutUmbra;0.00;-;0.00;0.00;3;-;-3
+UnityEngine.Physics2DModule.dll!UnityEngine.LowLevelPhysics2D::PhysicsEvents.InvokePostSimulate() [Invoke];0.00;0.00;0.00;0.00;148;763;615
+Physics2D.GetRayIntersection;0.00;0.00;0.00;0.00;627;489;-138
+UIEvents.UpdateCanvasRectTransform;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.Systems.SyncCustomPhysicsProxySystem;0.00;0.00;0.00;0.00;178;916;738
+EarlyUpdate.UnityWebRequestUpdate;0.00;0.00;0.00;0.00;627;489;-138
+UnityEngine.AIModule.dll!UnityEngine.AI::NavMesh.Internal_CallOnNavMeshPreUpdate() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+Unity.ResourceManager.dll!::MonoBehaviourCallbackHooks.Update() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.ExecuteMainThreadJobs;0.00;0.00;0.00;0.00;627;489;-138
+PrepareUpdateRendererBoundingVolumes;0.00;0.00;0.00;0.00;3762;2934;-828
+PostLateUpdate.UpdateCustomRenderTextures;0.00;0.00;0.00;0.00;627;489;-138
+CustomRenderTextures.Update;0.00;0.00;0.00;0.00;1254;909;-345
+LowLevelPhysics2D.PhysicsWorld.RenderWorlds;0.00;0.00;0.00;0.00;627;489;-138
+CompleteJobs;0.00;0.00;0.00;0.00;627;489;-138
+UnityEngine.CoreModule.dll!UnityEngine.Rendering::RenderPipelineManager.HandleRenderPipelineChange() [Invoke];0.00;0.00;0.00;0.00;1254;978;-276
+EarlyUpdate.ClearLines;0.00;0.00;0.00;0.00;627;489;-138
+FixedUpdate.ScriptRunBehaviourFixedUpdate;0.00;0.00;0.00;0.00;148;763;615
+Default World Unity.Entities.VariableRateSimulationSystemGroup;0.00;0.00;0.00;0.00;627;489;-138
+SpeedTreeWindManager.UpdateGlobalAndLocalWinds;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.DeformationsInPresentation;0.01;0.01;0.00;0.00;627;489;-138
+Default World Unity.Entities.WorldUpdateAllocatorResetSystem;0.01;0.01;0.00;0.00;627;489;-138
+D3D12ScratchAllocator.ReclaimScratchBuffers;0.00;0.00;0.00;0.00;29469;22260;-7209
+Default World Unity.Rendering.AddLODRequirementComponents;0.01;0.01;0.00;0.00;627;489;-138
+CullSendEvents;0.01;0.01;0.00;0.00;627;489;-138
+Inl_Initialize Frame;0.01;0.01;0.00;0.00;627;489;-138
+Inl_UniversalRenderPipeline.CreateLightData;0.00;0.00;0.00;0.00;627;489;-138
+Audibility computation;0.00;0.00;0.00;0.00;627;489;-138
+UGUI.Rendering.UpdateBatches;0.00;0.00;0.00;0.00;627;489;-138
+EndUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.AddWorldAndChunkRenderBounds;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Entities.RetainBlobAssetSystem;0.00;0.00;0.00;0.00;627;489;-138
+UpdateHybridChunksStructure;0.00;0.00;0.00;0.00;627;489;-138
+InstanceDataSystem:MotionUpdateJob (Burst);0.00;0.00;0.00;0.00;609;466;-143
+UpdateScreenManagerAndInput;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.UpdateContentLoading;0.00;0.00;0.00;0.00;627;489;-138
+Inl_Draw Additional Lights Shadowmap;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Entities.BeginSimulationEntityCommandBufferSystem;0.00;0.00;0.00;0.00;627;489;-138
+Initialize Frame;0.00;0.00;0.00;0.00;1254;909;-345
+Physics2D.SyncTransformChanges;0.00;0.00;0.00;0.00;148;763;615
+FixedUpdate.DirectorFixedUpdate;0.00;0.00;0.00;0.00;148;763;615
+Default World Unity.Physics.Authoring.CleanPhysicsDebugDataSystem_Default;0.00;0.00;0.00;0.00;178;916;738
+Set Global Texture;0.00;0.00;0.00;0.00;2508;1818;-690
+GPUResidentDrawer.FindUnsupportedRenderers;0.00;0.00;0.00;0.00;627;489;-138
+Inl_Set Global Texture;0.00;0.00;0.00;0.00;1254;978;-276
+PreLateUpdate.DirectorDeferredEvaluate;0.00;0.00;0.00;0.00;627;489;-138
+NavMeshManager;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.UpdateVideoTextures;0.00;0.00;0.00;0.00;627;489;-138
+Physics2D.SyncRigidbodyTransformChanges;0.00;0.00;0.00;0.00;148;763;615
+EarlyUpdate.UpdateAsyncInstantiate;0.00;0.00;0.00;0.00;627;489;-138
+GlobalEventQueue;0.00;0.00;0.00;0.00;627;489;-138
+Inl_DrawSkybox;0.00;0.00;0.00;0.00;627;489;-138
+FixedUpdate.LegacyFixedAnimationUpdate;0.00;0.00;0.00;0.00;148;763;615
+Profiler.CollectEditorStats;0.00;0.00;0.00;0.00;627;489;-138
+RenderTarget.GrabPixels;0.00;0.00;0.00;0.00;42;33;-9
+PostLateUpdate.UpdateRectTransform;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Entities.BeginPresentationEntityCommandBufferSystem;0.00;0.00;0.00;0.00;627;489;-138
+EngineJob;0.00;0.00;0.00;0.00;613;550;-63
+Default World Unity.Rendering.PushSkinMatrixSystem;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.SkinningDeformationSystem;0.00;0.00;0.00;0.00;627;489;-138
+TerrainManager.CullAllTerrains;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.Authoring.DisplayJointsSystem_Default;0.00;0.00;0.00;0.00;627;489;-138
+UpdateEntitiesGraphicsBatches;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.PushBlendWeightSystem;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Transforms.LocalToWorldSystem;0.00;0.00;0.00;0.00;627;489;-138
+BatchRendererGroup.AddReader;0.00;0.00;0.00;0.00;8778;6848;-1930
+Default World Unity.Physics.Authoring.DisplayContactsSystem;0.00;0.00;0.00;0.00;178;916;738
+Physics.Interpolation;0.00;0.00;0.00;0.00;775;978;203
+Default World Unity.Rendering.BlendShapeDeformationSystem;0.00;0.00;0.00;0.00;627;489;-138
+CullResultsToNativeArrays;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.InsightsUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Entities.EndInitializationEntityCommandBufferSystem;0.00;0.00;0.00;0.00;627;489;-138
+UnityEngine.CoreModule.dll!UnityEngine.Rendering::SupportedRenderingFeatures.IsUIOverlayRenderedBySRP() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.Authoring.DisplayBodyCollidersSystem;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.ScriptRunDelayedDynamicFrameRate;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.UpdateResolution;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.DirectorLateUpdate;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.XRUpdate;0.00;0.00;0.00;0.00;627;489;-138
+CleanUp.TextRenderingGarbageCollect;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.DispatchEventQueueEvents;0.00;0.00;0.00;0.00;627;489;-138
+PreLateUpdate.DirectorUpdateAnimationBegin;0.00;0.00;0.00;0.00;627;489;-138
+Camera.Render;0.00;0.00;0.00;0.00;1254;909;-345
+Default World Unity.Physics.Authoring.DisplayColliderAabbsSystem_Default;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.InputEndFrame;0.00;0.00;0.00;0.00;627;489;-138
+LowLevelPhysics2D.PhysicsWorld.WriteTransformTweens;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.Authoring.DisplayBodyColliderEdges_Default;0.00;0.00;0.00;0.00;627;489;-138
+ObjectDispatcher.CollectInstances;0.00;0.00;0.00;0.00;3135;2445;-690
+RayTracingAccelerationStructureManager.Update;0.00;0.00;0.00;0.00;627;489;-138
+AsyncUploadManager.ScheduleAsyncCommands;0.00;0.00;0.00;0.00;1254;840;-414
+TextRendering.CollectGarbage;0.00;0.00;0.00;0.00;627;489;-138
+addCustomLights.Invoke;0.00;0.00;0.00;0.00;4389;3423;-966
+CompileRenderGraph;0.00;0.00;0.00;0.00;1254;909;-345
+EarlyUpdate.UpdateAsyncReadbackManager;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Entities.BeginVariableRateSimulationEntityCommandBufferSystem;0.00;0.00;0.00;0.00;43;164;121
+VFX Process Camera;0.00;0.00;0.00;0.00;1254;909;-345
+TextureStreamingManager.Update;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.GpuTimestamp;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.BatchModeUpdate;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.ResetFrameStatsAfterPresent;0.00;0.00;0.00;0.00;627;489;-138
+Setup Debug Properties;0.00;0.00;0.00;0.00;1254;909;-345
+FixedUpdate.ClearLines;0.00;0.00;0.00;0.00;148;763;615
+Inl_DecalDrawErrorSystem.Execute;0.00;0.00;0.00;0.00;627;489;-138
+FinalizeUpdateRendererBoundingVolumes;0.00;0.00;0.00;0.00;627;489;-138
+UpdateRendererBoundingVolumes;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.DirectorRenderImage;0.00;0.00;0.00;0.00;627;489;-138
+QueuePrepareIntegrateMainThreadObjects;0.00;0.00;0.00;0.00;1254;978;-276
+FixedUpdate.DirectorFixedSampleTime;0.00;0.00;0.00;0.00;148;763;615
+FixedUpdate.DirectorFixedUpdatePostPhysics;0.00;0.00;0.00;0.00;148;763;615
+FixedUpdate.ScriptRunDelayedFixedFrameRate;0.00;0.00;0.00;0.00;148;763;615
+Default World Unity.Physics.Authoring.DisplayCollisionEventsSystem;0.00;0.00;0.00;0.00;178;916;738
+Director.PrepareFrame;0.00;0.00;0.00;0.00;3431;3971;540
+ParticleSystem.EndUpdateAll;0.00;0.00;0.00;0.00;2508;1956;-552
+Default World Unity.Rendering.PushMeshDataSystem;0.00;0.00;0.00;0.00;627;489;-138
+Update;0.00;0.00;0.00;0.00;627;489;-138
+PreLateUpdate.ConstraintManagerUpdate;0.00;0.00;0.00;0.00;627;489;-138
+BatchRendererGroup.AcquireWrite;0.00;0.00;0.00;0.00;2508;1956;-552
+UGUI.Rendering.EmitWorldScreenspaceCameraGeometry;0.00;0.00;0.00;0.00;1254;978;-276
+PostLateUpdate.AccessibilityLateUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Inl_Draw Decal Forward Emissive;0.00;0.00;0.00;0.00;627;489;-138
+Connections.Process;0.00;0.00;0.00;0.00;1254;978;-276
+updateScene.Invoke;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Entities.BeginFixedStepSimulationEntityCommandBufferSystem;0.00;0.00;0.00;0.00;178;916;738
+Initialization.XREarlyUpdate;0.00;0.00;0.00;0.00;627;489;-138
+EntityCommandBuffer.Playback;0.00;0.00;0.00;0.00;178;916;738
+PreLateUpdate.AIUpdatePostScript;0.00;0.00;0.00;0.00;627;489;-138
+Inl_DecalEntityManager.SortChunks;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.Authoring.PhysicsDebugDisplaySystem_Default;0.00;0.00;0.00;0.00;627;489;-138
+ObjectDispatcher.FilterInstancesJob;0.00;0.00;0.00;0.00;609;464;-145
+EarlyUpdate.AnalyticsCoreStatsUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Inl_RenderPipeline.EndContextRendering;0.02;0.02;0.00;0.00;627;489;-138
+JobDebuggerFrameMaintenance;0.00;0.00;0.00;0.00;627;489;-138
+UpdatePostFrame;0.00;0.00;0.00;0.00;627;489;-138
+PlayerEndOfFrame;0.01;0.01;0.00;0.00;1254;909;-345
+DestroyCullResults;0.01;0.01;0.00;0.00;627;489;-138
+PostLateUpdate.PlayerUpdateCanvases;0.00;0.00;0.00;0.00;627;489;-138
+FrameEvents.NewInputBeforeRenderUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Inl_UniversalRenderPipeline.GetMainLightIndex;0.00;0.00;0.00;0.00;627;489;-138
+Inl_Set Motion Vector Global Matrices;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.RenderAs2DUpdate;0.00;0.00;0.00;0.00;627;489;-138
+ReflectionProbeAnchorManagerUpdate;0.00;0.00;0.00;0.00;1881;1467;-414
+GeneralConnection.Poll;0.00;0.00;0.00;0.00;1254;978;-276
+BatchRendererGroup.InvalidateStaleBatches;0.00;0.00;0.00;0.00;2508;1956;-552
+BatchRendererGroup.CreateMissingMetadata;0.00;0.00;0.00;0.00;8778;6846;-1932
+UI.RenderOverlays;0.00;0.00;0.00;0.00;1254;909;-345
+CullAllVisibleLights;0.02;0.02;0.00;0.00;627;489;-138
+ReflectionProbeAnchorPositionUpdate;0.00;0.00;0.00;0.00;1881;1467;-414
+Inl_CompileRenderGraph;0.01;0.01;0.00;0.00;627;489;-138
+Inl_SSAO;0.01;0.01;0.00;0.00;627;489;-138
+Shadows.ExtractShaderPassContext;0.01;0.01;0.00;0.00;2508;1956;-552
+UIEvents.WillRenderCanvases;0.00;0.00;0.00;0.00;627;489;-138
+Initialization.DirectorSampleTime;0.00;0.00;0.00;0.00;627;489;-138
+Director.SampleTime;0.00;0.00;0.00;0.00;627;489;-138
+Inl_ScriptableRenderer.ClearRenderingState;0.00;0.00;0.00;0.00;627;489;-138
+InstanceDataSystem:UpdateCompactedInstanceVisibilityJob (Burst);0.00;0.00;0.00;0.00;621;489;-132
+Default World Unity.Entities.BeginInitializationEntityCommandBufferSystem;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.PhysicsSkinnedClothBeginUpdate;0.00;0.00;0.00;0.00;627;489;-138
+ClothManager.LateUpdate;0.00;0.00;0.00;0.00;627;489;-138
+AsyncUploadManager.AsyncResourceUploadAll;0.00;0.00;0.00;0.00;1254;840;-414
+Default World Unity.Scenes.SceneSystem;0.00;0.00;0.00;0.00;627;489;-138
+Inl_LightCookies;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.LODRequirementsUpdateSystem;0.00;0.00;0.00;0.00;627;489;-138
+FrameEvents.XRBeginFrame;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Transforms.ParentSystem;0.00;0.00;0.00;0.00;627;489;-138
+UnityEngine.UIModule.dll!UnityEngine::Canvas.SendPreWillRenderCanvases() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Entities.CompanionGameObjectLiveBakingInitSystem;0.00;0.00;0.00;0.00;627;489;-138
+Unity.ResourceManager.dll!::MonoBehaviourCallbackHooks.LateUpdate() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.InstantiateDeformationSystem;0.00;0.00;0.00;0.00;627;489;-138
+UIEvents.CanvasManagerEmitOffScreenGeometry;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.GraphicsIntegration.SmoothRigidBodiesGraphicalMotion;0.00;0.00;0.00;0.00;627;489;-138
+LightCookies;0.00;0.00;0.00;0.00;1254;909;-345
+Default World Unity.Scenes.WeakAssetReferenceLoadingSystem;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Rendering.RenderBoundsUpdateSystem;0.00;0.00;0.00;0.00;627;489;-138
+UnityEngine.CoreModule.dll!UnityEngine.Rendering::SupportedRenderingFeatures.IsLightmapBakeTypeSupportedByRef() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Entities.EntitiesJournaling+FrameCountSystem;0.00;0.00;0.00;0.00;627;489;-138
+Draw Decal Forward Emissive;0.00;0.00;0.00;0.00;1254;909;-345
+Profiler.FrameMetadata;0.00;0.00;0.00;0.00;2592;2022;-570
+GC.Alloc;0.00;0.00;0.00;0.00;1034;489;-545
+ContentLoadFrontend.IntegrateUpdate;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.ObjectDispatcherPostLateUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Draw Additional Lights Shadowmap;0.00;0.00;0.00;0.00;1254;909;-345
+GPUResidentDrawer.ProcessCameras;0.00;0.00;0.00;0.00;627;489;-138
+GPUResidentDrawer.ProcessRendererMaterialAndMeshChanges;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.TriggerEndOfFrameCallbacks;0.00;0.00;0.00;0.00;627;489;-138
+Remove;0.00;0.00;0.00;0.00;627;489;-138
+Flush DSP connections;0.00;0.00;0.00;0.00;627;489;-138
+AddNew;0.00;0.00;0.00;0.00;627;489;-138
+UnityEngine.CoreModule.dll!UnityEngine.Rendering::OnDemandRendering.GetRenderFrameInterval() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+ConstraintManager::Update;0.00;0.00;0.00;0.00;627;489;-138
+Inl_Setup Debug Properties;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.UpdateVideo;0.00;0.00;0.00;0.00;627;489;-138
+LowLevelPhysics2D.PhysicsWorld.Transform.WriteTweens;0.00;0.00;0.00;0.00;627;489;-138
+RewindAllocators;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.Authoring.DisplayMassPropertiesSystem;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.UpdateAllSkinnedMeshes;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.ParticleSystemEndUpdateAll;0.00;0.00;0.00;0.00;627;489;-138
+Preload Single Step;0.00;0.00;0.00;0.00;627;489;-138
+Connections.Poll;0.00;0.00;0.00;0.00;1254;978;-276
+GPUResidentDrawer.FreeRendererGroupInstances;0.00;0.00;0.00;0.00;627;489;-138
+UnityEngine.AccessibilityModule.dll!UnityEngine.Accessibility::AccessibilityManager.Internal_LateUpdate() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+PreLateUpdate.LegacyAnimationUpdate;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.UpdateTextureStreamingManager;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.Authoring.DisplayTriggerEventsSystem;0.00;0.00;0.00;0.00;178;916;738
+Set Motion Vector Global Matrices;0.00;0.00;0.00;0.00;1254;909;-345
+PostLateUpdate.GUIClearEvents;0.00;0.00;0.00;0.00;627;489;-138
+UpdateAllBatches;0.00;0.00;0.00;0.00;627;489;-138
+FindDirectionalShadowCastingLights;0.00;0.00;0.00;0.00;627;489;-138
+ClothScene.Update;0.00;0.00;0.00;0.00;627;489;-138
+GarbageCollector.CollectIncremental;0.00;0.00;0.00;0.00;627;489;-138
+ApplyPass.PrepareKeywords;0.00;0.00;0.00;0.00;627;489;-138
+Director.ProcessFrame;0.00;0.00;0.00;0.00;3431;3971;540
+UnityEngine.UIModule.dll!UnityEngine::Canvas.SendWillRenderCanvases() [Invoke];0.00;0.00;0.00;0.00;627;489;-138
+ScheduleCullingGroups;0.00;0.00;0.00;0.00;627;489;-138
+FrameEvents.XREndFrame;0.00;0.00;0.00;0.00;627;489;-138
+SoundManager.Update;0.00;0.00;0.00;0.00;627;489;-138
+SkinnedMeshOncePerFrameUpdate;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.PhysicsSkinnedClothFinishUpdate;0.00;0.00;0.00;0.00;627;489;-138
+GPUResidentDrawer.ProcessMeshes;0.00;0.00;0.00;0.00;627;489;-138
+Profiler.FlushFileIOCounters;0.00;0.00;0.00;0.00;627;489;-138
+Terrain.Trees.OnWillRender;0.00;0.00;0.00;0.00;1254;978;-276
+GfxDeviceD3D12.InsertEditorWaitForPresentFence;0.00;0.00;0.00;0.00;627;420;-207
+Update Lights;0.00;0.00;0.00;0.00;627;489;-138
+FixedBehaviourUpdate;0.00;0.00;0.00;0.00;148;763;615
+Physics2D.SyncColliderTransformChanges;0.00;0.00;0.00;0.00;148;763;615
+GPUResidentDrawer.ProcessLODGroups;0.00;0.00;0.00;0.00;627;489;-138
+Inl_DecalUpdateCulledSystem.Execute;0.00;0.00;0.00;0.00;627;489;-138
+Update.ScriptRunDelayedDynamicFrameRate;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.TilemapRendererEarlyUpdate;0.00;0.00;0.00;0.00;627;489;-138
+PreLateUpdate.DirectorUpdateAnimationEnd;0.00;0.00;0.00;0.00;627;489;-138
+GPUResidentDrawer.ProcessMaterials;0.00;0.00;0.00;0.00;627;489;-138
+Application.FlushRenderStats;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.XRPreEndFrame;0.00;0.00;0.00;0.00;627;489;-138
+DecalDrawFowardEmissiveSystem.Execute;0.00;0.00;0.00;0.00;1254;909;-345
+ObjectDispatcher.SortInstances;0.00;0.00;0.00;0.00;627;489;-138
+ParticleSystem.WaitForPreviousRenderingToFinish;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.PerformanceAnalyticsUpdate;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.SortingGroupsUpdate;0.00;0.00;0.00;0.00;627;489;-138
+DecalDrawIntoDBufferSystem.Execute;0.00;0.00;0.00;0.00;1254;909;-345
+FindShadowCastingLights;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.XRPostLateUpdate;0.00;0.00;0.00;0.00;627;489;-138
+EarlyUpdate.SpriteAtlasManagerUpdate;0.00;0.00;0.00;0.00;627;489;-138
+VFX.CollectShadowCullResults;0.00;0.00;0.00;0.00;627;489;-138
+ConstraintManager::Update::JobSetup;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.ResetInputAxis;0.00;0.00;0.00;0.00;627;489;-138
+Inl_DecalUpdateCullingGroupsSystem.Execute;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.EndGraphicsJobsAfterScriptLateUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Physics.WriteColliderPoses;0.00;0.00;0.00;0.00;148;763;615
+GPUResidentDrawer.TransformInstances;0.00;0.00;0.00;0.00;627;489;-138
+Inl_DecalDrawIntoDBufferSystem.Execute;0.00;0.00;0.00;0.00;627;489;-138
+EditorConnection.RefreshObservablePlayerList;0.00;0.00;0.00;0.00;627;489;-138
+RenderTarget.SetActive;0.00;0.00;0.00;0.00;3804;2967;-837
+Inl_UniversalRenderPipeline.GetPerObjectLightFlags;0.00;0.00;0.00;0.00;627;489;-138
+ClothManager.UploadSimulatedSkinData;0.00;0.00;0.00;0.00;627;489;-138
+Send messages;0.00;0.00;0.00;0.00;627;489;-138
+Initialization.SynchronizeState;0.00;0.00;0.00;0.00;627;489;-138
+WaitForLastPresentation;0.00;0.00;0.00;0.00;627;489;-138
+Inl_DecalCreateDrawCallSystem.Execute;0.00;0.00;0.00;0.00;627;489;-138
+FixedUpdate.XRFixedUpdate;0.00;0.00;0.00;0.00;148;763;615
+SortingGroupManager.Update;0.00;0.00;0.00;0.00;627;489;-138
+Terrain.UpdateSplatProperties;0.00;0.00;0.00;0.00;627;489;-138
+Inl_DecalUpdateCachedSystem.Execute;0.00;0.00;0.00;0.00;627;489;-138
+Physics.CalculateChangedBodyTransforms;0.00;0.00;0.00;0.00;148;763;615
+PreLateUpdate.PhysicsLateUpdate;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Physics.Systems.DummySimulationSystem;0.00;0.00;0.00;0.00;178;916;738
+CombineJobResults;0.00;-;0.00;0.00;3;-;-3
+UIEvents.AlignCanvasRectTransformWithCamera;0.00;0.00;0.00;0.00;627;489;-138
+PostLateUpdate.UpdateCaptureScreenshot;0.00;0.00;0.00;0.00;627;489;-138
+CullingGroupSendEvents;0.00;0.00;0.00;0.00;627;489;-138
+Physics.WriteRigidbodyPoses;0.00;0.00;0.00;0.00;148;763;615
+Scenes;0.00;0.00;0.00;0.00;627;489;-138
+File Reads Started;0.00;0.00;0.00;0.00;627;489;-138
+File Bytes Read;0.00;0.00;0.00;0.00;627;489;-138
+WaitForCompleted;0.00;0.00;0.00;0.00;21725;27823;6098
+Assets;0.00;0.00;0.00;0.00;627;489;-138
+Files Opened;0.00;0.00;0.00;0.00;627;489;-138
+ScheduleAllocJob;0.00;0.00;0.00;0.00;19399;21888;2489
+Files Closed;0.00;0.00;0.00;0.00;627;489;-138
+File Handles Open;0.00;0.00;0.00;0.00;627;489;-138
+File Seeks;0.00;0.00;0.00;0.00;627;489;-138
+KickJobs;0.00;0.00;0.00;0.00;32512;45322;12810
+File Bytes Written;0.00;0.00;0.00;0.00;627;489;-138
+Reads in Flight;0.00;0.00;0.00;0.00;627;489;-138
+Virtual Texture Reads;0.00;0.00;0.00;0.00;627;489;-138
+Other Reads;0.00;0.00;0.00;0.00;627;489;-138
+ScheduleJob;0.00;0.00;0.00;0.00;53877;57532;3655
+Loaded Files;0.00;0.00;0.00;0.00;627;489;-138
+Loaded Archives;0.00;0.00;0.00;0.00;627;489;-138
+Loaded Objects;0.00;0.00;0.00;0.00;627;489;-138
+Scripting Reads;0.00;0.00;0.00;0.00;627;489;-138
+File Reads Finished;0.00;0.00;0.00;0.00;627;489;-138
+BeginJob;0.00;0.00;0.00;0.00;3084;2536;-548
+Entities Reads;0.00;0.00;0.00;0.00;627;489;-138
+EndJob;0.00;0.00;0.00;0.00;3084;2536;-548
+Audio Reads;0.00;0.00;0.00;0.00;627;489;-138
+Asset Bundles;0.00;0.00;0.00;0.00;627;489;-138
+Object Load Requests;0.00;0.00;0.00;0.00;627;489;-138
+Object Release Requests;0.00;0.00;0.00;0.00;627;489;-138
+Object Ref Count;0.00;0.00;0.00;0.00;627;489;-138
+Texture Reads;0.00;0.00;0.00;0.00;627;489;-138
+Command Process Time;0.00;0.00;0.00;0.00;627;489;-138
+Loaded Scenes;0.00;0.00;0.00;0.00;627;489;-138
+Scene Load Requests;0.00;0.00;0.00;0.00;627;489;-138
+Scene Unload Requests;0.00;0.00;0.00;0.00;627;489;-138
+Mesh Reads;0.00;0.00;0.00;0.00;627;489;-138
+Catalogs;0.00;0.00;0.00;0.00;627;489;-138
+Default World Unity.Entities.EndVariableRateSimulationEntityCommandBufferSystem;0.00;0.00;0.00;0.00;43;164;121
+Inl_DecalDrawFowardEmissiveSystem.Execute;0.00;0.00;0.00;0.00;627;489;-138
+PreUpdate.CheckTexFieldInput;0.00;0.00;0.00;0.00;627;489;-138

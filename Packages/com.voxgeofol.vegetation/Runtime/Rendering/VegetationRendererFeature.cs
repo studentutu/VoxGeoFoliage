@@ -18,9 +18,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         [Tooltip("Shared runtime settings for the compiled vegetation render world.")]
         [SerializeField] private VegetationFoliageFeatureSettings settings = new VegetationFoliageFeatureSettings();
 
+        [Tooltip("Compute shader that records the RenderGraph vegetation frame contract before raster vegetation passes.")]
+        [SerializeField] private ComputeShader? renderGraphPreparationComputeShader;
+
         private VegetationRenderPass? depthPass;
         private VegetationRenderPass? colorPass;
         private VegetationRenderPass? shadowPass;
+        private ComputeShader? resolvedRenderGraphPreparationComputeShader;
         private bool featureFaulted;
 
         private static readonly ProfilerMarker AddRenderPassesMarker =
@@ -70,15 +74,19 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         return;
                     }
 
-                    bool batchRendererActive = VegetationRenderWorld.Shared.RefreshBatchRenderer(settings, camera.GetInstanceID());
-                    if (batchRendererActive)
+                    ComputeShader? preparationComputeShader = ResolveRenderGraphPreparationComputeShader();
+                    if (preparationComputeShader == null)
                     {
+                        MarkFeatureFault(
+                            "resolve-render-graph-prepare",
+                            new InvalidOperationException(
+                                $"Missing compute resource '{VegetationRenderGraphPreparationContract.DefaultComputeResourceName}'."));
                         return;
                     }
 
-                    shadowPass.Setup(camera, settings);
-                    depthPass.Setup(camera, settings);
-                    colorPass.Setup(camera, settings);
+                    shadowPass.Setup(camera, settings, preparationComputeShader);
+                    depthPass.Setup(camera, settings, preparationComputeShader);
+                    colorPass.Setup(camera, settings, preparationComputeShader);
 
                     if (settings.ShadowMode == VegetationShadowMode.CheapTree &&
                         shadowPass.HasWork &&
@@ -102,6 +110,22 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     MarkFeatureFault("add-render-passes", exception);
                 }
             }
+        }
+
+        private ComputeShader? ResolveRenderGraphPreparationComputeShader()
+        {
+            if (renderGraphPreparationComputeShader != null)
+            {
+                return renderGraphPreparationComputeShader;
+            }
+
+            if (resolvedRenderGraphPreparationComputeShader == null)
+            {
+                resolvedRenderGraphPreparationComputeShader =
+                    Resources.Load<ComputeShader>(VegetationRenderGraphPreparationContract.DefaultComputeResourceName);
+            }
+
+            return resolvedRenderGraphPreparationComputeShader;
         }
 
         private bool ShouldRenderCamera(CameraType cameraType)
@@ -165,9 +189,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             private static readonly ProfilerMarker DrawRasterMarker =
                 new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawRaster");
 
-            private static readonly ProfilerMarker DrawCommandBufferMarker =
-                new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawCommandBuffer");
-
             private static readonly ProfilerMarker DrawShadowMarker =
                 new ProfilerMarker("VoxGeoFol.VegetationRenderPass.DrawShadow");
 
@@ -227,6 +248,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             private readonly ShadowSliceData[] shadowCascadeSlices = new ShadowSliceData[4];
             private Camera? camera;
             private VegetationFoliageFeatureSettings? settings;
+            private ComputeShader? preparationComputeShader;
             private bool passFaulted;
 
             public VegetationRenderPass(VegetationRenderPassMode passMode)
@@ -240,45 +262,22 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 };
             }
 
-            public bool HasWork => !passFaulted && camera != null && settings != null && VegetationRenderWorld.Shared.HasProviders;
+            public bool HasWork =>
+                !passFaulted &&
+                camera != null &&
+                settings != null &&
+                preparationComputeShader != null &&
+                VegetationRenderWorld.Shared.HasProviders;
 
-            public void Setup(Camera targetCamera, VegetationFoliageFeatureSettings targetSettings)
+            public void Setup(
+                Camera targetCamera,
+                VegetationFoliageFeatureSettings targetSettings,
+                ComputeShader targetPreparationComputeShader)
             {
                 camera = targetCamera;
                 settings = targetSettings;
+                preparationComputeShader = targetPreparationComputeShader;
             }
-
-#if !UNITY_6000_2_OR_NEWER
-#pragma warning disable CS0672
-#pragma warning disable CS0618
-            public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
-            {
-                if (!HasWork || camera == null || settings == null || passMode == VegetationRenderPassMode.Shadow)
-                {
-                    return;
-                }
-
-                CommandBuffer commandBuffer = CommandBufferPool.Get(passMode == VegetationRenderPassMode.Depth
-                    ? "Vegetation Depth Pass"
-                    : "Vegetation Color Pass");
-                try
-                {
-                    DrawWorld(camera, settings, passMode, commandBuffer);
-                    context.ExecuteCommandBuffer(commandBuffer);
-                }
-                catch (Exception exception)
-                {
-                    MarkPassFault(exception);
-                }
-                finally
-                {
-                    commandBuffer.Clear();
-                    CommandBufferPool.Release(commandBuffer);
-                }
-            }
-#pragma warning restore CS0618
-#pragma warning restore CS0672
-#endif
 
             public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
             {
@@ -297,6 +296,32 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                             return;
                         }
 
+                        bool prepared;
+                        VegetationRenderGraphFrame frame = default;
+                        using (DrawPrepareCameraMarker.Auto())
+                        {
+                            prepared = VegetationRenderWorld.Shared.ScheduleRenderGraphPrepareForCamera(
+                                camera,
+                                passMode,
+                                settings,
+                                out frame);
+                        }
+
+                        if (!prepared)
+                        {
+                            return;
+                        }
+
+                        ComputeShader computeShader = preparationComputeShader!;
+                        BufferHandle instanceBuffer = renderGraph.ImportBuffer(frame.InstanceBuffer);
+                        BufferHandle argsBuffer = renderGraph.ImportBuffer(frame.ArgsBuffer);
+                        BufferHandle preparationContract = VegetationRenderGraphPreparationContract.Record(
+                            renderGraph,
+                            computeShader,
+                            passMode,
+                            frame,
+                            instanceBuffer,
+                            argsBuffer);
                         UniversalResourceData resourceData = frameData.Get<UniversalResourceData>();
                         using (var builder = renderGraph.AddRasterRenderPass<PassData>(
                                    passMode == VegetationRenderPassMode.Depth
@@ -308,6 +333,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                             passData.Camera = camera;
                             passData.Settings = settings;
                             passData.PassMode = passMode;
+                            passData.Frame = frame;
+                            passData.InstanceBuffer = instanceBuffer;
+                            passData.ArgsBuffer = argsBuffer;
+                            passData.PreparationContract = preparationContract;
 
                             if (passMode == VegetationRenderPassMode.Depth)
                             {
@@ -323,8 +352,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                                 }
                             }
 
+                            builder.UseBuffer(passData.InstanceBuffer, AccessFlags.Read);
+                            builder.UseBuffer(passData.ArgsBuffer, AccessFlags.Read);
+                            builder.UseBuffer(passData.PreparationContract, AccessFlags.Read);
                             builder.AllowPassCulling(false);
-                            builder.AllowGlobalStateModification(true);
                             builder.SetRenderFunc(ExecuteRasterPassFunc);
                         }
                     }
@@ -346,6 +377,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     UniversalRenderingData renderingData = frameData.Get<UniversalRenderingData>();
 
                     if (settings == null ||
+                        preparationComputeShader == null ||
                         settings.ShadowMode == VegetationShadowMode.Off ||
                         cameraData.xrRendering ||
                         !shadowData.supportsMainLightShadows ||
@@ -355,6 +387,98 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         return;
                     }
 
+                    VisibleLight shadowLight;
+                    Light shadowSource;
+                    using (ShadowValidateMarker.Auto())
+                    {
+                        NativeArray<VisibleLight> visibleLights = lightData.visibleLights;
+                        if (!visibleLights.IsCreated ||
+                            lightData.mainLightIndex < 0 ||
+                            lightData.mainLightIndex >= visibleLights.Length)
+                        {
+                            return;
+                        }
+
+                        shadowLight = visibleLights[lightData.mainLightIndex];
+                        Light? candidateLight = shadowLight.light;
+                        if (candidateLight == null ||
+                            shadowLight.lightType != LightType.Directional ||
+                            candidateLight.shadows == LightShadows.None ||
+                            Mathf.Approximately(candidateLight.shadowStrength, 0f))
+                        {
+                            return;
+                        }
+
+                        shadowSource = candidateLight;
+                    }
+
+                    CullingResults cullResults = renderingData.cullResults;
+                    int cascadeCount = Mathf.Clamp(shadowData.mainLightShadowCascadesCount, 1, 4);
+                    int renderTargetWidth = shadowData.mainLightShadowmapWidth;
+                    int renderTargetHeight = cascadeCount == 2
+                        ? shadowData.mainLightShadowmapHeight >> 1
+                        : shadowData.mainLightShadowmapHeight;
+                    int shadowResolution = ShadowUtils.GetMaxTileResolutionInAtlas(
+                        renderTargetWidth,
+                        renderTargetHeight,
+                        cascadeCount);
+
+                    int preparedCascadeCount = 0;
+                    using (ShadowExtractCascadesMarker.Auto())
+                    {
+                        for (int cascadeIndex = 0; cascadeIndex < cascadeCount; cascadeIndex++)
+                        {
+                            if (!ShadowUtils.ExtractDirectionalLightMatrix(
+                                    ref cullResults,
+                                    shadowData,
+                                    lightData.mainLightIndex,
+                                    cascadeIndex,
+                                    renderTargetWidth,
+                                    renderTargetHeight,
+                                    shadowResolution,
+                                    shadowSource.shadowNearPlane,
+                                    out Vector4 _,
+                                    out ShadowSliceData shadowSliceData))
+                            {
+                                continue;
+                            }
+
+                            GeometryUtility.CalculateFrustumPlanes(
+                                shadowSliceData.projectionMatrix * shadowSliceData.viewMatrix,
+                                shadowFrustumPlanes);
+                            CopyFrustumPlanes(shadowFrustumPlanes, shadowCascadeFrustumPlanes, preparedCascadeCount * 6);
+                            shadowCascadeSlices[preparedCascadeCount] = shadowSliceData;
+                            preparedCascadeCount++;
+                        }
+                    }
+
+                    bool prepared;
+                    VegetationRenderGraphFrame frame = default;
+                    using (ShadowPrepareRenderWorldMarker.Auto())
+                    {
+                        prepared = preparedCascadeCount > 0 &&
+                                   VegetationRenderWorld.Shared.ScheduleRenderGraphPrepareForFrustums(
+                                       cameraData.worldSpaceCameraPos,
+                                       shadowCascadeFrustumPlanes,
+                                       preparedCascadeCount,
+                                       settings,
+                                       out frame);
+                    }
+
+                    if (!prepared)
+                    {
+                        return;
+                    }
+
+                    BufferHandle instanceBuffer = renderGraph.ImportBuffer(frame.InstanceBuffer);
+                    BufferHandle argsBuffer = renderGraph.ImportBuffer(frame.ArgsBuffer);
+                    BufferHandle preparationContract = VegetationRenderGraphPreparationContract.Record(
+                        renderGraph,
+                        preparationComputeShader,
+                        VegetationRenderPassMode.Shadow,
+                        frame,
+                        instanceBuffer,
+                        argsBuffer);
                     using (var builder = renderGraph.AddRasterRenderPass<ShadowPassData>(
                                "Vegetation Shadow Pass",
                                out ShadowPassData passData,
@@ -363,12 +487,24 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                         passData.RenderPass = this;
                         passData.Camera = camera!;
                         passData.CameraData = cameraData;
-                        passData.RenderingData = renderingData;
-                        passData.LightData = lightData;
                         passData.ShadowData = shadowData;
                         passData.Settings = settings;
+                        passData.ShadowLight = shadowLight;
+                        passData.MainLightIndex = lightData.mainLightIndex;
+                        passData.PreparedCascadeCount = preparedCascadeCount;
+                        passData.Frame = frame;
+                        passData.InstanceBuffer = instanceBuffer;
+                        passData.ArgsBuffer = argsBuffer;
+                        passData.PreparationContract = preparationContract;
+                        for (int i = 0; i < preparedCascadeCount; i++)
+                        {
+                            passData.CascadeSlices[i] = shadowCascadeSlices[i];
+                        }
 
                         builder.SetRenderAttachmentDepth(resourceData.mainShadowsTexture, AccessFlags.ReadWrite);
+                        builder.UseBuffer(passData.InstanceBuffer, AccessFlags.Read);
+                        builder.UseBuffer(passData.ArgsBuffer, AccessFlags.Read);
+                        builder.UseBuffer(passData.PreparationContract, AccessFlags.Read);
                         builder.AllowPassCulling(false);
                         builder.AllowGlobalStateModification(true);
                         builder.SetRenderFunc(ExecuteShadowPassFunc);
@@ -382,6 +518,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 {
                     try
                     {
+                        if (!VegetationRenderWorld.Shared.ActivateRenderGraphPreparedFrame(data.Frame))
+                        {
+                            return;
+                        }
+
                         data.RenderPass.DrawWorld(data.Camera, data.Settings, data.PassMode, context.cmd);
                     }
                     catch (Exception exception)
@@ -397,6 +538,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 {
                     try
                     {
+                        if (!VegetationRenderWorld.Shared.ActivateRenderGraphPreparedFrame(data.Frame))
+                        {
+                            return;
+                        }
+
                         data.RenderPass.DrawMainLightShadowAtlas(data, context);
                     }
                     catch (Exception exception)
@@ -410,60 +556,17 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 Camera targetCamera,
                 VegetationFoliageFeatureSettings targetSettings,
                 VegetationRenderPassMode targetPassMode,
-                CommandBuffer commandBuffer)
-            {
-                using (DrawCommandBufferMarker.Auto())
-                {
-                    bool prepared;
-                    using (DrawPrepareCameraMarker.Auto())
-                    {
-                        prepared = VegetationRenderWorld.Shared.PrepareForCamera(
-                            targetCamera,
-                            targetPassMode,
-                            targetSettings);
-                    }
-
-                    if (prepared)
-                    {
-                        using (DrawSubmitMarker.Auto())
-                        {
-                            VegetationRenderWorld.Shared.Render(
-                                commandBuffer,
-                                targetCamera,
-                                targetPassMode,
-                                targetSettings.EnableDiagnostics);
-                        }
-                    }
-                }
-            }
-
-            private void DrawWorld(
-                Camera targetCamera,
-                VegetationFoliageFeatureSettings targetSettings,
-                VegetationRenderPassMode targetPassMode,
                 IRasterCommandBuffer commandBuffer)
             {
                 using (DrawRasterMarker.Auto())
                 {
-                    bool prepared;
-                    using (DrawPrepareCameraMarker.Auto())
+                    using (DrawSubmitMarker.Auto())
                     {
-                        prepared = VegetationRenderWorld.Shared.PrepareForCamera(
+                        VegetationRenderWorld.Shared.Render(
+                            commandBuffer,
                             targetCamera,
                             targetPassMode,
-                            targetSettings);
-                    }
-
-                    if (prepared)
-                    {
-                        using (DrawSubmitMarker.Auto())
-                        {
-                            VegetationRenderWorld.Shared.Render(
-                                commandBuffer,
-                                targetCamera,
-                                targetPassMode,
-                                targetSettings.EnableDiagnostics);
-                        }
+                            targetSettings.EnableDiagnostics);
                     }
                 }
             }
@@ -472,96 +575,21 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             {
                 using (DrawShadowMarker.Auto())
                 {
-                    VisibleLight shadowLight;
-                    Light shadowSource;
-                    using (ShadowValidateMarker.Auto())
+                    if (data.PreparedCascadeCount <= 0)
                     {
-                        NativeArray<VisibleLight> visibleLights = data.LightData.visibleLights;
-                        if (!visibleLights.IsCreated ||
-                            data.LightData.mainLightIndex < 0 ||
-                            data.LightData.mainLightIndex >= visibleLights.Length)
-                        {
-                            return;
-                        }
-
-                        shadowLight = visibleLights[data.LightData.mainLightIndex];
-                        Light? candidateLight = shadowLight.light;
-                        if (candidateLight == null ||
-                            shadowLight.lightType != LightType.Directional ||
-                            candidateLight.shadows == LightShadows.None ||
-                            Mathf.Approximately(candidateLight.shadowStrength, 0f))
-                        {
-                            return;
-                        }
-
-                        shadowSource = candidateLight;
+                        return;
                     }
 
-                    CullingResults cullResults = data.RenderingData.cullResults;
-                    int cascadeCount = Mathf.Clamp(data.ShadowData.mainLightShadowCascadesCount, 1, 4);
-                    int renderTargetWidth = data.ShadowData.mainLightShadowmapWidth;
-                    int renderTargetHeight = cascadeCount == 2
-                        ? data.ShadowData.mainLightShadowmapHeight >> 1
-                        : data.ShadowData.mainLightShadowmapHeight;
-                    int shadowResolution = ShadowUtils.GetMaxTileResolutionInAtlas(
-                        renderTargetWidth,
-                        renderTargetHeight,
-                        cascadeCount);
-
+                    VisibleLight shadowLight = data.ShadowLight;
                     RasterCommandBuffer commandBuffer = context.cmd;
 
                     try
                     {
                         ApplyCameraPosition(commandBuffer, data.CameraData);
                         commandBuffer.DisableShaderKeyword(CastingPunctualLightShadowKeyword);
-                        int preparedCascadeCount = 0;
-                        using (ShadowExtractCascadesMarker.Auto())
-                        {
-                            for (int cascadeIndex = 0; cascadeIndex < cascadeCount; cascadeIndex++)
-                            {
-                                if (!ShadowUtils.ExtractDirectionalLightMatrix(
-                                        ref cullResults,
-                                        data.ShadowData,
-                                        data.LightData.mainLightIndex,
-                                        cascadeIndex,
-                                        renderTargetWidth,
-                                        renderTargetHeight,
-                                        shadowResolution,
-                                        shadowSource.shadowNearPlane,
-                                        out Vector4 _,
-                                        out ShadowSliceData shadowSliceData))
-                                {
-                                    continue;
-                                }
-
-                                GeometryUtility.CalculateFrustumPlanes(
-                                    shadowSliceData.projectionMatrix * shadowSliceData.viewMatrix,
-                                    shadowFrustumPlanes);
-                                CopyFrustumPlanes(shadowFrustumPlanes, shadowCascadeFrustumPlanes, preparedCascadeCount * 6);
-                                shadowCascadeSlices[preparedCascadeCount] = shadowSliceData;
-                                preparedCascadeCount++;
-                            }
-                        }
-
-                        bool prepared;
-                        using (ShadowPrepareRenderWorldMarker.Auto())
-                        {
-                            prepared = preparedCascadeCount > 0 &&
-                                       VegetationRenderWorld.Shared.PrepareForFrustums(
-                                           data.CameraData.worldSpaceCameraPos,
-                                           shadowCascadeFrustumPlanes,
-                                           preparedCascadeCount,
-                                           data.Settings);
-                        }
-
-                        if (!prepared)
-                        {
-                            return;
-                        }
-
                         using (ShadowSubmitCascadesMarker.Auto())
                         {
-                            for (int cascadeIndex = 0; cascadeIndex < preparedCascadeCount; cascadeIndex++)
+                            for (int cascadeIndex = 0; cascadeIndex < data.PreparedCascadeCount; cascadeIndex++)
                             {
                                 if (!VegetationRenderWorld.Shared.HasPreparedShadowFrustum(cascadeIndex))
                                 {
@@ -570,10 +598,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                                 using (ShadowSubmitCascadeMarker.Auto())
                                 {
-                                    ShadowSliceData shadowSliceData = shadowCascadeSlices[cascadeIndex];
+                                    ShadowSliceData shadowSliceData = data.CascadeSlices[cascadeIndex];
                                     Vector4 shadowBias = ShadowUtils.GetShadowBias(
                                         ref shadowLight,
-                                        data.LightData.mainLightIndex,
+                                        data.MainLightIndex,
                                         data.ShadowData,
                                         shadowSliceData.projectionMatrix,
                                         shadowSliceData.resolution);
@@ -686,6 +714,10 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 public Camera Camera = null!;
                 public VegetationFoliageFeatureSettings Settings = null!;
                 public VegetationRenderPassMode PassMode;
+                public VegetationRenderGraphFrame Frame;
+                public BufferHandle InstanceBuffer;
+                public BufferHandle ArgsBuffer;
+                public BufferHandle PreparationContract;
             }
 
             private sealed class ShadowPassData
@@ -693,10 +725,16 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 public VegetationRenderPass RenderPass = null!;
                 public Camera Camera = null!;
                 public UniversalCameraData CameraData = null!;
-                public UniversalRenderingData RenderingData = null!;
-                public UniversalLightData LightData = null!;
                 public UniversalShadowData ShadowData = null!;
                 public VegetationFoliageFeatureSettings Settings = null!;
+                public VisibleLight ShadowLight;
+                public int MainLightIndex;
+                public int PreparedCascadeCount;
+                public VegetationRenderGraphFrame Frame;
+                public BufferHandle InstanceBuffer;
+                public BufferHandle ArgsBuffer;
+                public BufferHandle PreparationContract;
+                public readonly ShadowSliceData[] CascadeSlices = new ShadowSliceData[4];
             }
         }
     }

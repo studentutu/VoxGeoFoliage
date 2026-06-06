@@ -35,6 +35,7 @@ MonoBehaviour:
     RenderGameCameras: 1
     RenderSceneViewCameras: 0
     EnableDiagnostics: 0
+  renderGraphPreparationComputeShader: {fileID: 0}
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0

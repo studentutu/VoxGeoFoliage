@@ -3,14 +3,12 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.RenderGraphModule;
 
 namespace VoxGeoFol.Features.Vegetation.Rendering
 {
@@ -23,48 +21,40 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private const int PacketLookupRepresentationSlotCount = 5;
         private const long EstimatedNearDetailPacketBytes = 80L;
         private const long EstimatedNearDetailInstanceBytes = 144L;
-        private const int BrgSizeOfPackedMatrix = sizeof(float) * 4 * 3;
-        private const int BrgSizeOfUint = sizeof(uint);
-        private const int BrgSizeOfFloat4 = sizeof(float) * 4;
-        private const int BrgExtraBytes = BrgSizeOfPackedMatrix * 2;
-        private const uint BrgPerInstanceMetadataFlag = 0x80000000u;
-        // Keep custom vegetation BRG output off SRP Core's reserved GPU Resident Drawer layers.
-        private const byte BrgVegetationBatchLayer = 0;
-        private const int BatchRendererRetireFrameDelay = 4;
-        private const int BatchRendererRetireSlotCount = 8;
-        private const int BatchRendererCullingDiagnosticLogLimit = 4;
+        private const int PreparationSlotCount = 6;
+        private const int RecordedPreparationSlotHoldFrames = 1;
+        private const int PreparationCounterPreparedInstanceCount = 0;
+        private const int PreparationCounterPreparedPacketCount = 1;
+        private const int PreparationCounterPreparedNearDetailPacketCount = 2;
+        private const int PreparationCounterPreparedTreeL0PacketCount = 3;
+        private const int PreparationCounterPreparedTreeL1PacketCount = 4;
+        private const int PreparationCounterPreparedTreeL2PacketCount = 5;
+        private const int PreparationCounterPreparedHlodPacketCount = 6;
+        private const int PreparationCounterPreparedShadowPacketCount = 7;
+        private const int PreparationCounterPreparedActiveGroupCount = 8;
+        private const int PreparationCounterPreparedFrustumMask = 9;
+        private const int PreparationCounterVisiblePageCount = 10;
+        private const int PreparationCounterVisibleCellCount = 11;
+        private const int PreparationCounterNearDetailLoadRequestCount = 12;
+        private const int PreparationCounterNearDetailEvictedCellCount = 13;
+        private const int PreparationCounterNearDetailResidentCellCount = 14;
+        private const int PreparationCounterCount = 15;
+        private const int PreparationLongCounterNearDetailResidentBytes = 0;
+        private const int PreparationLongCounterNearDetailLoadedBytes = 1;
+        private const int PreparationLongCounterCount = 2;
         private static readonly VegetationRenderWorld SharedInstance = new VegetationRenderWorld();
         private static readonly ProfilerMarker PrepareMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderWorld.Prepare");
         private static readonly ProfilerMarker PrepareEnsureGraphMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderWorld.Prepare.EnsureGraph");
         private static readonly ProfilerMarker PrepareBroadPhaseMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderWorld.Prepare.BroadPhase");
         private static readonly ProfilerMarker PrepareSelectPacketsMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderWorld.Prepare.SelectPackets");
-        private static readonly ProfilerMarker PrepareUploadMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderWorld.Prepare.Upload");
-        private static readonly ProfilerMarker PrepareUploadLayoutMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderWorld.Prepare.Upload.Layout");
-        private static readonly ProfilerMarker PrepareUploadCopyInstancesMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderWorld.Prepare.Upload.CopyInstances");
-        private static readonly ProfilerMarker PrepareUploadArgsMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderWorld.Prepare.Upload.Args");
-        private static readonly ProfilerMarker PrepareUploadSetDataMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderWorld.Prepare.Upload.SetData");
         private static readonly ProfilerMarker RenderMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderWorld.Render");
         private static readonly ProfilerMarker RenderDrawGroupsMarker = new ProfilerMarker("VoxGeoFol.VegetationRenderWorld.Render.DrawGroups");
-        private static readonly BatchCullingViewType[] BatchRendererCameraViewTypes =
-        {
-            BatchCullingViewType.Camera
-        };
-        private static readonly BatchCullingViewType[] BatchRendererCameraAndLightViewTypes =
-        {
-            BatchCullingViewType.Camera,
-            BatchCullingViewType.Light
-        };
         private static readonly int InstanceBufferId = Shader.PropertyToID("_VegetationInstanceData");
         private static readonly int InstanceBufferBaseOffsetId = Shader.PropertyToID("_VegetationInstanceDataBaseOffset");
-        private static readonly int UnityObjectToWorldId = Shader.PropertyToID("unity_ObjectToWorld");
-        private static readonly int UnityWorldToObjectId = Shader.PropertyToID("unity_WorldToObject");
-        private static readonly int BrgPackedLeafTintId = Shader.PropertyToID("_VegetationPackedLeafTint");
-        private static readonly int BrgWindId = Shader.PropertyToID("_VegetationWind");
         private static readonly int WindStrengthId = Shader.PropertyToID("_VegetationWindStrength");
         private static readonly int WindFrequencyId = Shader.PropertyToID("_VegetationWindFrequency");
         private static readonly int WindDirectionId = Shader.PropertyToID("_VegetationWindDirection");
         private static readonly int LeafFlutterSettingsId = Shader.PropertyToID("_VegetationLeafFlutterSettings");
-        [ThreadStatic] private static BatchCullingScratch? threadBatchCullingScratch;
 
         private readonly List<ProviderRecord> providers = new List<ProviderRecord>();
         private readonly List<PageRecord> pages = new List<PageRecord>();
@@ -76,41 +66,29 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private readonly MaterialPropertyBlock sharedPropertyBlock = new MaterialPropertyBlock();
         private readonly Plane[] cameraFrustumPlanes = new Plane[6];
 
-        private BoundingSphere[] boundingSpheres = Array.Empty<BoundingSphere>();
-        private SphereRecord[] sphereRecords = Array.Empty<SphereRecord>();
-        private int[] visibleSphereIndices = Array.Empty<int>();
-        private bool[] visiblePageMask = Array.Empty<bool>();
-        private bool[] visibleCellMask = Array.Empty<bool>();
-        private int[] visiblePageFrustumMasks = Array.Empty<int>();
-        private int[] visibleCellFrustumMasks = Array.Empty<int>();
-        private bool[] nearDetailResidentCellMask = Array.Empty<bool>();
-        private bool[] nearDetailRequestedCellMask = Array.Empty<bool>();
         private long[] nearDetailCellBytes = Array.Empty<long>();
-        private int[] nearDetailLastUsedCellFrame = Array.Empty<int>();
         private PacketRange[] pagePacketRanges = Array.Empty<PacketRange>();
         private PacketRange[] cellPacketRanges = Array.Empty<PacketRange>();
         private int[] packetLookupIndices = Array.Empty<int>();
         private int[] groupInstanceCounts = Array.Empty<int>();
         private int[] groupFrustumMasks = Array.Empty<int>();
         private int[] groupStartInstances = Array.Empty<int>();
-        private int[] groupWriteOffsets = Array.Empty<int>();
         private int[] groupTotalInstanceCounts = Array.Empty<int>();
         private int[][] pageInstanceGroupLocalIndices = Array.Empty<int[]>();
         private int[][] pagePacketValidInstanceCounts = Array.Empty<int[]>();
-        private CellCandidate[] cellCandidates = Array.Empty<CellCandidate>();
-        private PacketSelection[] selectedPackets = Array.Empty<PacketSelection>();
         private int[] activeGroupIndices = Array.Empty<int>();
-        private int[] batchRendererAllowedCameraViewIds = Array.Empty<int>();
-        private VegetationBrgBatch[] brgBatches = Array.Empty<VegetationBrgBatch>();
-        private readonly BatchRendererState?[] retiredBatchRendererStates = new BatchRendererState?[BatchRendererRetireSlotCount];
-        private NativeArray<uint> argsData;
-        private NativeArray<VegetationIndirectInstanceData> instanceData;
+        private NativeArray<PreparationPageRecord> preparationPages;
+        private NativeArray<PreparationCellRecord> preparationCells;
+        private NativeArray<PreparationPacketRecord> preparationPackets;
+        private NativeArray<int> preparationPacketLookupIndices;
+        private NativeArray<PreparationGroupRecord> preparationGroups;
+        private NativeArray<VegetationIndirectInstanceData> preparationStaticInstances;
+        private NativeArray<int> preparationNearDetailResidentCellMask;
+        private NativeArray<int> preparationNearDetailRequestedCellMask;
+        private NativeArray<int> preparationNearDetailLastUsedCellFrame;
+        private readonly PreparationSlot[] preparationSlots = new PreparationSlot[PreparationSlotCount];
         private GraphicsBuffer? instanceBuffer;
         private GraphicsBuffer? argsBuffer;
-        private BatchRendererGroup? batchRendererGroup;
-        private BatchRendererState? batchRendererState;
-        private VegetationFoliageFeatureSettings? batchRendererSettings;
-        private CullingGroup? cullingGroup;
         private int instanceCapacity;
         private int argsGroupCapacity;
         private int preparedInstanceCount;
@@ -140,24 +118,38 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private bool graphDirty = true;
         private bool hasPreparedFrame;
         private int graphVersion;
-        private int cachedCameraFrame = -1;
-        private int cachedCameraId = -1;
-        private int cachedCameraSettingsHash;
-        private int cellCandidateCount;
-        private int selectedPacketCount;
+        private int renderGraphCameraFrame = -1;
+        private int renderGraphCameraId = -1;
+        private int renderGraphCameraSettingsHash;
+        private int renderGraphCameraPreparationSlot = -1;
+        private int renderGraphCameraPreparationVersion;
+        private int pendingCameraFrame = -1;
+        private int pendingCameraId = -1;
+        private int pendingCameraSettingsHash;
+        private int renderGraphShadowFrame = -1;
+        private int renderGraphShadowSettingsHash;
+        private int renderGraphShadowPreparationSlot = -1;
+        private int renderGraphShadowPreparationVersion;
+        private int completedCameraPreparationSlot = -1;
+        private int completedCameraPreparationVersion;
+        private int completedShadowPreparationSlot = -1;
+        private int completedShadowPreparationVersion;
         private int activeGroupIndexCount;
-        private int batchRendererAllowedCameraViewIdCount;
-        private int batchRendererAllowedCameraViewFrame = -1;
+        private int preparationSlotCursor;
+        private int preparationVersion;
+        private int maxPreparationInstanceCount;
+        private JobHandle preparationDependency;
         private bool lastPrepareUsedCameraCache;
-        private bool batchRendererFaulted;
-        private bool batchRendererUnsupportedLogged;
         private bool invalidCompiledPacketsLogged;
         private int invalidCompiledPacketCount;
-        private int retiredBatchRendererStateCursor;
         private bool disposed;
 
         private VegetationRenderWorld()
         {
+            for (int i = 0; i < preparationSlots.Length; i++)
+            {
+                preparationSlots[i] = new PreparationSlot(i);
+            }
         }
 
         public static VegetationRenderWorld Shared => SharedInstance;
@@ -213,75 +205,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         public long NearDetailResidentBytes => nearDetailResidentBytes;
 
         public bool LastPrepareUsedCameraCache => lastPrepareUsedCameraCache;
-
-        /// <summary>
-        /// [INTEGRATION] Ensures the compiled provider graph is exposed through Unity BatchRendererGroup batches for the active URP renderer.
-        /// </summary>
-        public bool RefreshBatchRenderer(VegetationFoliageFeatureSettings settings, int cameraViewId)
-        {
-            // Range: one renderer-feature settings surface. Condition: BRG-capable graphics API and compiled providers exist. Output: BRG batches own renderer submission; unsupported APIs use the RenderGraph grouped-indirect backend.
-            FlushRetiredBatchRendererResources(force: false);
-            if (settings == null || providers.Count == 0)
-            {
-                return false;
-            }
-
-            if (batchRendererFaulted)
-            {
-                ReleaseBatchRendererResources();
-                return false;
-            }
-
-            if (!CanUseBatchRendererGraphics())
-            {
-                ReleaseBatchRendererResources();
-                return false;
-            }
-
-            if (BatchRendererGroup.BufferTarget != BatchBufferTarget.RawBuffer)
-            {
-                if (!batchRendererUnsupportedLogged)
-                {
-                    batchRendererUnsupportedLogged = true;
-                    Debug.LogError(
-                        $"Vegetation BatchRendererGroup disabled: graphics API requires '{BatchRendererGroup.BufferTarget}' buffers, but the vegetation BRG backend currently supports RawBuffer only.");
-                }
-
-                return false;
-            }
-
-            RegisterAllowedBatchRendererCameraView(cameraViewId);
-            batchRendererSettings = settings;
-            ApplyGlobalShaderSettings(settings);
-            try
-            {
-                EnsureCompiledGraph();
-                if (groups.Count == 0 || pages.Count == 0)
-                {
-                    return false;
-                }
-
-                EnsureBatchRendererResources();
-                return batchRendererGroup != null && brgBatches.Length > 0;
-            }
-            catch (Exception exception)
-            {
-                batchRendererFaulted = true;
-                ReleaseBatchRendererResources();
-                Debug.LogError(
-                    $"Vegetation BatchRendererGroup disabled reason={exception.GetType().Name}: {exception.Message}");
-                Debug.LogException(exception);
-                return false;
-            }
-        }
-
-        private static bool CanUseBatchRendererGraphics()
-        {
-            return Application.isPlaying &&
-                   !Application.isBatchMode &&
-                   SystemInfo.graphicsDeviceType != GraphicsDeviceType.Null &&
-                   SystemInfo.graphicsDeviceType != GraphicsDeviceType.Direct3D12;
-        }
 
         /// <summary>
         /// [INTEGRATION] Registers or replaces one compiled page provider. Source authoring is not consumed at runtime.
@@ -358,8 +281,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             {
                 ClearCompiledGraph();
                 ReleaseGpuBuffers();
-                ReleaseBatchRendererResources();
-                ReleaseCullingGroup();
             }
         }
 
@@ -372,36 +293,101 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             providerIndicesById.Clear();
             ClearCompiledGraph();
             ReleaseGpuBuffers();
-            ReleaseBatchRendererResources();
-            ReleaseCullingGroup();
             MarkGraphDirty();
         }
 
         /// <summary>
-        /// [INTEGRATION] Prepares grouped indirect buffers for one camera-visible color or depth pass using page/cell CullingGroup broad phase.
+        /// [INTEGRATION] Schedules one RenderGraph-owned camera preparation job without completing it on the caller thread.
         /// </summary>
-        public bool PrepareForCamera(Camera camera, VegetationRenderPassMode passMode, VegetationFoliageFeatureSettings settings)
+        internal bool ScheduleRenderGraphPrepareForCamera(
+            Camera camera,
+            VegetationRenderPassMode passMode,
+            VegetationFoliageFeatureSettings settings,
+            out VegetationRenderGraphFrame frame)
         {
-            // Range: one camera and one non-shadow pass. Condition: CullingGroup selects visible page/cell spheres, then active budget chooses HLOD or near-detail packets. Output: instance and args buffers are ready for grouped indirect submission.
+            // Range: one camera and one non-shadow pass. Condition: records only an already-completed preparation frame, then schedules the next frame without waiting. Output: a renderable preparation frame imported by RenderGraph.
+            frame = default;
             lastPrepareUsedCameraCache = false;
             if (camera == null || passMode == VegetationRenderPassMode.Shadow)
             {
                 return false;
             }
 
-            int frame = Time.renderedFrameCount;
+            int renderFrame = Time.renderedFrameCount;
             int cameraId = camera.GetInstanceID();
-            int settingsHash = ComputeCameraPrepareSettingsHash(settings);
-            if (!graphDirty &&
-                hasPreparedFrame &&
-                cachedCameraFrame == frame &&
-                cachedCameraId == cameraId &&
-                cachedCameraSettingsHash == settingsHash)
+            int settingsHash = ComputePrepareSettingsHash(settings, passMode);
+
+            using (PrepareMarker.Auto())
             {
-                lastPrepareUsedCameraCache = true;
-                return true;
+                using (PrepareEnsureGraphMarker.Auto())
+                {
+                    EnsureCompiledGraph();
+                    RefreshCompletedPreparationSlots();
+                    if (groups.Count == 0 || pages.Count == 0)
+                    {
+                        ClearPreparedFrame();
+                        return false;
+                    }
+                }
+
+                if (TryCreateRecordedCameraFrame(renderFrame, cameraId, settingsHash, out frame))
+                {
+                    lastPrepareUsedCameraCache = true;
+                    return true;
+                }
+
+                bool hasCompletedFrame = TryCreateCompletedCameraFrame(cameraId, settingsHash, out frame);
+                if (hasCompletedFrame)
+                {
+                    CacheRecordedCameraFrame(renderFrame, cameraId, settingsHash, frame);
+                }
+
+                using (PrepareBroadPhaseMarker.Auto())
+                {
+                    GeometryUtility.CalculateFrustumPlanes(camera, cameraFrustumPlanes);
+                }
+
+                using (PrepareSelectPacketsMarker.Auto())
+                {
+                    TryScheduleCameraPreparation(
+                        renderFrame,
+                        cameraId,
+                        settingsHash,
+                        camera.transform.position,
+                        passMode,
+                        settings,
+                        cameraFrustumPlanes);
+                    return hasCompletedFrame;
+                }
+            }
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Schedules and immediately completes one camera preparation frame for EditMode tests that cannot execute RenderGraph.
+        /// </summary>
+        internal bool PrepareRenderGraphCameraImmediateForTests(
+            Camera camera,
+            VegetationRenderPassMode passMode,
+            VegetationFoliageFeatureSettings settings)
+        {
+            // Range: EditMode validation only. Condition: uses the same scheduling path as RenderGraph, then completes the job and CPU buffer upload synchronously. Output: diagnostics counters match the production scheduled frame.
+            lastPrepareUsedCameraCache = false;
+            if (camera == null || passMode == VegetationRenderPassMode.Shadow)
+            {
+                return false;
             }
 
+            int renderFrame = Time.renderedFrameCount;
+            int cameraId = camera.GetInstanceID();
+            int settingsHash = ComputePrepareSettingsHash(settings, passMode);
+            if (TryCreateRecordedCameraFrame(renderFrame, cameraId, settingsHash, out VegetationRenderGraphFrame frame))
+            {
+                lastPrepareUsedCameraCache = true;
+                CompletePreparationImmediate(frame);
+                return hasPreparedFrame;
+            }
+
+            CompletePreparationSlots();
             using (PrepareMarker.Auto())
             {
                 using (PrepareEnsureGraphMarker.Auto())
@@ -416,68 +402,61 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                 using (PrepareBroadPhaseMarker.Auto())
                 {
-                    EnsureCullingGroup(camera);
-                    ClearVisibilityMasks();
-                    int visibleCount = cullingGroup!.QueryIndices(true, visibleSphereIndices, 0);
-                    MarkVisibleSpheres(visibleCount);
-                    if (preparedVisiblePageCount == 0 || preparedVisibleCellCount == 0)
-                    {
-                        // CullingGroup results can be one camera cull late; first-frame fallback stays conservative.
-                        GeometryUtility.CalculateFrustumPlanes(camera, cameraFrustumPlanes);
-                        MarkVisibleByFrustum(cameraFrustumPlanes);
-                    }
+                    GeometryUtility.CalculateFrustumPlanes(camera, cameraFrustumPlanes);
                 }
 
-                using (PrepareSelectPacketsMarker.Auto())
+                if (!TrySchedulePreparationJob(
+                        camera.transform.position,
+                        passMode,
+                        settings,
+                        cameraFrustumPlanes,
+                        1,
+                        renderFrame,
+                        cameraId,
+                        settingsHash,
+                        out PreparationSlot slot))
                 {
-                    SelectPackets(camera.transform.position, passMode, settings, null, 0);
+                    return false;
                 }
 
-                bool prepared;
-                using (PrepareUploadMarker.Auto())
-                {
-                    prepared = UploadPreparedFrame(settings, passMode);
-                }
-
-                if (prepared)
-                {
-                    cachedCameraFrame = frame;
-                    cachedCameraId = cameraId;
-                    cachedCameraSettingsHash = settingsHash;
-                }
-
-                return prepared;
+                TryFinalizePreparationSlot(slot, allowBlocking: true);
+                frame = CreateRenderGraphFrame(slot);
+                CacheRecordedCameraFrame(renderFrame, cameraId, settingsHash, frame);
             }
+
+            CompletePreparationImmediate(frame);
+            return hasPreparedFrame;
         }
 
         /// <summary>
-        /// [INTEGRATION] Prepares grouped indirect buffers for one explicit frustum, used by main-light shadow cascades.
+        /// [INTEGRATION] Schedules and immediately completes one explicit-frustum preparation frame for EditMode tests that cannot execute RenderGraph.
         /// </summary>
-        public bool PrepareForFrustum(
+        internal bool PrepareRenderGraphFrustumImmediateForTests(
             Vector3 cameraWorldPosition,
             Plane[] frustumPlanes,
             VegetationFoliageFeatureSettings settings)
         {
-            return PrepareForFrustums(cameraWorldPosition, frustumPlanes, 1, settings);
+            // Range: EditMode validation only. Condition: uses the same shadow scheduling path as RenderGraph with one frustum. Output: diagnostics counters match the production scheduled shadow frame.
+            return PrepareRenderGraphFrustumsImmediateForTests(cameraWorldPosition, frustumPlanes, 1, settings);
         }
 
         /// <summary>
-        /// [INTEGRATION] Prepares one grouped shadow frame for a batch of main-light cascade frustums.
+        /// [INTEGRATION] Schedules and immediately completes one batched-frustum preparation frame for EditMode tests that cannot execute RenderGraph.
         /// </summary>
-        public bool PrepareForFrustums(
+        internal bool PrepareRenderGraphFrustumsImmediateForTests(
             Vector3 cameraWorldPosition,
             Plane[] frustumPlanes,
             int frustumCount,
             VegetationFoliageFeatureSettings settings)
         {
-            // Range: one or more main-light shadow cascade frustums. Condition: compiled packet shadow modes decide the submitted caster set; no runtime shadow-proxy promotion exists. Output: one shared shadow instance/args frame is ready for all cascade submissions.
+            // Range: EditMode validation only. Condition: uses the same shadow scheduling path as RenderGraph, then completes the job and CPU buffer upload synchronously. Output: diagnostics counters match the production scheduled shadow frame.
+            CompletePreparationSlots();
             int validatedFrustumCount = ResolveFrustumCount(frustumPlanes, frustumCount);
             if (validatedFrustumCount <= 0 || settings.ShadowMode == VegetationShadowMode.Off)
             {
                 return false;
             }
 
-            InvalidatePreparedCameraCache();
             using (PrepareMarker.Auto())
             {
                 using (PrepareEnsureGraphMarker.Auto())
@@ -490,20 +469,84 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     }
                 }
 
+                int settingsHash = ComputePrepareSettingsHash(settings, VegetationRenderPassMode.Shadow);
+                if (!TrySchedulePreparationJob(
+                    cameraWorldPosition,
+                    VegetationRenderPassMode.Shadow,
+                    settings,
+                    frustumPlanes,
+                    validatedFrustumCount,
+                    Time.renderedFrameCount,
+                    0,
+                    settingsHash,
+                    out PreparationSlot slot))
+                {
+                    return false;
+                }
+
+                TryFinalizePreparationSlot(slot, allowBlocking: true);
+                VegetationRenderGraphFrame frame = CreateRenderGraphFrame(slot);
+                CompletePreparationImmediate(frame);
+                return hasPreparedFrame;
+            }
+        }
+
+        /// <summary>
+        /// [INTEGRATION] Schedules one RenderGraph-owned shadow-frustum preparation job without completing it on the caller thread.
+        /// </summary>
+        internal bool ScheduleRenderGraphPrepareForFrustums(
+            Vector3 cameraWorldPosition,
+            Plane[] frustumPlanes,
+            int frustumCount,
+            VegetationFoliageFeatureSettings settings,
+            out VegetationRenderGraphFrame frame)
+        {
+            // Range: one or more main-light shadow cascade frustums. Condition: records only an already-completed shadow preparation frame, then schedules the next shadow frame without waiting. Output: a renderable preparation frame imported by RenderGraph.
+            frame = default;
+            int validatedFrustumCount = ResolveFrustumCount(frustumPlanes, frustumCount);
+            if (validatedFrustumCount <= 0 || settings.ShadowMode == VegetationShadowMode.Off)
+            {
+                return false;
+            }
+
+            int renderFrame = Time.renderedFrameCount;
+            int settingsHash = ComputePrepareSettingsHash(settings, VegetationRenderPassMode.Shadow);
+            using (PrepareMarker.Auto())
+            {
+                using (PrepareEnsureGraphMarker.Auto())
+                {
+                    EnsureCompiledGraph();
+                    RefreshCompletedPreparationSlots();
+                    if (groups.Count == 0 || pages.Count == 0)
+                    {
+                        ClearPreparedFrame();
+                        return false;
+                    }
+                }
+
+                bool hasCompletedFrame = TryCreateRecordedShadowFrame(renderFrame, settingsHash, out frame);
+                if (!hasCompletedFrame)
+                {
+                    hasCompletedFrame = TryCreateCompletedShadowFrame(settingsHash, out frame);
+                    if (hasCompletedFrame)
+                    {
+                        CacheRecordedShadowFrame(renderFrame, settingsHash, frame);
+                    }
+                }
+
                 using (PrepareBroadPhaseMarker.Auto())
                 {
-                    ClearVisibilityMasks();
-                    MarkVisibleByFrustums(frustumPlanes, validatedFrustumCount);
-                }
-
-                using (PrepareSelectPacketsMarker.Auto())
-                {
-                    SelectPackets(cameraWorldPosition, VegetationRenderPassMode.Shadow, settings, frustumPlanes, validatedFrustumCount);
-                }
-
-                using (PrepareUploadMarker.Auto())
-                {
-                    return UploadPreparedFrame(settings, VegetationRenderPassMode.Shadow);
+                    TrySchedulePreparationJob(
+                        cameraWorldPosition,
+                        VegetationRenderPassMode.Shadow,
+                        settings,
+                        frustumPlanes,
+                        validatedFrustumCount,
+                        renderFrame,
+                        0,
+                        settingsHash,
+                        out _);
+                    return hasCompletedFrame;
                 }
             }
         }
@@ -550,6 +593,605 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
         }
 
+        internal void CompleteRenderGraphPreparation(
+            in VegetationRenderGraphFrame frame,
+            ComputeCommandBuffer commandBuffer,
+            BufferHandle instanceBufferHandle,
+            BufferHandle argsBufferHandle)
+        {
+            if (!TryResolveCompletedPreparationSlot(frame, out PreparationSlot slot))
+            {
+                return;
+            }
+
+            if (slot.UploadedVersion == slot.Version)
+            {
+                return;
+            }
+
+            int instanceUploadCount = Math.Max(1, slot.Counters[PreparationCounterPreparedInstanceCount]);
+            int argsUploadCount = Math.Max(1, slot.ArgsEntryCount * IndirectArgsUIntCount);
+            commandBuffer.SetBufferData(instanceBufferHandle, slot.InstanceData, 0, 0, instanceUploadCount);
+            commandBuffer.SetBufferData(argsBufferHandle, slot.ArgsData, 0, 0, argsUploadCount);
+            slot.UploadedVersion = slot.Version;
+        }
+
+        internal bool ActivateRenderGraphPreparedFrame(in VegetationRenderGraphFrame frame)
+        {
+            if (!TryResolveCompletedPreparationSlot(frame, out PreparationSlot slot))
+            {
+                return false;
+            }
+
+            return ActivatePreparationSlot(slot);
+        }
+
+        private void CompletePreparationImmediate(in VegetationRenderGraphFrame frame)
+        {
+            if (!TryResolvePreparationSlot(frame, out PreparationSlot slot))
+            {
+                ClearPreparedFrame();
+                return;
+            }
+
+            if (!TryFinalizePreparationSlot(slot, allowBlocking: true) ||
+                !ActivatePreparationSlot(slot))
+            {
+                ClearPreparedFrame();
+                return;
+            }
+
+            if (slot.UploadedVersion == slot.Version)
+            {
+                return;
+            }
+
+            int instanceUploadCount = Math.Max(1, slot.Counters[PreparationCounterPreparedInstanceCount]);
+            int argsUploadCount = Math.Max(1, slot.ArgsEntryCount * IndirectArgsUIntCount);
+            instanceBuffer!.SetData(slot.InstanceData, 0, 0, instanceUploadCount);
+            argsBuffer!.SetData(slot.ArgsData, 0, 0, argsUploadCount);
+            slot.UploadedVersion = slot.Version;
+        }
+
+        private bool TryResolvePreparationSlot(in VegetationRenderGraphFrame frame, out PreparationSlot slot)
+        {
+            slot = null!;
+            int slotIndex = frame.PreparationSlotIndex;
+            if (slotIndex < 0 || slotIndex >= preparationSlots.Length)
+            {
+                return false;
+            }
+
+            PreparationSlot candidate = preparationSlots[slotIndex];
+            if (candidate.Version != frame.PreparationVersion)
+            {
+                return false;
+            }
+
+            slot = candidate;
+            return true;
+        }
+
+        private bool TryResolveCompletedPreparationSlot(in VegetationRenderGraphFrame frame, out PreparationSlot slot)
+        {
+            if (!TryResolvePreparationSlot(frame, out slot))
+            {
+                return false;
+            }
+
+            return slot.CompletedVersion == slot.Version;
+        }
+
+        private VegetationRenderGraphFrame CreateRenderGraphFrame(PreparationSlot slot)
+        {
+            return new VegetationRenderGraphFrame(
+                instanceBuffer!,
+                argsBuffer!,
+                slot.Counters[PreparationCounterPreparedInstanceCount],
+                slot.Counters[PreparationCounterPreparedPacketCount],
+                slot.Counters[PreparationCounterPreparedActiveGroupCount],
+                slot.Counters[PreparationCounterPreparedFrustumMask],
+                graphVersion,
+                slot.SlotIndex,
+                slot.Version);
+        }
+
+        private int ResolvePreparationArgsEntryCount(VegetationRenderPassMode passMode, int frustumCount)
+        {
+            int groupCount = Math.Max(1, groups.Count);
+            return passMode == VegetationRenderPassMode.Shadow
+                ? groupCount * Math.Max(1, frustumCount)
+                : groupCount;
+        }
+
+        private int ResolvePreparationInstanceCapacity(VegetationRenderPassMode passMode, int frustumCount)
+        {
+            int baseCount = Math.Max(1, maxPreparationInstanceCount);
+            return passMode == VegetationRenderPassMode.Shadow
+                ? baseCount * Math.Max(1, frustumCount)
+                : baseCount;
+        }
+
+        private void RefreshCompletedPreparationSlots()
+        {
+            for (int i = 0; i < preparationSlots.Length; i++)
+            {
+                TryFinalizePreparationSlot(preparationSlots[i], allowBlocking: false);
+            }
+        }
+
+        private bool TryCreateRecordedCameraFrame(
+            int renderFrame,
+            int cameraId,
+            int settingsHash,
+            out VegetationRenderGraphFrame frame)
+        {
+            frame = default;
+            if (renderGraphCameraFrame != renderFrame ||
+                renderGraphCameraId != cameraId ||
+                renderGraphCameraSettingsHash != settingsHash ||
+                renderGraphCameraPreparationSlot < 0)
+            {
+                return false;
+            }
+
+            return TryCreateFrameFromCompletedSlot(
+                renderGraphCameraPreparationSlot,
+                renderGraphCameraPreparationVersion,
+                cameraId,
+                settingsHash,
+                VegetationRenderPassMode.Color,
+                out frame);
+        }
+
+        private void CacheRecordedCameraFrame(
+            int renderFrame,
+            int cameraId,
+            int settingsHash,
+            in VegetationRenderGraphFrame frame)
+        {
+            renderGraphCameraFrame = renderFrame;
+            renderGraphCameraId = cameraId;
+            renderGraphCameraSettingsHash = settingsHash;
+            renderGraphCameraPreparationSlot = frame.PreparationSlotIndex;
+            renderGraphCameraPreparationVersion = frame.PreparationVersion;
+            if (TryResolveCompletedPreparationSlot(frame, out PreparationSlot slot))
+            {
+                slot.LastRecordedFrame = renderFrame;
+            }
+        }
+
+        private bool TryCreateCompletedCameraFrame(
+            int cameraId,
+            int settingsHash,
+            out VegetationRenderGraphFrame frame)
+        {
+            return TryCreateFrameFromCompletedSlot(
+                completedCameraPreparationSlot,
+                completedCameraPreparationVersion,
+                cameraId,
+                settingsHash,
+                VegetationRenderPassMode.Color,
+                out frame);
+        }
+
+        private bool TryCreateRecordedShadowFrame(int renderFrame, int settingsHash, out VegetationRenderGraphFrame frame)
+        {
+            frame = default;
+            if (renderGraphShadowFrame != renderFrame ||
+                renderGraphShadowSettingsHash != settingsHash ||
+                renderGraphShadowPreparationSlot < 0)
+            {
+                return false;
+            }
+
+            return TryCreateFrameFromCompletedSlot(
+                renderGraphShadowPreparationSlot,
+                renderGraphShadowPreparationVersion,
+                cameraId: 0,
+                settingsHash,
+                VegetationRenderPassMode.Shadow,
+                out frame);
+        }
+
+        private void CacheRecordedShadowFrame(int renderFrame, int settingsHash, in VegetationRenderGraphFrame frame)
+        {
+            renderGraphShadowFrame = renderFrame;
+            renderGraphShadowSettingsHash = settingsHash;
+            renderGraphShadowPreparationSlot = frame.PreparationSlotIndex;
+            renderGraphShadowPreparationVersion = frame.PreparationVersion;
+            if (TryResolveCompletedPreparationSlot(frame, out PreparationSlot slot))
+            {
+                slot.LastRecordedFrame = renderFrame;
+            }
+        }
+
+        private bool TryCreateCompletedShadowFrame(int settingsHash, out VegetationRenderGraphFrame frame)
+        {
+            return TryCreateFrameFromCompletedSlot(
+                completedShadowPreparationSlot,
+                completedShadowPreparationVersion,
+                cameraId: 0,
+                settingsHash,
+                VegetationRenderPassMode.Shadow,
+                out frame);
+        }
+
+        private bool TryCreateFrameFromCompletedSlot(
+            int slotIndex,
+            int slotVersion,
+            int cameraId,
+            int settingsHash,
+            VegetationRenderPassMode passMode,
+            out VegetationRenderGraphFrame frame,
+            bool requireSettingsMatch = true)
+        {
+            frame = default;
+            if (slotIndex < 0 || slotIndex >= preparationSlots.Length)
+            {
+                return false;
+            }
+
+            PreparationSlot slot = preparationSlots[slotIndex];
+            if (slot.Version != slotVersion ||
+                slot.CompletedVersion != slotVersion ||
+                slot.GraphVersion != graphVersion ||
+                (slot.PassMode != passMode &&
+                 !(passMode != VegetationRenderPassMode.Shadow && slot.PassMode != VegetationRenderPassMode.Shadow)))
+            {
+                return false;
+            }
+
+            if (requireSettingsMatch &&
+                (slot.CameraId != cameraId || slot.SettingsHash != settingsHash))
+            {
+                return false;
+            }
+
+            frame = CreateRenderGraphFrame(slot);
+            return frame.InstanceCount > 0 && frame.ActiveGroupCount > 0;
+        }
+
+        private void TryScheduleCameraPreparation(
+            int renderFrame,
+            int cameraId,
+            int settingsHash,
+            Vector3 cameraWorldPosition,
+            VegetationRenderPassMode passMode,
+            VegetationFoliageFeatureSettings settings,
+            Plane[] frustumPlanes)
+        {
+            if (pendingCameraFrame == renderFrame &&
+                pendingCameraId == cameraId &&
+                pendingCameraSettingsHash == settingsHash)
+            {
+                return;
+            }
+
+            if (TrySchedulePreparationJob(
+                    cameraWorldPosition,
+                    passMode,
+                    settings,
+                    frustumPlanes,
+                    1,
+                    renderFrame,
+                    cameraId,
+                    settingsHash,
+                    out _))
+            {
+                pendingCameraFrame = renderFrame;
+                pendingCameraId = cameraId;
+                pendingCameraSettingsHash = settingsHash;
+            }
+        }
+
+        private void CacheCompletedPreparationSlot(PreparationSlot slot)
+        {
+            if (slot.GraphVersion != graphVersion ||
+                slot.CompletedVersion != slot.Version ||
+                !slot.Counters.IsCreated ||
+                slot.Counters.Length <= PreparationCounterPreparedActiveGroupCount ||
+                slot.Counters[PreparationCounterPreparedInstanceCount] <= 0 ||
+                slot.Counters[PreparationCounterPreparedActiveGroupCount] <= 0)
+            {
+                return;
+            }
+
+            if (slot.PassMode == VegetationRenderPassMode.Shadow)
+            {
+                completedShadowPreparationSlot = slot.SlotIndex;
+                completedShadowPreparationVersion = slot.Version;
+                return;
+            }
+
+            completedCameraPreparationSlot = slot.SlotIndex;
+            completedCameraPreparationVersion = slot.Version;
+        }
+
+        private bool IsPreparationSlotPinnedForCurrentRenderGraph(PreparationSlot slot)
+        {
+            int renderFrame = Time.renderedFrameCount;
+            if (slot.LastRecordedFrame >= 0)
+            {
+                int recordedAge = renderFrame - slot.LastRecordedFrame;
+                if (recordedAge >= 0 && recordedAge <= RecordedPreparationSlotHoldFrames)
+                {
+                    return true;
+                }
+            }
+
+            return (renderGraphCameraFrame == renderFrame &&
+                    renderGraphCameraPreparationSlot == slot.SlotIndex &&
+                    renderGraphCameraPreparationVersion == slot.Version) ||
+                   (renderGraphShadowFrame == renderFrame &&
+                    renderGraphShadowPreparationSlot == slot.SlotIndex &&
+                    renderGraphShadowPreparationVersion == slot.Version);
+        }
+
+        private void InvalidatePreparationReferences(PreparationSlot slot)
+        {
+            if (completedCameraPreparationSlot == slot.SlotIndex &&
+                completedCameraPreparationVersion == slot.Version)
+            {
+                completedCameraPreparationSlot = -1;
+                completedCameraPreparationVersion = 0;
+            }
+
+            if (completedShadowPreparationSlot == slot.SlotIndex &&
+                completedShadowPreparationVersion == slot.Version)
+            {
+                completedShadowPreparationSlot = -1;
+                completedShadowPreparationVersion = 0;
+            }
+
+            if (renderGraphCameraPreparationSlot == slot.SlotIndex &&
+                renderGraphCameraPreparationVersion == slot.Version)
+            {
+                renderGraphCameraFrame = -1;
+                renderGraphCameraId = -1;
+                renderGraphCameraSettingsHash = 0;
+                renderGraphCameraPreparationSlot = -1;
+                renderGraphCameraPreparationVersion = 0;
+            }
+
+            if (renderGraphShadowPreparationSlot == slot.SlotIndex &&
+                renderGraphShadowPreparationVersion == slot.Version)
+            {
+                renderGraphShadowFrame = -1;
+                renderGraphShadowSettingsHash = 0;
+                renderGraphShadowPreparationSlot = -1;
+                renderGraphShadowPreparationVersion = 0;
+            }
+        }
+
+        private bool TrySchedulePreparationJob(
+            Vector3 cameraWorldPosition,
+            VegetationRenderPassMode passMode,
+            VegetationFoliageFeatureSettings settings,
+            Plane[] frustumPlanes,
+            int frustumCount,
+            int renderFrame,
+            int cameraId,
+            int settingsHash,
+            out PreparationSlot slot)
+        {
+            slot = null!;
+            int validatedFrustumCount = ResolveFrustumCount(frustumPlanes, frustumCount);
+            if (!TryAcquirePreparationSlot(out slot))
+            {
+                return false;
+            }
+
+            int argsEntryCount = ResolvePreparationArgsEntryCount(passMode, validatedFrustumCount);
+            int instanceCount = ResolvePreparationInstanceCapacity(passMode, validatedFrustumCount);
+            EnsureGpuBuffers(instanceCount, argsEntryCount);
+            EnsurePreparationSlotCapacity(
+                slot,
+                instanceCount,
+                Math.Max(1, groups.Count),
+                argsEntryCount,
+                Math.Max(1, cells.Count),
+                Math.Max(6, validatedFrustumCount * 6));
+            CopyFrustumPlanesToSlot(slot, frustumPlanes, validatedFrustumCount);
+            BeginScheduledResidencyFrame();
+            ApplyPreparationWindSettings(slot, settings);
+
+            unchecked
+            {
+                preparationVersion++;
+                if (preparationVersion == 0)
+                {
+                    preparationVersion = 1;
+                }
+            }
+
+            slot.Version = preparationVersion;
+            slot.UploadedVersion = 0;
+            slot.CompletedVersion = 0;
+            slot.PassMode = passMode;
+            slot.RenderFrame = renderFrame;
+            slot.CameraId = cameraId;
+            slot.SettingsHash = settingsHash;
+            slot.GraphVersion = graphVersion;
+            slot.LastRecordedFrame = -1;
+            slot.GroupCount = groups.Count;
+            slot.ArgsEntryCount = argsEntryCount;
+            slot.FrustumCount = validatedFrustumCount;
+            slot.JobHandle = new PrepareFrameJob
+            {
+                Pages = preparationPages,
+                Cells = preparationCells,
+                Packets = preparationPackets,
+                PacketLookupIndices = preparationPacketLookupIndices,
+                Groups = preparationGroups,
+                StaticInstances = preparationStaticInstances,
+                NearDetailResidentCellMask = preparationNearDetailResidentCellMask,
+                NearDetailRequestedCellMask = preparationNearDetailRequestedCellMask,
+                NearDetailLastUsedCellFrame = preparationNearDetailLastUsedCellFrame,
+                FrustumPlanes = slot.FrustumPlanes,
+                CellCandidates = slot.CellCandidates,
+                SelectedPackets = slot.SelectedPackets,
+                PageVisibleMask = slot.PageVisibleMask,
+                InstanceData = slot.InstanceData,
+                ArgsData = slot.ArgsData,
+                GroupInstanceCounts = slot.GroupInstanceCounts,
+                GroupStartInstances = slot.GroupStartInstances,
+                GroupWriteOffsets = slot.GroupWriteOffsets,
+                GroupFrustumMasks = slot.GroupFrustumMasks,
+                Counters = slot.Counters,
+                LongCounters = slot.LongCounters,
+                CameraWorldPosition = cameraWorldPosition,
+                PassMode = (int)passMode,
+                FrustumCount = validatedFrustumCount,
+                AllFrustumMask = AllFrustumBits(validatedFrustumCount),
+                GroupCount = groups.Count,
+                ArgsEntryCount = argsEntryCount,
+                CellCount = cells.Count,
+                ResidencyFrameIndex = residencyFrameIndex,
+                WorkBudget = settings.GetWorkBudget(passMode),
+                InstanceBudget = Mathf.Max(1, settings.MaxVisiblePacketInstances),
+                ResidentByteBudget = settings.GetNearDetailResidentByteBudget(),
+                UploadByteBudget = settings.GetNearDetailUploadByteBudget(),
+                NearDistanceSqr = Mathf.Max(1f, settings.NearDetailDistance) * Mathf.Max(1f, settings.NearDetailDistance)
+            }.Schedule(preparationDependency);
+            preparationDependency = slot.JobHandle;
+            JobHandle.ScheduleBatchedJobs();
+            return true;
+        }
+
+        private bool TryAcquirePreparationSlot(out PreparationSlot slot)
+        {
+            slot = null!;
+            for (int attempt = 0; attempt < preparationSlots.Length; attempt++)
+            {
+                int slotIndex = (preparationSlotCursor + attempt) % preparationSlots.Length;
+                PreparationSlot candidate = preparationSlots[slotIndex];
+                if (IsPreparationSlotPinnedForCurrentRenderGraph(candidate))
+                {
+                    continue;
+                }
+
+                if (candidate.Version != 0 &&
+                    candidate.CompletedVersion != candidate.Version &&
+                    !TryFinalizePreparationSlot(candidate, allowBlocking: false))
+                {
+                    continue;
+                }
+
+                InvalidatePreparationReferences(candidate);
+                preparationSlotCursor = (slotIndex + 1) % preparationSlots.Length;
+                slot = candidate;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TryFinalizePreparationSlot(PreparationSlot slot, bool allowBlocking)
+        {
+            if (slot.Version == 0)
+            {
+                return false;
+            }
+
+            if (slot.CompletedVersion == slot.Version)
+            {
+                return true;
+            }
+
+            if (!allowBlocking && !slot.JobHandle.IsCompleted)
+            {
+                return false;
+            }
+
+            slot.JobHandle.Complete();
+            slot.CompletedVersion = slot.Version;
+            CacheCompletedPreparationSlot(slot);
+            return true;
+        }
+
+        private bool ActivatePreparationSlot(PreparationSlot slot)
+        {
+            if (slot.CompletedVersion != slot.Version)
+            {
+                return false;
+            }
+
+            activeGroupIndexCount = 0;
+            EnsureActiveGroupIndexCapacity(groups.Count);
+            EnsurePreparedGroupStateCapacity(Math.Max(groups.Count, slot.ArgsEntryCount));
+            int groupEntryCount = Math.Min(slot.ArgsEntryCount, groupInstanceCounts.Length);
+            for (int entryIndex = 0; entryIndex < groupEntryCount; entryIndex++)
+            {
+                groupStartInstances[entryIndex] = slot.GroupStartInstances[entryIndex];
+                groupInstanceCounts[entryIndex] = slot.GroupInstanceCounts[entryIndex];
+            }
+
+            for (int groupIndex = 0; groupIndex < groups.Count; groupIndex++)
+            {
+                int groupFrustumMask = groupIndex < slot.GroupFrustumMasks.Length
+                    ? slot.GroupFrustumMasks[groupIndex]
+                    : 0;
+                if (groupFrustumMask != 0)
+                {
+                    activeGroupIndices[activeGroupIndexCount++] = groupIndex;
+                }
+
+                groupFrustumMasks[groupIndex] = groupFrustumMask;
+            }
+
+            preparedInstanceCount = slot.Counters[PreparationCounterPreparedInstanceCount];
+            preparedPacketCount = slot.Counters[PreparationCounterPreparedPacketCount];
+            preparedNearDetailPacketCount = slot.Counters[PreparationCounterPreparedNearDetailPacketCount];
+            preparedTreeL0PacketCount = slot.Counters[PreparationCounterPreparedTreeL0PacketCount];
+            preparedTreeL1PacketCount = slot.Counters[PreparationCounterPreparedTreeL1PacketCount];
+            preparedTreeL2PacketCount = slot.Counters[PreparationCounterPreparedTreeL2PacketCount];
+            preparedHlodPacketCount = slot.Counters[PreparationCounterPreparedHlodPacketCount];
+            preparedShadowPacketCount = slot.Counters[PreparationCounterPreparedShadowPacketCount];
+            preparedActiveGroupCount = slot.Counters[PreparationCounterPreparedActiveGroupCount];
+            preparedFrustumMask = slot.Counters[PreparationCounterPreparedFrustumMask];
+            preparedVisiblePageCount = slot.Counters[PreparationCounterVisiblePageCount];
+            preparedVisibleCellCount = slot.Counters[PreparationCounterVisibleCellCount];
+            preparedNearDetailLoadRequestCount = slot.Counters[PreparationCounterNearDetailLoadRequestCount];
+            preparedNearDetailEvictedCellCount = slot.Counters[PreparationCounterNearDetailEvictedCellCount];
+            nearDetailResidentCellCount = slot.Counters[PreparationCounterNearDetailResidentCellCount];
+            nearDetailResidentBytes = slot.LongCounters[PreparationLongCounterNearDetailResidentBytes];
+            preparedNearDetailLoadedBytes = slot.LongCounters[PreparationLongCounterNearDetailLoadedBytes];
+            preparedWindStrength = slot.WindStrength;
+            preparedWindFrequency = slot.WindFrequency;
+            preparedWindDirection = slot.WindDirection;
+            preparedLeafFlutterSettings = slot.LeafFlutterSettings;
+            lastRenderedGroupCount = 0;
+            lastSkippedGroupCount = 0;
+            hasPreparedFrame = preparedInstanceCount > 0 && preparedActiveGroupCount > 0;
+            return hasPreparedFrame;
+        }
+
+        private void EnsureActiveGroupIndexCapacity(int requiredCount)
+        {
+            if (activeGroupIndices.Length >= requiredCount)
+            {
+                return;
+            }
+
+            activeGroupIndices = new int[Mathf.NextPowerOfTwo(Mathf.Max(1, requiredCount))];
+        }
+
+        private void EnsurePreparedGroupStateCapacity(int requiredCount)
+        {
+            if (groupInstanceCounts.Length < requiredCount)
+            {
+                int capacity = Mathf.NextPowerOfTwo(Mathf.Max(1, requiredCount));
+                groupInstanceCounts = new int[capacity];
+                groupStartInstances = new int[capacity];
+            }
+
+            if (groupFrustumMasks.Length < groups.Count)
+            {
+                groupFrustumMasks = new int[Mathf.NextPowerOfTwo(Mathf.Max(1, groups.Count))];
+            }
+        }
+
         public void Dispose()
         {
             if (disposed)
@@ -559,7 +1201,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             disposed = true;
             Reset();
-            FlushRetiredBatchRendererResources(force: true);
         }
 
         private void RenderInternal(
@@ -578,9 +1219,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     return;
                 }
 
-                // Unity 6.3/D3D12 validates this SRV on indirect draws before per-draw property-block state is always visible.
-                // The shader declares it only for procedural indirect variants, so this does not affect BRG/DOTS or preview draws.
-                drawWrapper.SetGlobalBuffer(InstanceBufferId, instanceBuffer);
                 sharedPropertyBlock.Clear();
                 sharedPropertyBlock.SetBuffer(InstanceBufferId, instanceBuffer);
                 sharedPropertyBlock.SetInt(InstanceBufferBaseOffsetId, 0);
@@ -616,12 +1254,21 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                             continue;
                         }
 
-                        sharedPropertyBlock.SetInt(InstanceBufferBaseOffsetId, groupStartInstances[groupIndex]);
+                        int groupEntryIndex = ResolveRenderGroupEntryIndex(passMode, shadowFrustumIndex, groupIndex);
+                        if (groupEntryIndex < 0 ||
+                            groupEntryIndex >= groupInstanceCounts.Length ||
+                            groupInstanceCounts[groupEntryIndex] <= 0)
+                        {
+                            skippedGroupCount++;
+                            continue;
+                        }
+
+                        sharedPropertyBlock.SetInt(InstanceBufferBaseOffsetId, groupStartInstances[groupEntryIndex]);
                         drawWrapper.DrawMeshInstancedIndirect(
                             group.AssetGroup.Mesh,
                             group.AssetGroup.Material,
                             argsBuffer,
-                            group.ArgsBufferOffset,
+                            ResolveArgsBufferOffset(groupEntryIndex),
                             passIndex,
                             sharedPropertyBlock);
                         renderedGroupCount++;
@@ -656,6 +1303,34 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             return 1 << shadowFrustumIndex;
         }
 
+        private int ResolveRenderGroupEntryIndex(
+            VegetationRenderPassMode passMode,
+            int shadowFrustumIndex,
+            int groupIndex)
+        {
+            if (groupIndex < 0 || groupIndex >= groups.Count)
+            {
+                return -1;
+            }
+
+            if (passMode != VegetationRenderPassMode.Shadow)
+            {
+                return groupIndex;
+            }
+
+            if (shadowFrustumIndex < 0)
+            {
+                return -1;
+            }
+
+            return groupIndex + shadowFrustumIndex * groups.Count;
+        }
+
+        private static int ResolveArgsBufferOffset(int groupEntryIndex)
+        {
+            return checked(groupEntryIndex * GraphicsBuffer.IndirectDrawIndexedArgs.size);
+        }
+
         private void EnsureCompiledGraph()
         {
             if (!graphDirty)
@@ -664,7 +1339,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             ClearCompiledGraph();
-            int sphereCount = 0;
             for (int providerIndex = 0; providerIndex < providers.Count; providerIndex++)
             {
                 ProviderRecord provider = providers[providerIndex];
@@ -673,7 +1347,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
                 for (int groupIndex = 0; groupIndex < provider.AssetGroups.Length; groupIndex++)
                 {
-                    groups.Add(new GroupRecord(provider.AssetGroups[groupIndex], groups.Count));
+                    groups.Add(new GroupRecord(provider.AssetGroups[groupIndex]));
                 }
 
                 for (int pageIndex = 0; pageIndex < provider.Pages.Length; pageIndex++)
@@ -681,201 +1355,452 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                     FoliagePageAsset page = provider.Pages[pageIndex];
                     int pageRecordIndex = pages.Count;
                     int firstCellRecord = cells.Count;
-                    PageRecord pageRecord = new PageRecord(pageRecordIndex, providerIndex, pageIndex, page, sphereCount, firstCellRecord, page.Cells.Count);
+                    PageRecord pageRecord = new PageRecord(pageRecordIndex, providerIndex, pageIndex, page, firstCellRecord, page.Cells.Count);
                     pages.Add(pageRecord);
-                    sphereCount++;
 
                     for (int cellOffset = 0; cellOffset < page.Cells.Count; cellOffset++)
                     {
                         FoliagePageCell cell = page.Cells[cellOffset];
-                        cells.Add(new CellRecord(pageRecordIndex, cell.CellIndex, sphereCount, cell.WorldBounds));
-                        sphereCount++;
+                        cells.Add(new CellRecord(pageRecordIndex, cell.CellIndex, cell.WorldBounds));
                     }
                 }
             }
 
-            boundingSpheres = new BoundingSphere[Mathf.Max(0, sphereCount)];
-            sphereRecords = new SphereRecord[Mathf.Max(0, sphereCount)];
-            visibleSphereIndices = new int[Mathf.Max(1, sphereCount)];
-            visiblePageMask = new bool[pages.Count];
-            visibleCellMask = new bool[cells.Count];
-            visiblePageFrustumMasks = new int[pages.Count];
-            visibleCellFrustumMasks = new int[cells.Count];
-            nearDetailResidentCellMask = new bool[cells.Count];
-            nearDetailRequestedCellMask = new bool[cells.Count];
             nearDetailCellBytes = new long[cells.Count];
-            nearDetailLastUsedCellFrame = new int[cells.Count];
             nearDetailResidentBytes = 0L;
             nearDetailResidentCellCount = 0;
-            int writeSphere = 0;
-            for (int pageIndex = 0; pageIndex < pages.Count; pageIndex++)
-            {
-                PageRecord page = pages[pageIndex];
-                boundingSpheres[writeSphere] = new BoundingSphere(
-                    page.Page.WorldBounds.center,
-                    Mathf.Max(0.01f, page.Page.WorldBounds.extents.magnitude));
-                sphereRecords[writeSphere] = SphereRecord.Page(pageIndex);
-                page.PageSphereIndex = writeSphere;
-                pages[pageIndex] = page;
-                writeSphere++;
-
-                for (int cellOffset = 0; cellOffset < page.CellCount; cellOffset++)
-                {
-                    int cellRecordIndex = page.FirstCellRecord + cellOffset;
-                    CellRecord cell = cells[cellRecordIndex];
-                    boundingSpheres[writeSphere] = new BoundingSphere(
-                        cell.WorldBounds.center,
-                        Mathf.Max(0.01f, cell.WorldBounds.extents.magnitude));
-                    sphereRecords[writeSphere] = SphereRecord.Cell(cellRecordIndex);
-                    cell.SphereIndex = writeSphere;
-                    cells[cellRecordIndex] = cell;
-                    writeSphere++;
-                }
-            }
 
             BuildPacketLookup();
             BuildNearDetailCellBytes();
             BuildBatchInstanceLookup();
             BuildPacketInstanceValidation();
             LogInvalidCompiledPacketsOnce();
+            BuildPreparationGraph();
             EnsureHotPathCapacity();
             groupInstanceCounts = new int[groups.Count];
             groupFrustumMasks = new int[groups.Count];
             groupStartInstances = new int[groups.Count];
-            groupWriteOffsets = new int[groups.Count];
-            EnsureArgsUploadCapacity(groups.Count * IndirectArgsUIntCount);
             argsGroupCapacity = 0;
-            ReleaseCullingGroup();
             graphDirty = false;
         }
 
         private void EnsureHotPathCapacity()
         {
-            if (cellCandidates.Length < cells.Count)
-            {
-                cellCandidates = new CellCandidate[Mathf.NextPowerOfTwo(Mathf.Max(1, cells.Count))];
-            }
-
             if (activeGroupIndices.Length < groups.Count)
             {
                 activeGroupIndices = new int[Mathf.NextPowerOfTwo(Mathf.Max(1, groups.Count))];
             }
-
-            if (selectedPackets.Length < packetLookupIndices.Length)
-            {
-                selectedPackets = new PacketSelection[Mathf.NextPowerOfTwo(Mathf.Max(1, packetLookupIndices.Length))];
-            }
         }
 
-        private void AddCellCandidate(CellCandidate candidate)
+        private void BuildPreparationGraph()
         {
-            if (cellCandidateCount >= cellCandidates.Length)
+            CompletePreparationSlots();
+            DisposePreparationGraph();
+
+            int pageCount = pages.Count;
+            int cellCount = cells.Count;
+            int groupCount = groups.Count;
+            int packetCount = 0;
+            int validPacketInstanceCount = 0;
+            int[] pagePacketOffsets = pageCount > 0 ? new int[pageCount] : Array.Empty<int>();
+            for (int pageRecordIndex = 0; pageRecordIndex < pageCount; pageRecordIndex++)
             {
-                Array.Resize(ref cellCandidates, Mathf.NextPowerOfTwo(Mathf.Max(1, cellCandidateCount + 1)));
-            }
-
-            cellCandidates[cellCandidateCount++] = candidate;
-        }
-
-        private void AddSelectedPacket(PacketSelection selection)
-        {
-            if (selectedPacketCount >= selectedPackets.Length)
-            {
-                Array.Resize(ref selectedPackets, Mathf.NextPowerOfTwo(Mathf.Max(1, selectedPacketCount + 1)));
-            }
-
-            selectedPackets[selectedPacketCount++] = selection;
-        }
-
-        private void AddActiveGroupIndex(int groupIndex)
-        {
-            if (activeGroupIndexCount >= activeGroupIndices.Length)
-            {
-                Array.Resize(ref activeGroupIndices, Mathf.NextPowerOfTwo(Mathf.Max(1, activeGroupIndexCount + 1)));
-            }
-
-            activeGroupIndices[activeGroupIndexCount++] = groupIndex;
-        }
-
-        private void RegisterAllowedBatchRendererCameraView(int cameraViewId)
-        {
-            int frame = Time.renderedFrameCount;
-            if (batchRendererAllowedCameraViewFrame != frame)
-            {
-                batchRendererAllowedCameraViewFrame = frame;
-                batchRendererAllowedCameraViewIdCount = 0;
-            }
-
-            for (int i = 0; i < batchRendererAllowedCameraViewIdCount; i++)
-            {
-                if (batchRendererAllowedCameraViewIds[i] == cameraViewId)
+                pagePacketOffsets[pageRecordIndex] = packetCount;
+                IReadOnlyList<FoliageRepresentationPacket> packets = pages[pageRecordIndex].Page.Packets;
+                packetCount += packets.Count;
+                for (int packetIndex = 0; packetIndex < packets.Count; packetIndex++)
                 {
-                    return;
+                    validPacketInstanceCount += GetValidPacketInstanceCount(pageRecordIndex, packetIndex);
                 }
             }
 
-            if (batchRendererAllowedCameraViewIdCount >= batchRendererAllowedCameraViewIds.Length)
-            {
-                Array.Resize(
-                    ref batchRendererAllowedCameraViewIds,
-                    Mathf.NextPowerOfTwo(Mathf.Max(1, batchRendererAllowedCameraViewIdCount + 1)));
-            }
+            preparationPages = new NativeArray<PreparationPageRecord>(
+                Mathf.Max(1, pageCount),
+                Allocator.Persistent,
+                NativeArrayOptions.UninitializedMemory);
+            preparationCells = new NativeArray<PreparationCellRecord>(
+                Mathf.Max(1, cellCount),
+                Allocator.Persistent,
+                NativeArrayOptions.UninitializedMemory);
+            preparationPackets = new NativeArray<PreparationPacketRecord>(
+                Mathf.Max(1, packetCount),
+                Allocator.Persistent,
+                NativeArrayOptions.UninitializedMemory);
+            preparationPacketLookupIndices = new NativeArray<int>(
+                Mathf.Max(1, packetLookupIndices.Length),
+                Allocator.Persistent,
+                NativeArrayOptions.UninitializedMemory);
+            preparationGroups = new NativeArray<PreparationGroupRecord>(
+                Mathf.Max(1, groupCount),
+                Allocator.Persistent,
+                NativeArrayOptions.UninitializedMemory);
+            preparationStaticInstances = new NativeArray<VegetationIndirectInstanceData>(
+                Mathf.Max(1, validPacketInstanceCount),
+                Allocator.Persistent,
+                NativeArrayOptions.UninitializedMemory);
+            preparationNearDetailResidentCellMask = new NativeArray<int>(
+                Mathf.Max(1, cellCount),
+                Allocator.Persistent,
+                NativeArrayOptions.ClearMemory);
+            preparationNearDetailRequestedCellMask = new NativeArray<int>(
+                Mathf.Max(1, cellCount),
+                Allocator.Persistent,
+                NativeArrayOptions.ClearMemory);
+            preparationNearDetailLastUsedCellFrame = new NativeArray<int>(
+                Mathf.Max(1, cellCount),
+                Allocator.Persistent,
+                NativeArrayOptions.ClearMemory);
 
-            batchRendererAllowedCameraViewIds[batchRendererAllowedCameraViewIdCount++] = cameraViewId;
-        }
-
-        private bool IsBatchRendererCameraViewAllowed(int cameraViewId)
-        {
-            for (int i = 0; i < batchRendererAllowedCameraViewIdCount; i++)
+            int staticInstanceWrite = 0;
+            int[] pageWriteOffsets = pagePacketRanges.Length > 0 ? new int[pagePacketRanges.Length] : Array.Empty<int>();
+            int[] cellWriteOffsets = cellPacketRanges.Length > 0 ? new int[cellPacketRanges.Length] : Array.Empty<int>();
+            for (int pageRecordIndex = 0; pageRecordIndex < pageCount; pageRecordIndex++)
             {
-                if (batchRendererAllowedCameraViewIds[i] == cameraViewId)
+                PageRecord pageRecord = pages[pageRecordIndex];
+                FoliagePageAsset pageAsset = pageRecord.Page;
+                PacketRange pageHlodRange = GetPacketRange(pageRecordIndex, FoliageRepresentationKind.PageHLOD, -1);
+                Bounds pageBounds = pageAsset.WorldBounds;
+                preparationPages[pageRecordIndex] = new PreparationPageRecord
                 {
-                    return true;
+                    BoundsCenter = pageBounds.center,
+                    BoundsExtents = pageBounds.extents,
+                    FirstCellRecord = pageRecord.FirstCellRecord,
+                    CellCount = pageRecord.CellCount,
+                    PageHlodStart = pageHlodRange.Start,
+                    PageHlodCount = pageHlodRange.Count
+                };
+
+                for (int cellOffset = 0; cellOffset < pageRecord.CellCount; cellOffset++)
+                {
+                    int cellRecordIndex = pageRecord.FirstCellRecord + cellOffset;
+                    CellRecord cell = cells[cellRecordIndex];
+                    PacketRange cellHlodRange = GetPacketRange(pageRecordIndex, FoliageRepresentationKind.CellHLOD, cellRecordIndex);
+                    PacketRange treeL0Range = GetPacketRange(pageRecordIndex, FoliageRepresentationKind.TreeL0, cellRecordIndex);
+                    PacketRange treeL1Range = GetPacketRange(pageRecordIndex, FoliageRepresentationKind.TreeL1, cellRecordIndex);
+                    PacketRange treeL2Range = GetPacketRange(pageRecordIndex, FoliageRepresentationKind.TreeL2, cellRecordIndex);
+                    preparationCells[cellRecordIndex] = new PreparationCellRecord
+                    {
+                        BoundsCenter = cell.WorldBounds.center,
+                        BoundsExtents = cell.WorldBounds.extents,
+                        PageRecordIndex = cell.PageRecordIndex,
+                        CellHlodStart = cellHlodRange.Start,
+                        CellHlodCount = cellHlodRange.Count,
+                        TreeL0Start = treeL0Range.Start,
+                        TreeL0Count = treeL0Range.Count,
+                        TreeL1Start = treeL1Range.Start,
+                        TreeL1Count = treeL1Range.Count,
+                        TreeL2Start = treeL2Range.Start,
+                        TreeL2Count = treeL2Range.Count,
+                        NearDetailBytes = cellRecordIndex < nearDetailCellBytes.Length ? nearDetailCellBytes[cellRecordIndex] : 0L
+                    };
+                }
+
+                IReadOnlyList<FoliageRepresentationPacket> packets = pageAsset.Packets;
+                for (int packetIndex = 0; packetIndex < packets.Count; packetIndex++)
+                {
+                    FoliageRepresentationPacket packet = packets[packetIndex];
+                    int firstStaticInstance = staticInstanceWrite;
+                    int worldGroupIndex = -1;
+                    int shadowPacketIndex = -1;
+                    Bounds packetBounds = default;
+                    int workCost = 1;
+                    int residency = (int)FoliagePacketResidency.AlwaysResident;
+                    int representationKind = (int)FoliageRepresentationKind.PageHLOD;
+                    int shadowMode = (int)FoliageShadowPacketMode.None;
+                    if (packet != null)
+                    {
+                        worldGroupIndex = ResolveWorldGroupIndex(pageRecord.ProviderIndex, packet.AssetGroupIndex);
+                        packetBounds = packet.WorldBounds;
+                        workCost = packet.WorkCost;
+                        residency = (int)packet.Residency;
+                        representationKind = (int)packet.RepresentationKind;
+                        shadowMode = (int)packet.ShadowMode;
+                        if (packet.ShadowPacketIndex >= 0 && packet.ShadowPacketIndex < packets.Count)
+                        {
+                            shadowPacketIndex = pagePacketOffsets[pageRecordIndex] + packet.ShadowPacketIndex;
+                        }
+
+                        for (int instanceOffset = 0; instanceOffset < packet.InstanceCount; instanceOffset++)
+                        {
+                            if (!TryResolvePacketLocalInstance(
+                                    pageRecord,
+                                    pageRecordIndex,
+                                    packet,
+                                    instanceOffset,
+                                    worldGroupIndex,
+                                    out int sourceInstanceIndex,
+                                    out _))
+                            {
+                                continue;
+                            }
+
+                            preparationStaticInstances[staticInstanceWrite++] =
+                                ConvertInstance(pageAsset.Instances[sourceInstanceIndex]);
+                        }
+                    }
+
+                    preparationPackets[pagePacketOffsets[pageRecordIndex] + packetIndex] =
+                        new PreparationPacketRecord
+                        {
+                            BoundsCenter = packetBounds.center,
+                            BoundsExtents = packetBounds.extents,
+                            WorldGroupIndex = worldGroupIndex,
+                            FirstInstance = firstStaticInstance,
+                            InstanceCount = staticInstanceWrite - firstStaticInstance,
+                            WorkCost = workCost,
+                            Residency = residency,
+                            RepresentationKind = representationKind,
+                            ShadowMode = shadowMode,
+                            ShadowPacketIndex = shadowPacketIndex
+                        };
+
+                    if (packet == null ||
+                        !TryResolvePacketRangeIndex(pageRecord, packet, out bool pageRange, out int rangeIndex))
+                    {
+                        continue;
+                    }
+
+                    PacketRange range = pageRange ? pagePacketRanges[rangeIndex] : cellPacketRanges[rangeIndex];
+                    int[] writeOffsets = pageRange ? pageWriteOffsets : cellWriteOffsets;
+                    int writeIndex = range.Start + writeOffsets[rangeIndex];
+                    if (writeIndex >= 0 && writeIndex < preparationPacketLookupIndices.Length)
+                    {
+                        preparationPacketLookupIndices[writeIndex] = pagePacketOffsets[pageRecordIndex] + packetIndex;
+                    }
+
+                    writeOffsets[rangeIndex]++;
                 }
             }
 
-            return false;
-        }
-
-        private static BatchCullingScratch GetBatchCullingScratch()
-        {
-            BatchCullingScratch? scratch = threadBatchCullingScratch;
-            if (scratch == null)
+            int worstPreparedInstanceCount = 0;
+            for (int pageRecordIndex = 0; pageRecordIndex < pageCount; pageRecordIndex++)
             {
-                scratch = new BatchCullingScratch();
-                threadBatchCullingScratch = scratch;
+                PageRecord pageRecord = pages[pageRecordIndex];
+                int pageHlodCount = Math.Max(
+                    CountPacketRangeValidInstances(pageRecordIndex, GetPacketRange(pageRecordIndex, FoliageRepresentationKind.PageHLOD, -1), shadow: false),
+                    CountPacketRangeValidInstances(pageRecordIndex, GetPacketRange(pageRecordIndex, FoliageRepresentationKind.PageHLOD, -1), shadow: true));
+                int pageCellWorstCount = 0;
+                for (int cellOffset = 0; cellOffset < pageRecord.CellCount; cellOffset++)
+                {
+                    int cellRecordIndex = pageRecord.FirstCellRecord + cellOffset;
+                    int cellWorstCount = 0;
+                    cellWorstCount = Math.Max(cellWorstCount, CountPacketRangeValidInstances(pageRecordIndex, GetPacketRange(pageRecordIndex, FoliageRepresentationKind.CellHLOD, cellRecordIndex), shadow: false));
+                    cellWorstCount = Math.Max(cellWorstCount, CountPacketRangeValidInstances(pageRecordIndex, GetPacketRange(pageRecordIndex, FoliageRepresentationKind.TreeL0, cellRecordIndex), shadow: false));
+                    cellWorstCount = Math.Max(cellWorstCount, CountPacketRangeValidInstances(pageRecordIndex, GetPacketRange(pageRecordIndex, FoliageRepresentationKind.TreeL1, cellRecordIndex), shadow: false));
+                    cellWorstCount = Math.Max(cellWorstCount, CountPacketRangeValidInstances(pageRecordIndex, GetPacketRange(pageRecordIndex, FoliageRepresentationKind.TreeL2, cellRecordIndex), shadow: false));
+                    cellWorstCount = Math.Max(cellWorstCount, CountPacketRangeValidInstances(pageRecordIndex, GetPacketRange(pageRecordIndex, FoliageRepresentationKind.CellHLOD, cellRecordIndex), shadow: true));
+                    cellWorstCount = Math.Max(cellWorstCount, CountPacketRangeValidInstances(pageRecordIndex, GetPacketRange(pageRecordIndex, FoliageRepresentationKind.TreeL0, cellRecordIndex), shadow: true));
+                    cellWorstCount = Math.Max(cellWorstCount, CountPacketRangeValidInstances(pageRecordIndex, GetPacketRange(pageRecordIndex, FoliageRepresentationKind.TreeL1, cellRecordIndex), shadow: true));
+                    cellWorstCount = Math.Max(cellWorstCount, CountPacketRangeValidInstances(pageRecordIndex, GetPacketRange(pageRecordIndex, FoliageRepresentationKind.TreeL2, cellRecordIndex), shadow: true));
+                    pageCellWorstCount += cellWorstCount;
+                }
+
+                worstPreparedInstanceCount += Math.Max(pageHlodCount, pageCellWorstCount);
             }
 
-            return scratch;
+            maxPreparationInstanceCount = Mathf.Max(1, worstPreparedInstanceCount);
+            for (int groupIndex = 0; groupIndex < groupCount; groupIndex++)
+            {
+                GroupRecord group = groups[groupIndex];
+                preparationGroups[groupIndex] = new PreparationGroupRecord
+                {
+                    IndexCount = group.IndexCount,
+                    IndexStart = group.IndexStart,
+                    BaseVertex = group.BaseVertex
+                };
+            }
         }
 
-        private static BatchRendererState? ResolveBatchRendererState(IntPtr userContext)
+        private int CountPacketRangeValidInstances(int pageRecordIndex, PacketRange range, bool shadow)
         {
-            if (userContext == IntPtr.Zero)
+            if (pageRecordIndex < 0 || pageRecordIndex >= pages.Count || range.Count <= 0)
             {
-                return null;
+                return 0;
             }
 
-            GCHandle handle = GCHandle.FromIntPtr(userContext);
-            return handle.IsAllocated ? handle.Target as BatchRendererState : null;
+            FoliagePageAsset page = pages[pageRecordIndex].Page;
+            int count = 0;
+            for (int rangeOffset = 0; rangeOffset < range.Count; rangeOffset++)
+            {
+                int packetIndex = packetLookupIndices[range.Start + rangeOffset];
+                if (packetIndex < 0 || packetIndex >= page.Packets.Count)
+                {
+                    continue;
+                }
+
+                FoliageRepresentationPacket packet = page.Packets[packetIndex];
+                if (packet == null)
+                {
+                    continue;
+                }
+
+                if (!shadow)
+                {
+                    count += GetValidPacketInstanceCount(pageRecordIndex, packetIndex);
+                    continue;
+                }
+
+                if (packet.ShadowMode == FoliageShadowPacketMode.None ||
+                    packet.ShadowPacketIndex < 0 ||
+                    packet.ShadowPacketIndex >= page.Packets.Count)
+                {
+                    continue;
+                }
+
+                count += GetValidPacketInstanceCount(pageRecordIndex, packet.ShadowPacketIndex);
+            }
+
+            return count;
+        }
+
+        private void EnsurePreparationSlotCapacity(
+            PreparationSlot slot,
+            int instanceCount,
+            int groupCount,
+            int argsEntryCount,
+            int cellCount,
+            int frustumPlaneCount)
+        {
+            slot.JobHandle.Complete();
+            EnsureNativeArrayCapacity(ref slot.FrustumPlanes, frustumPlaneCount, NativeArrayOptions.UninitializedMemory);
+            EnsureNativeArrayCapacity(ref slot.CellCandidates, cellCount, NativeArrayOptions.UninitializedMemory);
+            EnsureNativeArrayCapacity(ref slot.SelectedPackets, Math.Max(1, preparationPacketLookupIndices.Length), NativeArrayOptions.UninitializedMemory);
+            EnsureNativeArrayCapacity(ref slot.PageVisibleMask, Math.Max(1, pages.Count), NativeArrayOptions.ClearMemory);
+            EnsureNativeArrayCapacity(ref slot.InstanceData, instanceCount, NativeArrayOptions.UninitializedMemory);
+            EnsureNativeArrayCapacity(ref slot.ArgsData, argsEntryCount * IndirectArgsUIntCount, NativeArrayOptions.ClearMemory);
+            EnsureNativeArrayCapacity(ref slot.GroupInstanceCounts, argsEntryCount, NativeArrayOptions.ClearMemory);
+            EnsureNativeArrayCapacity(ref slot.GroupStartInstances, argsEntryCount, NativeArrayOptions.ClearMemory);
+            EnsureNativeArrayCapacity(ref slot.GroupWriteOffsets, argsEntryCount, NativeArrayOptions.ClearMemory);
+            EnsureNativeArrayCapacity(ref slot.GroupFrustumMasks, groupCount, NativeArrayOptions.ClearMemory);
+            EnsureNativeArrayCapacity(ref slot.Counters, PreparationCounterCount, NativeArrayOptions.ClearMemory);
+            EnsureNativeArrayCapacity(ref slot.LongCounters, PreparationLongCounterCount, NativeArrayOptions.ClearMemory);
+        }
+
+        private static void CopyFrustumPlanesToSlot(PreparationSlot slot, Plane[] frustumPlanes, int frustumCount)
+        {
+            int planeCount = Mathf.Min(slot.FrustumPlanes.Length, Mathf.Max(0, frustumCount) * 6);
+            for (int i = 0; i < planeCount; i++)
+            {
+                Plane plane = frustumPlanes[i];
+                Vector3 normal = plane.normal;
+                slot.FrustumPlanes[i] = new Vector4(normal.x, normal.y, normal.z, plane.distance);
+            }
+        }
+
+        private void BeginScheduledResidencyFrame()
+        {
+            if (residencyFrameIndex == int.MaxValue)
+            {
+                if (preparationNearDetailLastUsedCellFrame.IsCreated)
+                {
+                    for (int i = 0; i < preparationNearDetailLastUsedCellFrame.Length; i++)
+                    {
+                        preparationNearDetailLastUsedCellFrame[i] = 0;
+                    }
+                }
+
+                residencyFrameIndex = 1;
+                return;
+            }
+
+            residencyFrameIndex++;
+        }
+
+        private static void ApplyPreparationWindSettings(PreparationSlot slot, VegetationFoliageFeatureSettings settings)
+        {
+            slot.WindStrength = Mathf.Max(0f, settings.WindStrength);
+            slot.WindFrequency = Mathf.Max(0f, settings.WindFrequency);
+            Vector3 windDirection = settings.WindDirection.sqrMagnitude > 0.0001f
+                ? settings.WindDirection.normalized
+                : Vector3.right;
+            slot.WindDirection = new Vector4(windDirection.x, windDirection.y, windDirection.z, 0f);
+            slot.LeafFlutterSettings = new Vector4(
+                Mathf.Max(0f, settings.LeafFlutterStrength),
+                Mathf.Max(0f, settings.LeafFlutterFrequencyMultiplier),
+                Mathf.Max(0f, settings.LeafFlutterSpatialScale),
+                Mathf.Max(0f, settings.LeafFlutterSecondaryStrength));
+        }
+
+        private void CompletePreparationSlots()
+        {
+            preparationDependency.Complete();
+            preparationDependency = default;
+            for (int i = 0; i < preparationSlots.Length; i++)
+            {
+                PreparationSlot slot = preparationSlots[i];
+                if (slot.Version == 0)
+                {
+                    continue;
+                }
+
+                if (slot.CompletedVersion != slot.Version)
+                {
+                    slot.JobHandle.Complete();
+                    slot.CompletedVersion = slot.Version;
+                    CacheCompletedPreparationSlot(slot);
+                }
+            }
+        }
+
+        private void DisposePreparationGraph()
+        {
+            DisposeNativeArray(ref preparationPages);
+            DisposeNativeArray(ref preparationCells);
+            DisposeNativeArray(ref preparationPackets);
+            DisposeNativeArray(ref preparationPacketLookupIndices);
+            DisposeNativeArray(ref preparationGroups);
+            DisposeNativeArray(ref preparationStaticInstances);
+            DisposeNativeArray(ref preparationNearDetailResidentCellMask);
+            DisposeNativeArray(ref preparationNearDetailRequestedCellMask);
+            DisposeNativeArray(ref preparationNearDetailLastUsedCellFrame);
+            maxPreparationInstanceCount = 0;
+        }
+
+        private void DisposePreparationSlots()
+        {
+            preparationDependency.Complete();
+            for (int i = 0; i < preparationSlots.Length; i++)
+            {
+                preparationSlots[i].Dispose();
+            }
+        }
+
+        private static void EnsureNativeArrayCapacity<T>(
+            ref NativeArray<T> array,
+            int requiredCount,
+            NativeArrayOptions options)
+            where T : struct
+        {
+            if (array.IsCreated && array.Length >= requiredCount)
+            {
+                return;
+            }
+
+            DisposeNativeArray(ref array);
+            array = new NativeArray<T>(
+                Mathf.NextPowerOfTwo(Mathf.Max(1, requiredCount)),
+                Allocator.Persistent,
+                options);
+        }
+
+        private static void DisposeNativeArray<T>(ref NativeArray<T> array)
+            where T : struct
+        {
+            if (array.IsCreated)
+            {
+                array.Dispose();
+            }
         }
 
         private void ClearCompiledGraph()
         {
+            CompletePreparationSlots();
+            DisposePreparationGraph();
+            DisposePreparationSlots();
             pages.Clear();
             cells.Clear();
             groups.Clear();
-            boundingSpheres = Array.Empty<BoundingSphere>();
-            sphereRecords = Array.Empty<SphereRecord>();
-            visibleSphereIndices = Array.Empty<int>();
-            visiblePageMask = Array.Empty<bool>();
-            visibleCellMask = Array.Empty<bool>();
-            visiblePageFrustumMasks = Array.Empty<int>();
-            visibleCellFrustumMasks = Array.Empty<int>();
-            nearDetailResidentCellMask = Array.Empty<bool>();
-            nearDetailRequestedCellMask = Array.Empty<bool>();
             nearDetailCellBytes = Array.Empty<long>();
-            nearDetailLastUsedCellFrame = Array.Empty<int>();
             pagePacketRanges = Array.Empty<PacketRange>();
             cellPacketRanges = Array.Empty<PacketRange>();
             packetLookupIndices = Array.Empty<int>();
@@ -884,20 +1809,13 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             groupInstanceCounts = Array.Empty<int>();
             groupFrustumMasks = Array.Empty<int>();
             groupStartInstances = Array.Empty<int>();
-            groupWriteOffsets = Array.Empty<int>();
             groupTotalInstanceCounts = Array.Empty<int>();
             pageInstanceGroupLocalIndices = Array.Empty<int[]>();
             pagePacketValidInstanceCounts = Array.Empty<int[]>();
             invalidCompiledPacketCount = 0;
-            ReleaseBatchRendererResources();
-            DisposeUploadArrays();
-            selectedPacketCount = 0;
             activeGroupIndexCount = 0;
-            cellCandidateCount = 0;
-            batchRendererAllowedCameraViewIdCount = 0;
-            batchRendererAllowedCameraViewFrame = -1;
             hasPreparedFrame = false;
-            InvalidatePreparedCameraCache();
+            InvalidatePreparationFrameCaches();
         }
 
         private void BuildPacketLookup()
@@ -1039,7 +1957,7 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
             invalidCompiledPacketsLogged = true;
             Debug.LogWarning(
-                $"Vegetation compiled graph dropped invalid packet instance ranges count={invalidCompiledPacketCount}. Rebuild compiled foliage pages; runtime will skip invalid packet entries to keep BRG culling output valid.");
+                $"Vegetation compiled graph dropped invalid packet instance ranges count={invalidCompiledPacketCount}. Rebuild compiled foliage pages; runtime will skip invalid packet entries to keep grouped draw output valid.");
         }
 
         private int CountValidPacketInstances(
@@ -1098,19 +2016,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             return packetIndex < counts.Length ? counts[packetIndex] : 0;
         }
 
-        private static int GetValidPacketInstanceCount(BatchRendererState state, int pageRecordIndex, int packetIndex)
-        {
-            if (pageRecordIndex < 0 ||
-                pageRecordIndex >= state.PagePacketValidInstanceCounts.Length ||
-                packetIndex < 0)
-            {
-                return 0;
-            }
-
-            int[] counts = state.PagePacketValidInstanceCounts[pageRecordIndex];
-            return packetIndex < counts.Length ? counts[packetIndex] : 0;
-        }
-
         private bool TryResolvePacketLocalInstance(
             PageRecord pageRecord,
             int pageRecordIndex,
@@ -1148,46 +2053,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                    expectedWorldGroupIndex < groupTotalInstanceCounts.Length &&
                    groupLocalInstanceIndex >= 0 &&
                    groupLocalInstanceIndex < groupTotalInstanceCounts[expectedWorldGroupIndex];
-        }
-
-        private static bool TryResolvePacketLocalInstance(
-            BatchRendererState state,
-            int pageRecordIndex,
-            BatchRendererPacketRecord packet,
-            int instanceOffset,
-            int expectedWorldGroupIndex,
-            out int sourceInstanceIndex,
-            out int groupLocalInstanceIndex)
-        {
-            sourceInstanceIndex = packet.FirstInstance + instanceOffset;
-            groupLocalInstanceIndex = -1;
-            if (instanceOffset < 0 ||
-                sourceInstanceIndex < 0 ||
-                pageRecordIndex < 0 ||
-                pageRecordIndex >= state.PageInstanceAssetGroupIndices.Length ||
-                pageRecordIndex >= state.PageInstanceGroupLocalIndices.Length)
-            {
-                return false;
-            }
-
-            int[] assetGroupIndices = state.PageInstanceAssetGroupIndices[pageRecordIndex];
-            if (sourceInstanceIndex >= assetGroupIndices.Length ||
-                assetGroupIndices[sourceInstanceIndex] != packet.AssetGroupIndex)
-            {
-                return false;
-            }
-
-            int[] pageLookup = state.PageInstanceGroupLocalIndices[pageRecordIndex];
-            if (sourceInstanceIndex >= pageLookup.Length)
-            {
-                return false;
-            }
-
-            groupLocalInstanceIndex = pageLookup[sourceInstanceIndex];
-            return expectedWorldGroupIndex >= 0 &&
-                   expectedWorldGroupIndex < state.GroupTotalInstanceCounts.Length &&
-                   groupLocalInstanceIndex >= 0 &&
-                   groupLocalInstanceIndex < state.GroupTotalInstanceCounts[expectedWorldGroupIndex];
         }
 
         private long EstimatePacketRangeBytes(FoliagePageAsset page, PacketRange range)
@@ -1269,37 +2134,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 : default;
         }
 
-        private static PacketRange GetPacketRange(
-            BatchRendererState state,
-            int pageRecordIndex,
-            FoliageRepresentationKind representationKind,
-            int cellRecordIndex)
-        {
-            if (pageRecordIndex < 0)
-            {
-                return default;
-            }
-
-            int representationSlot = GetRepresentationSlot(representationKind);
-            if (representationSlot < 0)
-            {
-                return default;
-            }
-
-            if (cellRecordIndex < 0)
-            {
-                int pageRangeIndex = pageRecordIndex * PacketLookupRepresentationSlotCount + representationSlot;
-                return pageRangeIndex >= 0 && pageRangeIndex < state.PagePacketRanges.Length
-                    ? state.PagePacketRanges[pageRangeIndex]
-                    : default;
-            }
-
-            int cellRangeIndex = cellRecordIndex * PacketLookupRepresentationSlotCount + representationSlot;
-            return cellRangeIndex >= 0 && cellRangeIndex < state.CellPacketRanges.Length
-                ? state.CellPacketRanges[cellRangeIndex]
-                : default;
-        }
-
         private int ResolveCellRecordIndex(PageRecord pageRecord, int pageCellIndex)
         {
             for (int cellOffset = 0; cellOffset < pageRecord.CellCount; cellOffset++)
@@ -1354,670 +2188,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
         }
 
-        private void EnsureCullingGroup(Camera camera)
-        {
-            if (cullingGroup == null)
-            {
-                cullingGroup = new CullingGroup();
-                cullingGroup.SetBoundingSpheres(boundingSpheres);
-                cullingGroup.SetBoundingSphereCount(boundingSpheres.Length);
-            }
-
-            if (cullingGroup.targetCamera != camera)
-            {
-                cullingGroup.targetCamera = camera;
-            }
-        }
-
-        private void EnsureBatchRendererResources()
-        {
-            VegetationFoliageFeatureSettings settings = batchRendererSettings
-                ?? throw new InvalidOperationException("Vegetation BRG settings are not assigned.");
-            BatchRendererSettingsSnapshot settingsSnapshot = BatchRendererSettingsSnapshot.From(settings);
-            if (batchRendererGroup != null && batchRendererState != null && brgBatches.Length == groups.Count)
-            {
-                batchRendererState.Settings = settingsSnapshot;
-                ApplyBatchRendererViewTypes(batchRendererGroup, settingsSnapshot);
-                return;
-            }
-
-            ReleaseBatchRendererResources();
-            BatchRendererState state = CreateBatchRendererState(settingsSnapshot);
-            state.Handle = GCHandle.Alloc(state);
-            try
-            {
-                batchRendererGroup = new BatchRendererGroup(
-                    OnPerformBatchRendererCulling,
-                    GCHandle.ToIntPtr(state.Handle));
-                state.RendererGroup = batchRendererGroup;
-                ApplyBatchRendererViewTypes(batchRendererGroup, settingsSnapshot);
-                batchRendererGroup.SetGlobalBounds(state.CalculateGlobalBounds());
-
-                brgBatches = new VegetationBrgBatch[groups.Count];
-                state.Batches = brgBatches;
-                for (int groupIndex = 0; groupIndex < groups.Count; groupIndex++)
-                {
-                    int instanceCount = groupIndex < groupTotalInstanceCounts.Length
-                        ? groupTotalInstanceCounts[groupIndex]
-                        : 0;
-                    if (instanceCount <= 0)
-                    {
-                        continue;
-                    }
-
-                    brgBatches[groupIndex] = CreateBatchRendererBatch(groupIndex, instanceCount);
-                }
-                batchRendererState = state;
-                LogBatchRendererRegistration(state);
-            }
-            catch
-            {
-                DisposeBatchRendererStateImmediate(state);
-                brgBatches = Array.Empty<VegetationBrgBatch>();
-                batchRendererGroup = null;
-                batchRendererState = null;
-                throw;
-            }
-        }
-
-        private static void ApplyBatchRendererViewTypes(
-            BatchRendererGroup rendererGroup,
-            BatchRendererSettingsSnapshot settings)
-        {
-            rendererGroup.SetEnabledViewTypes(settings.UsesBatchRendererLightCulling
-                ? BatchRendererCameraAndLightViewTypes
-                : BatchRendererCameraViewTypes);
-        }
-
-        private BatchRendererState CreateBatchRendererState(BatchRendererSettingsSnapshot settings)
-        {
-            // Range: the compiled graph currently owned by the main thread. Condition: graph was validated before BRG registration. Output: immutable managed arrays safe for Unity's BRG worker-thread culling callback.
-            int[] providerAssetGroupOffsets = providers.Count > 0 ? new int[providers.Count] : Array.Empty<int>();
-            for (int i = 0; i < providers.Count; i++)
-            {
-                providerAssetGroupOffsets[i] = providers[i].AssetGroupOffset;
-            }
-
-            BatchRendererPageRecord[] pageRecords = pages.Count > 0
-                ? new BatchRendererPageRecord[pages.Count]
-                : Array.Empty<BatchRendererPageRecord>();
-            BatchRendererPacketRecord[][] pagePackets = pages.Count > 0
-                ? new BatchRendererPacketRecord[pages.Count][]
-                : Array.Empty<BatchRendererPacketRecord[]>();
-            int[][] pageInstanceAssetGroupIndices = pages.Count > 0
-                ? new int[pages.Count][]
-                : Array.Empty<int[]>();
-
-            for (int pageRecordIndex = 0; pageRecordIndex < pages.Count; pageRecordIndex++)
-            {
-                PageRecord pageRecord = pages[pageRecordIndex];
-                FoliagePageAsset page = pageRecord.Page;
-                pageRecords[pageRecordIndex] = new BatchRendererPageRecord(
-                    pageRecord.ProviderIndex,
-                    pageRecord.PageRecordIndex,
-                    page.WorldBounds,
-                    pageRecord.FirstCellRecord,
-                    pageRecord.CellCount);
-
-                IReadOnlyList<FoliageRepresentationPacket> packets = page.Packets;
-                BatchRendererPacketRecord[] packetRecords = packets.Count > 0
-                    ? new BatchRendererPacketRecord[packets.Count]
-                    : Array.Empty<BatchRendererPacketRecord>();
-                for (int packetIndex = 0; packetIndex < packets.Count; packetIndex++)
-                {
-                    FoliageRepresentationPacket packet = packets[packetIndex];
-                    packetRecords[packetIndex] = packet != null
-                        ? new BatchRendererPacketRecord(packet)
-                        : default;
-                }
-
-                pagePackets[pageRecordIndex] = packetRecords;
-
-                IReadOnlyList<FoliagePacketInstance> instances = page.Instances;
-                int[] assetGroupIndices = instances.Count > 0
-                    ? new int[instances.Count]
-                    : Array.Empty<int>();
-                for (int instanceIndex = 0; instanceIndex < instances.Count; instanceIndex++)
-                {
-                    assetGroupIndices[instanceIndex] = instances[instanceIndex].AssetGroupIndex;
-                }
-
-                pageInstanceAssetGroupIndices[pageRecordIndex] = assetGroupIndices;
-            }
-
-            return new BatchRendererState(
-                settings,
-                providerAssetGroupOffsets,
-                pageRecords,
-                cells.Count > 0 ? cells.ToArray() : Array.Empty<CellRecord>(),
-                pagePackets,
-                pageInstanceAssetGroupIndices,
-                pagePacketRanges.Length > 0 ? (PacketRange[])pagePacketRanges.Clone() : Array.Empty<PacketRange>(),
-                cellPacketRanges.Length > 0 ? (PacketRange[])cellPacketRanges.Clone() : Array.Empty<PacketRange>(),
-                packetLookupIndices.Length > 0 ? (int[])packetLookupIndices.Clone() : Array.Empty<int>(),
-                groupTotalInstanceCounts.Length > 0 ? (int[])groupTotalInstanceCounts.Clone() : Array.Empty<int>(),
-                CloneJagged(pageInstanceGroupLocalIndices),
-                CloneJagged(pagePacketValidInstanceCounts));
-        }
-
-        private VegetationBrgBatch CreateBatchRendererBatch(int groupIndex, int instanceCount)
-        {
-            GroupRecord group = groups[groupIndex];
-            FoliageAssetGroup assetGroup = group.AssetGroup;
-            Mesh mesh = assetGroup.Mesh;
-            Material material = assetGroup.Material;
-            string shaderName = material.shader != null ? material.shader.name : "<missing-shader>";
-            BatchMeshID meshId = batchRendererGroup!.RegisterMesh(mesh);
-            BatchMaterialID materialId = batchRendererGroup.RegisterMaterial(material);
-
-            int byteAddressObjectToWorld = BrgExtraBytes;
-            int byteAddressWorldToObject = byteAddressObjectToWorld + instanceCount * BrgSizeOfPackedMatrix;
-            int byteAddressPackedLeafTint = byteAddressWorldToObject + instanceCount * BrgSizeOfPackedMatrix;
-            int byteAddressWind = AlignBytes(byteAddressPackedLeafTint + instanceCount * BrgSizeOfUint, BrgSizeOfFloat4);
-            int totalBytes = AlignBytes(byteAddressWind + instanceCount * BrgSizeOfFloat4, sizeof(int));
-            ValidateBatchRendererBufferLayout(
-                byteAddressObjectToWorld,
-                byteAddressWorldToObject,
-                byteAddressPackedLeafTint,
-                byteAddressWind);
-            GraphicsBuffer instanceDataBuffer = new GraphicsBuffer(
-                GraphicsBuffer.Target.Raw,
-                Mathf.Max(1, totalBytes / sizeof(int)),
-                sizeof(int));
-
-            UploadBatchRendererInstanceData(
-                groupIndex,
-                instanceCount,
-                instanceDataBuffer,
-                byteAddressObjectToWorld,
-                byteAddressWorldToObject,
-                byteAddressPackedLeafTint,
-                byteAddressWind);
-
-            NativeArray<MetadataValue> metadata = new NativeArray<MetadataValue>(
-                4,
-                Allocator.Temp,
-                NativeArrayOptions.UninitializedMemory);
-            try
-            {
-                metadata[0] = CreateBatchMetadata(UnityObjectToWorldId, byteAddressObjectToWorld);
-                metadata[1] = CreateBatchMetadata(UnityWorldToObjectId, byteAddressWorldToObject);
-                metadata[2] = CreateBatchMetadata(BrgPackedLeafTintId, byteAddressPackedLeafTint);
-                metadata[3] = CreateBatchMetadata(BrgWindId, byteAddressWind);
-                BatchID batchId = batchRendererGroup.AddBatch(metadata, instanceDataBuffer.bufferHandle);
-                return new VegetationBrgBatch(
-                    groupIndex,
-                    assetGroup.DebugLabel,
-                    mesh.name,
-                    material.name,
-                    shaderName,
-                    assetGroup.ForwardPassIndex,
-                    assetGroup.DepthPassIndex,
-                    assetGroup.ShadowPassIndex,
-                    byteAddressObjectToWorld,
-                    byteAddressWorldToObject,
-                    byteAddressPackedLeafTint,
-                    byteAddressWind,
-                    totalBytes,
-                    batchId,
-                    meshId,
-                    materialId,
-                    instanceDataBuffer,
-                    instanceCount);
-            }
-            catch
-            {
-                batchRendererGroup.UnregisterMesh(meshId);
-                batchRendererGroup.UnregisterMaterial(materialId);
-                instanceDataBuffer.Release();
-                throw;
-            }
-            finally
-            {
-                metadata.Dispose();
-            }
-        }
-
-        private void LogBatchRendererRegistration(BatchRendererState state)
-        {
-            if (!state.Settings.ShouldLogBatchRendererDiagnostics)
-            {
-                return;
-            }
-
-            int validBatchCount = 0;
-            for (int i = 0; i < state.Batches.Length; i++)
-            {
-                if (state.Batches[i].IsValid)
-                {
-                    validBatchCount++;
-                }
-            }
-
-            Bounds bounds = state.CalculateGlobalBounds();
-            StringBuilder builder = new StringBuilder(1024 + validBatchCount * 160);
-            builder.Append("Vegetation BRG registered api=")
-                .Append(state.Settings.GraphicsApi)
-                .Append(" shadowMode=")
-                .Append(state.Settings.ShadowMode)
-                .Append(" brgLightCulling=")
-                .Append(state.Settings.UsesBatchRendererLightCulling)
-                .Append(" bufferTarget=")
-                .Append(BatchRendererGroup.BufferTarget)
-                .Append(" providers=")
-                .Append(providers.Count)
-                .Append(" pages=")
-                .Append(state.PageCount)
-                .Append(" cells=")
-                .Append(state.CellCount)
-                .Append(" groups=")
-                .Append(state.GroupCount)
-                .Append(" validBatches=")
-                .Append(validBatchCount)
-                .Append(" boundsCenter=")
-                .Append(bounds.center)
-                .Append(" boundsSize=")
-                .Append(bounds.size);
-
-            for (int i = 0; i < state.Batches.Length; i++)
-            {
-                VegetationBrgBatch batch = state.Batches[i];
-                if (!batch.IsValid)
-                {
-                    continue;
-                }
-
-                builder.AppendLine()
-                    .Append("  brgBatch group=")
-                    .Append(batch.GroupIndex)
-                    .Append(" batchId=")
-                    .Append(batch.BatchId.value)
-                    .Append(" meshId=")
-                    .Append(batch.MeshId.value)
-                    .Append(" materialId=")
-                    .Append(batch.MaterialId.value)
-                    .Append(" instances=")
-                    .Append(batch.InstanceCount)
-                    .Append(" bufferBytes=")
-                    .Append(batch.BufferBytes)
-                    .Append(" metadataBytes=[objectToWorld:")
-                    .Append(batch.ObjectToWorldByteAddress)
-                    .Append(",worldToObject:")
-                    .Append(batch.WorldToObjectByteAddress)
-                    .Append(",leafTint:")
-                    .Append(batch.PackedLeafTintByteAddress)
-                    .Append(",wind:")
-                    .Append(batch.WindByteAddress)
-                    .Append("] passes=[forward:")
-                    .Append(batch.ForwardPassIndex)
-                    .Append(",depth:")
-                    .Append(batch.DepthPassIndex)
-                    .Append(",shadow:")
-                    .Append(batch.ShadowPassIndex)
-                    .Append("] mesh='")
-                    .Append(batch.MeshName)
-                    .Append("' material='")
-                    .Append(batch.MaterialName)
-                    .Append("' shader='")
-                    .Append(batch.ShaderName)
-                    .Append("' label='")
-                    .Append(batch.DebugLabel)
-                    .Append('\'');
-            }
-
-            Debug.Log(builder.ToString());
-        }
-
-        private void UploadBatchRendererInstanceData(
-            int groupIndex,
-            int instanceCount,
-            GraphicsBuffer instanceDataBuffer,
-            int byteAddressObjectToWorld,
-            int byteAddressWorldToObject,
-            int byteAddressPackedLeafTint,
-            int byteAddressWind)
-        {
-            Matrix4x4[] zeroMatrices =
-            {
-                Matrix4x4.zero
-            };
-            instanceDataBuffer.SetData(zeroMatrices, 0, 0, zeroMatrices.Length);
-
-            NativeArray<PackedMatrix> objectToWorld = new NativeArray<PackedMatrix>(
-                instanceCount,
-                Allocator.Temp,
-                NativeArrayOptions.UninitializedMemory);
-            NativeArray<PackedMatrix> worldToObject = new NativeArray<PackedMatrix>(
-                instanceCount,
-                Allocator.Temp,
-                NativeArrayOptions.UninitializedMemory);
-            NativeArray<uint> packedLeafTint = new NativeArray<uint>(
-                instanceCount,
-                Allocator.Temp,
-                NativeArrayOptions.UninitializedMemory);
-            NativeArray<Vector4> wind = new NativeArray<Vector4>(
-                instanceCount,
-                Allocator.Temp,
-                NativeArrayOptions.UninitializedMemory);
-            try
-            {
-                for (int pageRecordIndex = 0; pageRecordIndex < pages.Count; pageRecordIndex++)
-                {
-                    PageRecord pageRecord = pages[pageRecordIndex];
-                    IReadOnlyList<FoliagePacketInstance> instances = pageRecord.Page.Instances;
-                    int[] pageLookup = pageInstanceGroupLocalIndices[pageRecordIndex];
-                    for (int instanceIndex = 0; instanceIndex < instances.Count; instanceIndex++)
-                    {
-                        FoliagePacketInstance instance = instances[instanceIndex];
-                        int worldGroupIndex = ResolveWorldGroupIndex(pageRecord.ProviderIndex, instance.AssetGroupIndex);
-                        if (worldGroupIndex != groupIndex)
-                        {
-                            continue;
-                        }
-
-                        int localIndex = pageLookup[instanceIndex];
-                        if (localIndex < 0 || localIndex >= instanceCount)
-                        {
-                            continue;
-                        }
-
-                        FoliageWindMetadata windMetadata = instance.WindMetadata;
-                        objectToWorld[localIndex] = new PackedMatrix(instance.ObjectToWorld);
-                        worldToObject[localIndex] = new PackedMatrix(instance.WorldToObject);
-                        packedLeafTint[localIndex] = instance.PackedLeafTint;
-                        wind[localIndex] = new Vector4(
-                            windMetadata.Phase01,
-                            windMetadata.TrunkBendWeight,
-                            windMetadata.BranchFlutterWeight,
-                            windMetadata.AnchorHeight);
-                    }
-                }
-
-                instanceDataBuffer.SetData(
-                    objectToWorld,
-                    0,
-                    byteAddressObjectToWorld / BrgSizeOfPackedMatrix,
-                    objectToWorld.Length);
-                instanceDataBuffer.SetData(
-                    worldToObject,
-                    0,
-                    byteAddressWorldToObject / BrgSizeOfPackedMatrix,
-                    worldToObject.Length);
-                instanceDataBuffer.SetData(
-                    packedLeafTint,
-                    0,
-                    byteAddressPackedLeafTint / BrgSizeOfUint,
-                    packedLeafTint.Length);
-                instanceDataBuffer.SetData(
-                    wind,
-                    0,
-                    byteAddressWind / BrgSizeOfFloat4,
-                    wind.Length);
-            }
-            finally
-            {
-                objectToWorld.Dispose();
-                worldToObject.Dispose();
-                packedLeafTint.Dispose();
-                wind.Dispose();
-            }
-        }
-
-        private static MetadataValue CreateBatchMetadata(int propertyId, int byteAddress)
-        {
-            return new MetadataValue
-            {
-                NameID = propertyId,
-                Value = BrgPerInstanceMetadataFlag | unchecked((uint)byteAddress)
-            };
-        }
-
-        private static void ValidateBatchRendererBufferLayout(
-            int byteAddressObjectToWorld,
-            int byteAddressWorldToObject,
-            int byteAddressPackedLeafTint,
-            int byteAddressWind)
-        {
-            if (byteAddressObjectToWorld % BrgSizeOfPackedMatrix != 0 ||
-                byteAddressWorldToObject % BrgSizeOfPackedMatrix != 0 ||
-                byteAddressPackedLeafTint % BrgSizeOfUint != 0 ||
-                byteAddressWind % BrgSizeOfFloat4 != 0)
-            {
-                throw new InvalidOperationException(
-                    "Vegetation BRG batch buffer layout is invalid: metadata byte addresses must match GraphicsBuffer.SetData element alignment.");
-            }
-        }
-
-        private Bounds CalculateGlobalBounds()
-        {
-            if (pages.Count == 0)
-            {
-                return new Bounds(Vector3.zero, Vector3.one);
-            }
-
-            Bounds bounds = pages[0].Page.WorldBounds;
-            for (int i = 1; i < pages.Count; i++)
-            {
-                bounds.Encapsulate(pages[i].Page.WorldBounds);
-            }
-
-            return bounds;
-        }
-
-        private static int AlignBytes(int value, int alignment)
-        {
-            int safeAlignment = Mathf.Max(1, alignment);
-            return (value + safeAlignment - 1) / safeAlignment * safeAlignment;
-        }
-
-        private static int[][] CloneJagged(int[][] source)
-        {
-            if (source.Length == 0)
-            {
-                return Array.Empty<int[]>();
-            }
-
-            int[][] clone = new int[source.Length][];
-            for (int i = 0; i < source.Length; i++)
-            {
-                int[] inner = source[i];
-                clone[i] = inner.Length > 0 ? (int[])inner.Clone() : Array.Empty<int>();
-            }
-
-            return clone;
-        }
-
-        private void ClearVisibilityMasks()
-        {
-            if (visiblePageMask.Length > 0)
-            {
-                Array.Clear(visiblePageMask, 0, visiblePageMask.Length);
-            }
-
-            if (visibleCellMask.Length > 0)
-            {
-                Array.Clear(visibleCellMask, 0, visibleCellMask.Length);
-            }
-
-            if (visiblePageFrustumMasks.Length > 0)
-            {
-                Array.Clear(visiblePageFrustumMasks, 0, visiblePageFrustumMasks.Length);
-            }
-
-            if (visibleCellFrustumMasks.Length > 0)
-            {
-                Array.Clear(visibleCellFrustumMasks, 0, visibleCellFrustumMasks.Length);
-            }
-
-            preparedVisiblePageCount = 0;
-            preparedVisibleCellCount = 0;
-        }
-
-        private void MarkVisibleSpheres(int visibleCount)
-        {
-            int count = Mathf.Min(visibleCount, visibleSphereIndices.Length);
-            for (int i = 0; i < count; i++)
-            {
-                int sphereIndex = visibleSphereIndices[i];
-                if (sphereIndex < 0 || sphereIndex >= sphereRecords.Length)
-                {
-                    continue;
-                }
-
-                SphereRecord record = sphereRecords[sphereIndex];
-                if (record.Kind == SphereKind.Page)
-                {
-                    MarkPageVisible(record.RecordIndex);
-                }
-                else
-                {
-                    MarkCellVisible(record.RecordIndex);
-                }
-            }
-        }
-
-        private void MarkVisibleByFrustum(Plane[] frustumPlanes)
-        {
-            MarkVisibleByFrustums(frustumPlanes, 1);
-        }
-
-        private void MarkVisibleByFrustums(Plane[] frustumPlanes, int frustumCount)
-        {
-            int validatedFrustumCount = ResolveFrustumCount(frustumPlanes, frustumCount);
-            if (validatedFrustumCount <= 0)
-            {
-                return;
-            }
-
-            int allFrustumMask = AllFrustumBits(validatedFrustumCount);
-            for (int pageIndex = 0; pageIndex < pages.Count; pageIndex++)
-            {
-                PageRecord page = pages[pageIndex];
-                int pageFrustumMask = TestBoundsFrustumMask(
-                    frustumPlanes,
-                    allFrustumMask,
-                    validatedFrustumCount,
-                    page.Page.WorldBounds);
-                if (pageFrustumMask == 0)
-                {
-                    continue;
-                }
-
-                visiblePageFrustumMasks[pageIndex] = pageFrustumMask;
-                MarkPageVisible(pageIndex);
-                for (int cellOffset = 0; cellOffset < page.CellCount; cellOffset++)
-                {
-                    int cellRecordIndex = page.FirstCellRecord + cellOffset;
-                    int cellFrustumMask = TestBoundsFrustumMask(
-                        frustumPlanes,
-                        pageFrustumMask,
-                        validatedFrustumCount,
-                        cells[cellRecordIndex].WorldBounds);
-                    if (cellFrustumMask != 0)
-                    {
-                        visibleCellFrustumMasks[cellRecordIndex] = cellFrustumMask;
-                        MarkCellVisible(cellRecordIndex);
-                    }
-                }
-            }
-        }
-
-        private int MarkVisibleByBatchCullingContext(
-            BatchCullingContext cullingContext,
-            BatchCullingScratch scratch,
-            BatchRendererState state)
-        {
-            NativeArray<CullingSplit> splits = cullingContext.cullingSplits;
-            NativeArray<Plane> cullingPlanes = cullingContext.cullingPlanes;
-            if (!splits.IsCreated || !cullingPlanes.IsCreated || splits.Length <= 0)
-            {
-                return 0;
-            }
-
-            for (int planeIndex = 0; planeIndex < cullingPlanes.Length; planeIndex++)
-            {
-                scratch.CullingPlanes[planeIndex] = cullingPlanes[planeIndex];
-            }
-
-            int splitCount = Mathf.Min(splits.Length, 30);
-            int activeSplitMask = 0;
-            for (int splitIndex = 0; splitIndex < splitCount; splitIndex++)
-            {
-                CullingSplit split = splits[splitIndex];
-                scratch.SplitPlaneOffsets[splitIndex] = Mathf.Clamp(split.cullingPlaneOffset, 0, cullingPlanes.Length);
-                scratch.SplitPlaneCounts[splitIndex] = Mathf.Clamp(
-                    split.cullingPlaneCount,
-                    0,
-                    cullingPlanes.Length - scratch.SplitPlaneOffsets[splitIndex]);
-                int splitBit = 1 << splitIndex;
-                if ((cullingContext.splitExclusionMask & splitBit) == 0 && scratch.SplitPlaneCounts[splitIndex] > 0)
-                {
-                    activeSplitMask |= splitBit;
-                }
-            }
-
-            if (activeSplitMask == 0)
-            {
-                return 0;
-            }
-
-            for (int pageIndex = 0; pageIndex < state.Pages.Length; pageIndex++)
-            {
-                BatchRendererPageRecord page = state.Pages[pageIndex];
-                int pageSplitMask = TestBoundsBatchSplitMask(page.WorldBounds, activeSplitMask, splitCount, scratch);
-                if (pageSplitMask == 0)
-                {
-                    continue;
-                }
-
-                scratch.VisiblePageFrustumMasks[pageIndex] = pageSplitMask;
-                scratch.MarkPageVisible(pageIndex);
-                for (int cellOffset = 0; cellOffset < page.CellCount; cellOffset++)
-                {
-                    int cellRecordIndex = page.FirstCellRecord + cellOffset;
-                    if (cellRecordIndex < 0 || cellRecordIndex >= state.Cells.Length)
-                    {
-                        continue;
-                    }
-
-                    int cellSplitMask = TestBoundsBatchSplitMask(state.Cells[cellRecordIndex].WorldBounds, pageSplitMask, splitCount, scratch);
-                    if (cellSplitMask == 0)
-                    {
-                        continue;
-                    }
-
-                    scratch.VisibleCellFrustumMasks[cellRecordIndex] = cellSplitMask;
-                    scratch.MarkCellVisible(cellRecordIndex, state.Cells[cellRecordIndex].PageRecordIndex);
-                }
-            }
-
-            return activeSplitMask;
-        }
-
-        private int TestBoundsBatchSplitMask(Bounds bounds, int splitMask, int splitCount, BatchCullingScratch scratch)
-        {
-            int visibleMask = 0;
-            for (int splitIndex = 0; splitIndex < splitCount; splitIndex++)
-            {
-                int splitBit = 1 << splitIndex;
-                if ((splitMask & splitBit) == 0)
-                {
-                    continue;
-                }
-
-                if (TestBoundsPlanes(
-                        scratch.CullingPlanes,
-                        scratch.SplitPlaneOffsets[splitIndex],
-                        scratch.SplitPlaneCounts[splitIndex],
-                        bounds))
-                {
-                    visibleMask |= splitBit;
-                }
-            }
-
-            return visibleMask;
-        }
-
         private static int ResolveFrustumCount(Plane[]? frustumPlanes, int requestedFrustumCount)
         {
             if (frustumPlanes == null || requestedFrustumCount <= 0)
@@ -2028,1456 +2198,11 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             return Mathf.Min(Mathf.Min(requestedFrustumCount, frustumPlanes.Length / 6), 30);
         }
 
-        private static int TestBoundsFrustumMask(Plane[] frustumPlanes, int frustumMask, int frustumCount, Bounds bounds)
-        {
-            int visibleMask = 0;
-            for (int frustumIndex = 0; frustumIndex < frustumCount; frustumIndex++)
-            {
-                int frustumBit = 1 << frustumIndex;
-                if ((frustumMask & frustumBit) == 0)
-                {
-                    continue;
-                }
-
-                if (TestBoundsFrustum(frustumPlanes, frustumIndex * 6, bounds))
-                {
-                    visibleMask |= frustumBit;
-                }
-            }
-
-            return visibleMask;
-        }
-
-        private static bool TestBoundsPlanes(Plane[] planes, int planeOffset, int planeCount, Bounds bounds)
-        {
-            Vector3 center = bounds.center;
-            Vector3 extents = bounds.extents;
-            for (int planeIndex = 0; planeIndex < planeCount; planeIndex++)
-            {
-                Plane plane = planes[planeOffset + planeIndex];
-                Vector3 normal = plane.normal;
-                float radius =
-                    extents.x * Mathf.Abs(normal.x) +
-                    extents.y * Mathf.Abs(normal.y) +
-                    extents.z * Mathf.Abs(normal.z);
-                if (Vector3.Dot(normal, center) + plane.distance + radius < 0f)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
         private static int AllFrustumBits(int frustumCount)
         {
             int clampedCount = Mathf.Clamp(frustumCount, 0, 30);
             return clampedCount == 0 ? 0 : (1 << clampedCount) - 1;
         }
-
-        private static bool TestBoundsFrustum(Plane[] frustumPlanes, int planeOffset, Bounds bounds)
-        {
-            Vector3 center = bounds.center;
-            Vector3 extents = bounds.extents;
-            for (int planeIndex = 0; planeIndex < 6; planeIndex++)
-            {
-                Plane plane = frustumPlanes[planeOffset + planeIndex];
-                Vector3 normal = plane.normal;
-                float radius =
-                    extents.x * Mathf.Abs(normal.x) +
-                    extents.y * Mathf.Abs(normal.y) +
-                    extents.z * Mathf.Abs(normal.z);
-                if (Vector3.Dot(normal, center) + plane.distance + radius < 0f)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        private void MarkPageVisible(int pageRecordIndex)
-        {
-            if (pageRecordIndex < 0 || pageRecordIndex >= visiblePageMask.Length || visiblePageMask[pageRecordIndex])
-            {
-                return;
-            }
-
-            visiblePageMask[pageRecordIndex] = true;
-            preparedVisiblePageCount++;
-        }
-
-        private void MarkCellVisible(int cellRecordIndex)
-        {
-            if (cellRecordIndex < 0 || cellRecordIndex >= visibleCellMask.Length || visibleCellMask[cellRecordIndex])
-            {
-                return;
-            }
-
-            visibleCellMask[cellRecordIndex] = true;
-            preparedVisibleCellCount++;
-            int pageRecordIndex = cells[cellRecordIndex].PageRecordIndex;
-            MarkPageVisible(pageRecordIndex);
-        }
-
-        private unsafe JobHandle OnPerformBatchRendererCulling(
-            BatchRendererGroup rendererGroup,
-            BatchCullingContext cullingContext,
-            BatchCullingOutput cullingOutput,
-            IntPtr userContext)
-        {
-            BatchRendererState? state = ResolveBatchRendererState(userContext);
-            if (state == null ||
-                rendererGroup != state.RendererGroup ||
-                batchRendererFaulted ||
-                state.GroupCount == 0 ||
-                state.PageCount == 0)
-            {
-                WriteEmptyBatchCullingOutput(cullingOutput);
-                return default;
-            }
-
-            BatchRendererSettingsSnapshot settings = state.Settings;
-            VegetationRenderPassMode passMode = cullingContext.viewType == BatchCullingViewType.Light
-                ? VegetationRenderPassMode.Shadow
-                : VegetationRenderPassMode.Color;
-            if (passMode != VegetationRenderPassMode.Shadow &&
-                !IsBatchRendererCameraViewAllowed(cullingContext.viewID.GetInstanceID()))
-            {
-                WriteEmptyBatchCullingOutput(cullingOutput);
-                return default;
-            }
-
-            if (passMode == VegetationRenderPassMode.Shadow && settings.ShadowMode == VegetationShadowMode.Off)
-            {
-                WriteEmptyBatchCullingOutput(cullingOutput);
-                return default;
-            }
-
-            BatchCullingScratch scratch = GetBatchCullingScratch();
-            scratch.ResetVisibility(
-                state.PageCount,
-                state.CellCount,
-                state.GroupCount,
-                state.PacketLookupCount,
-                cullingContext.cullingSplits.IsCreated ? cullingContext.cullingSplits.Length : 0,
-                cullingContext.cullingPlanes.IsCreated ? cullingContext.cullingPlanes.Length : 0);
-            int activeSplitMask = MarkVisibleByBatchCullingContext(cullingContext, scratch, state);
-            if (activeSplitMask == 0)
-            {
-                WriteEmptyBatchCullingOutput(cullingOutput);
-                return default;
-            }
-
-            int activeSplitCount = CountRequiredBits(activeSplitMask);
-            SelectBatchRendererPackets(scratch, cullingContext.lodParameters.cameraPosition, passMode, settings, activeSplitCount, state);
-            if (!BuildSelectedGroupLayout(scratch, state))
-            {
-                WriteEmptyBatchCullingOutput(cullingOutput);
-                return default;
-            }
-
-            WriteBatchCullingOutput(
-                cullingOutput,
-                scratch,
-                activeSplitMask,
-                passMode,
-                state,
-                cullingContext.viewType,
-                cullingContext.viewID.GetInstanceID(),
-                cullingContext.viewID.GetSliceIndex());
-            return default;
-        }
-
-        private bool BuildSelectedGroupLayout(BatchCullingScratch scratch, BatchRendererState state)
-        {
-            scratch.PreparedInstanceCount = 0;
-            scratch.PreparedActiveGroupCount = 0;
-            for (int i = 0; i < scratch.ActiveGroupIndexCount; i++)
-            {
-                int groupIndex = scratch.ActiveGroupIndices[i];
-                if (groupIndex < 0 || groupIndex >= scratch.GroupInstanceCounts.Length)
-                {
-                    continue;
-                }
-
-                int instanceCount = scratch.GroupInstanceCounts[groupIndex];
-                if (instanceCount <= 0 || groupIndex >= state.Batches.Length || !state.Batches[groupIndex].IsValid)
-                {
-                    continue;
-                }
-
-                scratch.GroupStartInstances[groupIndex] = scratch.PreparedInstanceCount;
-                scratch.GroupWriteOffsets[groupIndex] = 0;
-                scratch.PreparedInstanceCount += instanceCount;
-                scratch.PreparedActiveGroupCount++;
-            }
-
-            return scratch.PreparedInstanceCount > 0 && scratch.PreparedActiveGroupCount > 0;
-        }
-
-        private unsafe void WriteBatchCullingOutput(
-            BatchCullingOutput cullingOutput,
-            BatchCullingScratch scratch,
-            int activeSplitMask,
-            VegetationRenderPassMode passMode,
-            BatchRendererState state,
-            BatchCullingViewType viewType,
-            int viewInstanceId,
-            int viewSliceIndex)
-        {
-            ClearBatchCullingOutputCustomResult(cullingOutput);
-            BatchCullingOutputDrawCommands* drawCommands =
-                (BatchCullingOutputDrawCommands*)cullingOutput.drawCommands.GetUnsafePtr();
-            *drawCommands = default;
-
-            int commandCount = scratch.PreparedActiveGroupCount;
-            int instanceCount = scratch.PreparedInstanceCount;
-            int alignment = UnsafeUtility.AlignOf<long>();
-            drawCommands->drawCommands = (BatchDrawCommand*)UnsafeUtility.Malloc(
-                UnsafeUtility.SizeOf<BatchDrawCommand>() * commandCount,
-                alignment,
-                Allocator.TempJob);
-            drawCommands->drawRanges = (BatchDrawRange*)UnsafeUtility.Malloc(
-                UnsafeUtility.SizeOf<BatchDrawRange>(),
-                alignment,
-                Allocator.TempJob);
-            drawCommands->visibleInstances = (int*)UnsafeUtility.Malloc(
-                sizeof(int) * instanceCount,
-                alignment,
-                Allocator.TempJob);
-            drawCommands->drawCommandCount = commandCount;
-            drawCommands->drawRangeCount = 1;
-            drawCommands->visibleInstanceCount = instanceCount;
-            drawCommands->instanceSortingPositions = null;
-            drawCommands->instanceSortingPositionFloatCount = 0;
-
-            UnsafeUtility.MemClear(drawCommands->visibleInstances, sizeof(int) * instanceCount);
-            FillBatchVisibleInstances(scratch, drawCommands->visibleInstances, state);
-
-            int commandIndex = 0;
-            int compactVisibleOffset = 0;
-            for (int i = 0; i < scratch.ActiveGroupIndexCount; i++)
-            {
-                int groupIndex = scratch.ActiveGroupIndices[i];
-                if (groupIndex < 0 || groupIndex >= scratch.GroupInstanceCounts.Length || groupIndex >= state.Batches.Length)
-                {
-                    continue;
-                }
-
-                int writtenInstanceCount = scratch.GroupWriteOffsets[groupIndex];
-                VegetationBrgBatch batch = state.Batches[groupIndex];
-                if (writtenInstanceCount <= 0 || !batch.IsValid)
-                {
-                    continue;
-                }
-
-                int sourceVisibleOffset = scratch.GroupStartInstances[groupIndex];
-                if (sourceVisibleOffset != compactVisibleOffset)
-                {
-                    UnsafeUtility.MemMove(
-                        drawCommands->visibleInstances + compactVisibleOffset,
-                        drawCommands->visibleInstances + sourceVisibleOffset,
-                        sizeof(int) * writtenInstanceCount);
-                }
-
-                int groupSplitMask = groupIndex < scratch.GroupFrustumMasks.Length && scratch.GroupFrustumMasks[groupIndex] != 0
-                    ? scratch.GroupFrustumMasks[groupIndex]
-                    : activeSplitMask;
-                drawCommands->drawCommands[commandIndex] = new BatchDrawCommand
-                {
-                    flags = BatchDrawCommandFlags.None,
-                    visibleOffset = (uint)compactVisibleOffset,
-                    visibleCount = (uint)writtenInstanceCount,
-                    batchID = batch.BatchId,
-                    materialID = batch.MaterialId,
-                    meshID = batch.MeshId,
-                    submeshIndex = 0,
-                    splitVisibilityMask = (ushort)(groupSplitMask & 0xffff),
-                    lightmapIndex = 0,
-                    sortingPosition = 0
-                };
-                compactVisibleOffset += writtenInstanceCount;
-                commandIndex++;
-            }
-
-            drawCommands->drawCommandCount = commandIndex;
-            drawCommands->drawRangeCount = commandIndex > 0 ? 1 : 0;
-            drawCommands->visibleInstanceCount = compactVisibleOffset;
-
-            drawCommands->drawRanges[0] = new BatchDrawRange
-            {
-                drawCommandsBegin = 0,
-                drawCommandsCount = (uint)commandIndex,
-                drawCommandsType = BatchDrawCommandType.Direct,
-                filterSettings = new BatchFilterSettings
-                {
-                    layer = 0,
-                    batchLayer = BrgVegetationBatchLayer,
-                    renderingLayerMask = uint.MaxValue,
-                    sceneCullingMask = ulong.MaxValue,
-                    motionMode = MotionVectorGenerationMode.ForceNoMotion,
-                    shadowCastingMode = passMode == VegetationRenderPassMode.Shadow
-                        ? ShadowCastingMode.On
-                        : ShadowCastingMode.Off,
-                    receiveShadows = true,
-                    staticShadowCaster = false,
-                    allDepthSorted = false
-                }
-            };
-
-            LogBatchRendererCullingOutput(
-                scratch,
-                activeSplitMask,
-                passMode,
-                state,
-                viewType,
-                viewInstanceId,
-                viewSliceIndex,
-                commandIndex,
-                compactVisibleOffset);
-        }
-
-        private static void LogBatchRendererCullingOutput(
-            BatchCullingScratch scratch,
-            int activeSplitMask,
-            VegetationRenderPassMode passMode,
-            BatchRendererState state,
-            BatchCullingViewType viewType,
-            int viewInstanceId,
-            int viewSliceIndex,
-            int commandCount,
-            int visibleInstanceCount)
-        {
-            if (!state.Settings.ShouldLogBatchRendererDiagnostics)
-            {
-                return;
-            }
-
-            int logIndex = Interlocked.Increment(ref state.CullingDiagnosticsLogCount);
-            if (logIndex > BatchRendererCullingDiagnosticLogLimit)
-            {
-                return;
-            }
-
-            StringBuilder builder = new StringBuilder(1024 + commandCount * 128);
-            builder.Append("Vegetation BRG culling output #")
-                .Append(logIndex)
-                .Append(" api=")
-                .Append(state.Settings.GraphicsApi)
-                .Append(" viewType=")
-                .Append(viewType)
-                .Append(" viewInstanceId=")
-                .Append(viewInstanceId)
-                .Append(" viewSlice=")
-                .Append(viewSliceIndex)
-                .Append(" pass=")
-                .Append(passMode)
-                .Append(" shadowMode=")
-                .Append(state.Settings.ShadowMode)
-                .Append(" activeSplitMask=0x")
-                .Append(activeSplitMask.ToString("X"))
-                .Append(" commands=")
-                .Append(commandCount)
-                .Append(" visibleInstances=")
-                .Append(visibleInstanceCount)
-                .Append(" selectedPackets=")
-                .Append(scratch.SelectedPacketCount)
-                .Append(" activeGroups=")
-                .Append(scratch.ActiveGroupIndexCount);
-
-            int compactVisibleOffset = 0;
-            for (int i = 0; i < scratch.ActiveGroupIndexCount; i++)
-            {
-                int groupIndex = scratch.ActiveGroupIndices[i];
-                if (groupIndex < 0 || groupIndex >= scratch.GroupWriteOffsets.Length || groupIndex >= state.Batches.Length)
-                {
-                    continue;
-                }
-
-                int writtenInstanceCount = scratch.GroupWriteOffsets[groupIndex];
-                VegetationBrgBatch batch = state.Batches[groupIndex];
-                if (writtenInstanceCount <= 0 || !batch.IsValid)
-                {
-                    continue;
-                }
-
-                int groupSplitMask = groupIndex < scratch.GroupFrustumMasks.Length && scratch.GroupFrustumMasks[groupIndex] != 0
-                    ? scratch.GroupFrustumMasks[groupIndex]
-                    : activeSplitMask;
-                builder.AppendLine()
-                    .Append("  draw group=")
-                    .Append(groupIndex)
-                    .Append(" batchId=")
-                    .Append(batch.BatchId.value)
-                    .Append(" meshId=")
-                    .Append(batch.MeshId.value)
-                    .Append(" materialId=")
-                    .Append(batch.MaterialId.value)
-                    .Append(" visibleOffset=")
-                    .Append(compactVisibleOffset)
-                    .Append(" visibleCount=")
-                    .Append(writtenInstanceCount)
-                    .Append(" batchInstanceCount=")
-                    .Append(batch.InstanceCount)
-                    .Append(" splitMask=0x")
-                    .Append(groupSplitMask.ToString("X"))
-                    .Append(" passIndices=[forward:")
-                    .Append(batch.ForwardPassIndex)
-                    .Append(",depth:")
-                    .Append(batch.DepthPassIndex)
-                    .Append(",shadow:")
-                    .Append(batch.ShadowPassIndex)
-                    .Append("] mesh='")
-                    .Append(batch.MeshName)
-                    .Append("' material='")
-                    .Append(batch.MaterialName)
-                    .Append("' shader='")
-                    .Append(batch.ShaderName)
-                    .Append("' label='")
-                    .Append(batch.DebugLabel)
-                    .Append('\'');
-                compactVisibleOffset += writtenInstanceCount;
-            }
-
-            Debug.Log(builder.ToString());
-        }
-
-        private unsafe void FillBatchVisibleInstances(BatchCullingScratch scratch, int* visibleInstances, BatchRendererState state)
-        {
-            for (int selectionIndex = 0; selectionIndex < scratch.SelectedPacketCount; selectionIndex++)
-            {
-                PacketSelection selection = scratch.SelectedPackets[selectionIndex];
-                if (selection.PageRecordIndex < 0 ||
-                    selection.PageRecordIndex >= state.Pages.Length ||
-                    selection.PageRecordIndex >= state.PagePackets.Length)
-                {
-                    continue;
-                }
-
-                BatchRendererPacketRecord[] packets = state.PagePackets[selection.PageRecordIndex];
-                if (selection.PacketIndex < 0 || selection.PacketIndex >= packets.Length)
-                {
-                    continue;
-                }
-
-                BatchRendererPageRecord pageRecord = state.Pages[selection.PageRecordIndex];
-                BatchRendererPacketRecord packet = packets[selection.PacketIndex];
-                int worldGroupIndex = ResolveWorldGroupIndex(state, pageRecord.ProviderIndex, packet.AssetGroupIndex);
-                if (worldGroupIndex < 0 || worldGroupIndex >= scratch.GroupWriteOffsets.Length)
-                {
-                    continue;
-                }
-
-                int groupStart = scratch.GroupStartInstances[worldGroupIndex];
-                int groupOffset = scratch.GroupWriteOffsets[worldGroupIndex];
-                int selectionWriteLimit = groupOffset + selection.InstanceCount;
-                for (int instanceOffset = 0; instanceOffset < packet.InstanceCount; instanceOffset++)
-                {
-                    if (groupOffset >= selectionWriteLimit ||
-                        groupOffset >= scratch.GroupInstanceCounts[worldGroupIndex])
-                    {
-                        break;
-                    }
-
-                    if (!TryResolvePacketLocalInstance(
-                            state,
-                            selection.PageRecordIndex,
-                            packet,
-                            instanceOffset,
-                            worldGroupIndex,
-                            out _,
-                            out int groupLocalInstanceIndex))
-                    {
-                        continue;
-                    }
-
-                    int writeIndex = groupStart + groupOffset;
-                    if (writeIndex >= 0 && writeIndex < scratch.PreparedInstanceCount)
-                    {
-                        visibleInstances[writeIndex] = groupLocalInstanceIndex;
-                    }
-
-                    groupOffset++;
-                }
-
-                scratch.GroupWriteOffsets[worldGroupIndex] = groupOffset;
-            }
-        }
-
-        private unsafe static void WriteEmptyBatchCullingOutput(BatchCullingOutput cullingOutput)
-        {
-            ClearBatchCullingOutputCustomResult(cullingOutput);
-            BatchCullingOutputDrawCommands* drawCommands =
-                (BatchCullingOutputDrawCommands*)cullingOutput.drawCommands.GetUnsafePtr();
-            *drawCommands = default;
-        }
-
-        private static void ClearBatchCullingOutputCustomResult(BatchCullingOutput cullingOutput)
-        {
-            if (cullingOutput.customCullingResult.IsCreated && cullingOutput.customCullingResult.Length > 0)
-            {
-                cullingOutput.customCullingResult[0] = IntPtr.Zero;
-            }
-        }
-
-        private static int CountRequiredBits(int mask)
-        {
-            int count = 0;
-            while (mask != 0)
-            {
-                count++;
-                mask >>= 1;
-            }
-
-            return count;
-        }
-
-        private void SelectPackets(
-            Vector3 cameraWorldPosition,
-            VegetationRenderPassMode passMode,
-            VegetationFoliageFeatureSettings settings,
-            Plane[]? explicitFrustum,
-            int explicitFrustumCount)
-        {
-            selectedPacketCount = 0;
-            ClearActiveGroupSelection();
-            cellCandidateCount = 0;
-            preparedInstanceCount = 0;
-            preparedPacketCount = 0;
-            preparedNearDetailPacketCount = 0;
-            preparedTreeL0PacketCount = 0;
-            preparedTreeL1PacketCount = 0;
-            preparedTreeL2PacketCount = 0;
-            preparedHlodPacketCount = 0;
-            preparedShadowPacketCount = 0;
-            preparedActiveGroupCount = 0;
-            preparedFrustumMask = 0;
-            lastRenderedGroupCount = 0;
-            lastSkippedGroupCount = 0;
-            preparedNearDetailLoadRequestCount = 0;
-            preparedNearDetailEvictedCellCount = 0;
-            preparedNearDetailLoadedBytes = 0L;
-            hasPreparedFrame = false;
-            InvalidatePreparedCameraCache();
-            int remainingWorkBudget = settings.GetWorkBudget(passMode);
-            int remainingInstanceBudget = Mathf.Max(1, settings.MaxVisiblePacketInstances);
-            long residentByteBudget = settings.GetNearDetailResidentByteBudget();
-            long remainingUploadByteBudget = settings.GetNearDetailUploadByteBudget();
-            float nearDistance = Mathf.Max(1f, settings.NearDetailDistance);
-            float nearDistanceSqr = nearDistance * nearDistance;
-            BeginResidencyPrepare(residentByteBudget);
-
-            for (int pageIndex = 0; pageIndex < pages.Count; pageIndex++)
-            {
-                if (!visiblePageMask[pageIndex])
-                {
-                    continue;
-                }
-
-                PageRecord page = pages[pageIndex];
-                bool hasVisibleCell = false;
-                for (int cellOffset = 0; cellOffset < page.CellCount; cellOffset++)
-                {
-                    int cellRecordIndex = page.FirstCellRecord + cellOffset;
-                    if (!visibleCellMask[cellRecordIndex])
-                    {
-                        continue;
-                    }
-
-                    hasVisibleCell = true;
-                    CellRecord cell = cells[cellRecordIndex];
-                    float distanceSqr = CalculateCellDistanceSqr(cell, cameraWorldPosition);
-                    AddCellCandidate(new CellCandidate(cellRecordIndex, distanceSqr));
-                }
-
-                if (!hasVisibleCell)
-                {
-                    TrySelectHlodPackets(pageIndex, FoliageRepresentationKind.PageHLOD, -1, passMode, explicitFrustum, explicitFrustumCount, ref remainingWorkBudget, ref remainingInstanceBudget);
-                }
-            }
-
-            Array.Sort(cellCandidates, 0, cellCandidateCount);
-            for (int i = 0; i < cellCandidateCount; i++)
-            {
-                CellCandidate candidate = cellCandidates[i];
-                CellRecord cell = cells[candidate.CellRecordIndex];
-                PageRecord page = pages[cell.PageRecordIndex];
-                if (candidate.DistanceSqr <= nearDistanceSqr)
-                {
-                    if (TryEnsureNearDetailCellResident(candidate.CellRecordIndex, residentByteBudget, ref remainingUploadByteBudget))
-                    {
-                        FoliageRepresentationKind desiredTier = ResolveTier(candidate.DistanceSqr, nearDistanceSqr);
-                        if (TrySelectNearDetailTierCascade(page, candidate.CellRecordIndex, desiredTier, passMode, explicitFrustum, explicitFrustumCount, ref remainingWorkBudget, ref remainingInstanceBudget))
-                        {
-                            continue;
-                        }
-                    }
-                }
-
-                TrySelectHlodPackets(page.PageRecordIndex, FoliageRepresentationKind.CellHLOD, candidate.CellRecordIndex, passMode, explicitFrustum, explicitFrustumCount, ref remainingWorkBudget, ref remainingInstanceBudget);
-            }
-        }
-
-        private void SelectBatchRendererPackets(
-            BatchCullingScratch scratch,
-            Vector3 cameraWorldPosition,
-            VegetationRenderPassMode passMode,
-            BatchRendererSettingsSnapshot settings,
-            int explicitFrustumCount,
-            BatchRendererState state)
-        {
-            // Range: one BRG culling callback. Condition: all per-instance data is already resident in BRG-owned buffers. Output: callback-local packet and group selection without mutating streaming/runtime upload state.
-            scratch.ResetSelection(state.GroupCount);
-            int remainingWorkBudget = settings.GetWorkBudget(passMode);
-            int remainingInstanceBudget = Mathf.Max(1, settings.MaxVisiblePacketInstances);
-            float nearDistance = Mathf.Max(1f, settings.NearDetailDistance);
-            float nearDistanceSqr = nearDistance * nearDistance;
-
-            for (int pageIndex = 0; pageIndex < state.Pages.Length; pageIndex++)
-            {
-                if (!scratch.VisiblePageMask[pageIndex])
-                {
-                    continue;
-                }
-
-                BatchRendererPageRecord page = state.Pages[pageIndex];
-                bool hasVisibleCell = false;
-                for (int cellOffset = 0; cellOffset < page.CellCount; cellOffset++)
-                {
-                    int cellRecordIndex = page.FirstCellRecord + cellOffset;
-                    if (cellRecordIndex < 0 ||
-                        cellRecordIndex >= state.Cells.Length ||
-                        !scratch.VisibleCellMask[cellRecordIndex])
-                    {
-                        continue;
-                    }
-
-                    hasVisibleCell = true;
-                    CellRecord cell = state.Cells[cellRecordIndex];
-                    float distanceSqr = CalculateCellDistanceSqr(cell, cameraWorldPosition);
-                    scratch.AddCellCandidate(new CellCandidate(cellRecordIndex, distanceSqr));
-                }
-
-                if (!hasVisibleCell)
-                {
-                    TrySelectBatchRendererHlodPackets(
-                        scratch,
-                        pageIndex,
-                        FoliageRepresentationKind.PageHLOD,
-                        -1,
-                        passMode,
-                        explicitFrustumCount,
-                        state,
-                        ref remainingWorkBudget,
-                        ref remainingInstanceBudget);
-                }
-            }
-
-            Array.Sort(scratch.CellCandidates, 0, scratch.CellCandidateCount);
-            for (int i = 0; i < scratch.CellCandidateCount; i++)
-            {
-                CellCandidate candidate = scratch.CellCandidates[i];
-                if (candidate.CellRecordIndex < 0 || candidate.CellRecordIndex >= state.Cells.Length)
-                {
-                    continue;
-                }
-
-                CellRecord cell = state.Cells[candidate.CellRecordIndex];
-                if (cell.PageRecordIndex < 0 || cell.PageRecordIndex >= state.Pages.Length)
-                {
-                    continue;
-                }
-
-                BatchRendererPageRecord page = state.Pages[cell.PageRecordIndex];
-                if (candidate.DistanceSqr <= nearDistanceSqr)
-                {
-                    FoliageRepresentationKind desiredTier = ResolveTier(candidate.DistanceSqr, nearDistanceSqr);
-                    if (TrySelectBatchRendererNearDetailTierCascade(
-                            scratch,
-                            page,
-                            candidate.CellRecordIndex,
-                            desiredTier,
-                            passMode,
-                            explicitFrustumCount,
-                            state,
-                            ref remainingWorkBudget,
-                            ref remainingInstanceBudget))
-                    {
-                        continue;
-                    }
-                }
-
-                TrySelectBatchRendererHlodPackets(
-                    scratch,
-                    page.PageRecordIndex,
-                    FoliageRepresentationKind.CellHLOD,
-                    candidate.CellRecordIndex,
-                    passMode,
-                    explicitFrustumCount,
-                    state,
-                    ref remainingWorkBudget,
-                    ref remainingInstanceBudget);
-            }
-        }
-
-        private void BeginResidencyPrepare(long residentByteBudget)
-        {
-            if (residencyFrameIndex == int.MaxValue)
-            {
-                Array.Clear(nearDetailLastUsedCellFrame, 0, nearDetailLastUsedCellFrame.Length);
-                residencyFrameIndex = 1;
-            }
-            else
-            {
-                residencyFrameIndex++;
-            }
-
-            if (nearDetailRequestedCellMask.Length > 0)
-            {
-                Array.Clear(nearDetailRequestedCellMask, 0, nearDetailRequestedCellMask.Length);
-            }
-
-            EvictNearDetailCellsToBudget(residentByteBudget, 0L);
-        }
-
-        private bool TryEnsureNearDetailCellResident(
-            int cellRecordIndex,
-            long residentByteBudget,
-            ref long remainingUploadByteBudget)
-        {
-            if (cellRecordIndex < 0 || cellRecordIndex >= nearDetailCellBytes.Length)
-            {
-                return false;
-            }
-
-            long cellBytes = nearDetailCellBytes[cellRecordIndex];
-            if (cellBytes <= 0L)
-            {
-                return true;
-            }
-
-            if (!nearDetailRequestedCellMask[cellRecordIndex])
-            {
-                nearDetailRequestedCellMask[cellRecordIndex] = true;
-                preparedNearDetailLoadRequestCount++;
-            }
-
-            if (cellBytes > residentByteBudget)
-            {
-                UnloadNearDetailCell(cellRecordIndex, countEviction: nearDetailResidentCellMask[cellRecordIndex]);
-                return false;
-            }
-
-            if (nearDetailResidentCellMask[cellRecordIndex])
-            {
-                nearDetailLastUsedCellFrame[cellRecordIndex] = residencyFrameIndex;
-                return true;
-            }
-
-            if (cellBytes > remainingUploadByteBudget)
-            {
-                return false;
-            }
-
-            EvictNearDetailCellsToBudget(residentByteBudget, cellBytes);
-            if (nearDetailResidentBytes + cellBytes > residentByteBudget)
-            {
-                return false;
-            }
-
-            nearDetailResidentCellMask[cellRecordIndex] = true;
-            nearDetailLastUsedCellFrame[cellRecordIndex] = residencyFrameIndex;
-            nearDetailResidentBytes += cellBytes;
-            nearDetailResidentCellCount++;
-            remainingUploadByteBudget -= cellBytes;
-            preparedNearDetailLoadedBytes += cellBytes;
-            return true;
-        }
-
-        private void EvictNearDetailCellsToBudget(long residentByteBudget, long incomingBytes)
-        {
-            while (nearDetailResidentBytes + incomingBytes > residentByteBudget)
-            {
-                int candidateCellIndex = -1;
-                int oldestFrame = int.MaxValue;
-                for (int cellIndex = 0; cellIndex < nearDetailResidentCellMask.Length; cellIndex++)
-                {
-                    if (!nearDetailResidentCellMask[cellIndex] || nearDetailRequestedCellMask[cellIndex])
-                    {
-                        continue;
-                    }
-
-                    int lastUsedFrame = nearDetailLastUsedCellFrame[cellIndex];
-                    if (lastUsedFrame < oldestFrame)
-                    {
-                        oldestFrame = lastUsedFrame;
-                        candidateCellIndex = cellIndex;
-                    }
-                }
-
-                if (candidateCellIndex < 0)
-                {
-                    return;
-                }
-
-                UnloadNearDetailCell(candidateCellIndex, countEviction: true);
-            }
-        }
-
-        private void UnloadNearDetailCell(int cellRecordIndex, bool countEviction)
-        {
-            if (cellRecordIndex < 0 ||
-                cellRecordIndex >= nearDetailResidentCellMask.Length ||
-                !nearDetailResidentCellMask[cellRecordIndex])
-            {
-                return;
-            }
-
-            nearDetailResidentCellMask[cellRecordIndex] = false;
-            nearDetailLastUsedCellFrame[cellRecordIndex] = 0;
-            nearDetailResidentBytes = Math.Max(0L, nearDetailResidentBytes - nearDetailCellBytes[cellRecordIndex]);
-            nearDetailResidentCellCount = Mathf.Max(0, nearDetailResidentCellCount - 1);
-            if (countEviction)
-            {
-                preparedNearDetailEvictedCellCount++;
-            }
-        }
-
-        private static FoliageRepresentationKind ResolveTier(float distanceSqr, float nearDistanceSqr)
-        {
-            float nearThird = nearDistanceSqr * 0.11111111f;
-            if (distanceSqr <= nearThird)
-            {
-                return FoliageRepresentationKind.TreeL0;
-            }
-
-            if (distanceSqr <= nearDistanceSqr * 0.44444444f)
-            {
-                return FoliageRepresentationKind.TreeL1;
-            }
-
-            return FoliageRepresentationKind.TreeL2;
-        }
-
-        private static float CalculateCellDistanceSqr(CellRecord cell, Vector3 cameraWorldPosition)
-        {
-            return cell.WorldBounds.SqrDistance(cameraWorldPosition);
-        }
-
-        private bool TrySelectNearDetailTierCascade(
-            PageRecord page,
-            int cellRecordIndex,
-            FoliageRepresentationKind desiredTier,
-            VegetationRenderPassMode passMode,
-            Plane[]? explicitFrustum,
-            int explicitFrustumCount,
-            ref int remainingWorkBudget,
-            ref int remainingInstanceBudget)
-        {
-            // Range: one visible near cell. Condition: try the best distance tier first, then cheaper tiers before HLOD. Output: selects the first affordable near-detail tier.
-            if (desiredTier == FoliageRepresentationKind.TreeL0 &&
-                TrySelectTierPackets(page, cellRecordIndex, FoliageRepresentationKind.TreeL0, passMode, explicitFrustum, explicitFrustumCount, ref remainingWorkBudget, ref remainingInstanceBudget))
-            {
-                return true;
-            }
-
-            if ((desiredTier == FoliageRepresentationKind.TreeL0 ||
-                 desiredTier == FoliageRepresentationKind.TreeL1) &&
-                TrySelectTierPackets(page, cellRecordIndex, FoliageRepresentationKind.TreeL1, passMode, explicitFrustum, explicitFrustumCount, ref remainingWorkBudget, ref remainingInstanceBudget))
-            {
-                return true;
-            }
-
-            return TrySelectTierPackets(page, cellRecordIndex, FoliageRepresentationKind.TreeL2, passMode, explicitFrustum, explicitFrustumCount, ref remainingWorkBudget, ref remainingInstanceBudget);
-        }
-
-        private bool TrySelectTierPackets(
-            PageRecord page,
-            int cellRecordIndex,
-            FoliageRepresentationKind representationKind,
-            VegetationRenderPassMode passMode,
-            Plane[]? explicitFrustum,
-            int explicitFrustumCount,
-            ref int remainingWorkBudget,
-            ref int remainingInstanceBudget)
-        {
-            return TrySelectPackets(
-                page.PageRecordIndex,
-                representationKind,
-                cellRecordIndex,
-                passMode,
-                explicitFrustum,
-                explicitFrustumCount,
-                ref remainingWorkBudget,
-                ref remainingInstanceBudget);
-        }
-
-        private bool TrySelectHlodPackets(
-            int pageRecordIndex,
-            FoliageRepresentationKind representationKind,
-            int cellRecordIndex,
-            VegetationRenderPassMode passMode,
-            Plane[]? explicitFrustum,
-            int explicitFrustumCount,
-            ref int remainingWorkBudget,
-            ref int remainingInstanceBudget)
-        {
-            return TrySelectPackets(
-                pageRecordIndex,
-                representationKind,
-                cellRecordIndex,
-                passMode,
-                explicitFrustum,
-                explicitFrustumCount,
-                ref remainingWorkBudget,
-                ref remainingInstanceBudget);
-        }
-
-        private bool TrySelectBatchRendererNearDetailTierCascade(
-            BatchCullingScratch scratch,
-            BatchRendererPageRecord page,
-            int cellRecordIndex,
-            FoliageRepresentationKind desiredTier,
-            VegetationRenderPassMode passMode,
-            int explicitFrustumCount,
-            BatchRendererState state,
-            ref int remainingWorkBudget,
-            ref int remainingInstanceBudget)
-        {
-            if (desiredTier == FoliageRepresentationKind.TreeL0 &&
-                TrySelectBatchRendererTierPackets(scratch, page, cellRecordIndex, FoliageRepresentationKind.TreeL0, passMode, explicitFrustumCount, state, ref remainingWorkBudget, ref remainingInstanceBudget))
-            {
-                return true;
-            }
-
-            if ((desiredTier == FoliageRepresentationKind.TreeL0 ||
-                 desiredTier == FoliageRepresentationKind.TreeL1) &&
-                TrySelectBatchRendererTierPackets(scratch, page, cellRecordIndex, FoliageRepresentationKind.TreeL1, passMode, explicitFrustumCount, state, ref remainingWorkBudget, ref remainingInstanceBudget))
-            {
-                return true;
-            }
-
-            return TrySelectBatchRendererTierPackets(scratch, page, cellRecordIndex, FoliageRepresentationKind.TreeL2, passMode, explicitFrustumCount, state, ref remainingWorkBudget, ref remainingInstanceBudget);
-        }
-
-        private bool TrySelectBatchRendererTierPackets(
-            BatchCullingScratch scratch,
-            BatchRendererPageRecord page,
-            int cellRecordIndex,
-            FoliageRepresentationKind representationKind,
-            VegetationRenderPassMode passMode,
-            int explicitFrustumCount,
-            BatchRendererState state,
-            ref int remainingWorkBudget,
-            ref int remainingInstanceBudget)
-        {
-            return TrySelectBatchRendererPackets(
-                scratch,
-                page.PageRecordIndex,
-                representationKind,
-                cellRecordIndex,
-                passMode,
-                explicitFrustumCount,
-                state,
-                ref remainingWorkBudget,
-                ref remainingInstanceBudget);
-        }
-
-        private bool TrySelectBatchRendererHlodPackets(
-            BatchCullingScratch scratch,
-            int pageRecordIndex,
-            FoliageRepresentationKind representationKind,
-            int cellRecordIndex,
-            VegetationRenderPassMode passMode,
-            int explicitFrustumCount,
-            BatchRendererState state,
-            ref int remainingWorkBudget,
-            ref int remainingInstanceBudget)
-        {
-            return TrySelectBatchRendererPackets(
-                scratch,
-                pageRecordIndex,
-                representationKind,
-                cellRecordIndex,
-                passMode,
-                explicitFrustumCount,
-                state,
-                ref remainingWorkBudget,
-                ref remainingInstanceBudget);
-        }
-
-        private bool TrySelectBatchRendererPackets(
-            BatchCullingScratch scratch,
-            int pageRecordIndex,
-            FoliageRepresentationKind representationKind,
-            int cellRecordIndex,
-            VegetationRenderPassMode passMode,
-            int explicitFrustumCount,
-            BatchRendererState state,
-            ref int remainingWorkBudget,
-            ref int remainingInstanceBudget)
-        {
-            if (pageRecordIndex < 0 || pageRecordIndex >= state.Pages.Length)
-            {
-                return false;
-            }
-
-            BatchRendererPageRecord pageRecord = state.Pages[pageRecordIndex];
-            PacketRange packetRange = GetPacketRange(state, pageRecordIndex, representationKind, cellRecordIndex);
-            if (packetRange.Count == 0)
-            {
-                return false;
-            }
-
-            BatchRendererPacketRecord[] pagePackets = pageRecordIndex < state.PagePackets.Length
-                ? state.PagePackets[pageRecordIndex]
-                : Array.Empty<BatchRendererPacketRecord>();
-            int visibilityFrustumMask = ResolveBatchRendererVisibilityFrustumMask(scratch, pageRecordIndex, cellRecordIndex, explicitFrustumCount);
-            bool chargeBudget = IsNearDetailRepresentation(representationKind);
-            int packetCost = 0;
-            int packetInstances = 0;
-            int matchingPacketCount = 0;
-            for (int rangeOffset = 0; rangeOffset < packetRange.Count; rangeOffset++)
-            {
-                int packetIndex = state.PacketLookupIndices[packetRange.Start + rangeOffset];
-                if (!TryResolveSelectablePacket(pagePackets, packetIndex, passMode, explicitFrustumCount, visibilityFrustumMask, out BatchRendererPacketRecord packet, out int resolvedPacketIndex, out int packetFrustumMask))
-                {
-                    continue;
-                }
-
-                int validInstanceCount = GetValidPacketInstanceCount(state, pageRecordIndex, resolvedPacketIndex);
-                if (validInstanceCount <= 0)
-                {
-                    continue;
-                }
-
-                if (packetFrustumMask == 0)
-                {
-                    packetFrustumMask = visibilityFrustumMask;
-                }
-
-                _ = packetFrustumMask;
-                packetCost += packet.WorkCost;
-                packetInstances += validInstanceCount;
-                matchingPacketCount++;
-            }
-
-            if (matchingPacketCount == 0 ||
-                (chargeBudget && (packetCost > remainingWorkBudget || packetInstances > remainingInstanceBudget)))
-            {
-                return false;
-            }
-
-            for (int rangeOffset = 0; rangeOffset < packetRange.Count; rangeOffset++)
-            {
-                int packetIndex = state.PacketLookupIndices[packetRange.Start + rangeOffset];
-                if (!TryResolveSelectablePacket(pagePackets, packetIndex, passMode, explicitFrustumCount, visibilityFrustumMask, out BatchRendererPacketRecord packet, out int resolvedPacketIndex, out int packetFrustumMask))
-                {
-                    continue;
-                }
-
-                int validInstanceCount = GetValidPacketInstanceCount(state, pageRecordIndex, resolvedPacketIndex);
-                if (validInstanceCount <= 0)
-                {
-                    continue;
-                }
-
-                if (packetFrustumMask == 0)
-                {
-                    packetFrustumMask = visibilityFrustumMask;
-                }
-
-                scratch.AddSelectedPacket(new PacketSelection(pageRecordIndex, resolvedPacketIndex, validInstanceCount));
-                int worldGroupIndex = ResolveWorldGroupIndex(state, pageRecord.ProviderIndex, packet.AssetGroupIndex);
-                if (worldGroupIndex >= 0 && worldGroupIndex < scratch.GroupInstanceCounts.Length)
-                {
-                    if (scratch.GroupInstanceCounts[worldGroupIndex] == 0)
-                    {
-                        scratch.AddActiveGroupIndex(worldGroupIndex);
-                    }
-
-                    scratch.GroupInstanceCounts[worldGroupIndex] += validInstanceCount;
-                    if (packetFrustumMask != 0 && worldGroupIndex < scratch.GroupFrustumMasks.Length)
-                    {
-                        scratch.GroupFrustumMasks[worldGroupIndex] |= packetFrustumMask;
-                        scratch.PreparedFrustumMask |= packetFrustumMask;
-                    }
-                }
-
-                if (packet.Residency == FoliagePacketResidency.NearDetail)
-                {
-                    scratch.PreparedNearDetailPacketCount++;
-                    scratch.IncrementNearDetailTierCounter(packet.RepresentationKind);
-                }
-                else
-                {
-                    scratch.PreparedHlodPacketCount++;
-                }
-
-                if (passMode == VegetationRenderPassMode.Shadow)
-                {
-                    scratch.PreparedShadowPacketCount++;
-                }
-            }
-
-            if (chargeBudget)
-            {
-                remainingWorkBudget -= packetCost;
-                remainingInstanceBudget -= packetInstances;
-            }
-
-            scratch.PreparedPacketCount += matchingPacketCount;
-            return true;
-        }
-
-        private bool TrySelectPackets(
-            int pageRecordIndex,
-            FoliageRepresentationKind representationKind,
-            int cellRecordIndex,
-            VegetationRenderPassMode passMode,
-            Plane[]? explicitFrustum,
-            int explicitFrustumCount,
-            ref int remainingWorkBudget,
-            ref int remainingInstanceBudget)
-        {
-            if (pageRecordIndex < 0 || pageRecordIndex >= pages.Count)
-            {
-                return false;
-            }
-
-            PageRecord pageRecord = pages[pageRecordIndex];
-            if (IsNearDetailRepresentation(representationKind) && !IsNearDetailCellResident(cellRecordIndex))
-            {
-                return false;
-            }
-
-            PacketRange packetRange = GetPacketRange(pageRecordIndex, representationKind, cellRecordIndex);
-            if (packetRange.Count == 0)
-            {
-                return false;
-            }
-
-            int visibilityFrustumMask = ResolveVisibilityFrustumMask(pageRecordIndex, cellRecordIndex, explicitFrustumCount);
-            bool chargeBudget = IsNearDetailRepresentation(representationKind);
-            int packetCost = 0;
-            int packetInstances = 0;
-            int matchingPacketCount = 0;
-            for (int rangeOffset = 0; rangeOffset < packetRange.Count; rangeOffset++)
-            {
-                int packetIndex = packetLookupIndices[packetRange.Start + rangeOffset];
-                if (!TryResolveSelectablePacket(pageRecord.Page, packetIndex, passMode, explicitFrustum, explicitFrustumCount, visibilityFrustumMask, out FoliageRepresentationPacket packet, out int resolvedPacketIndex, out int packetFrustumMask))
-                {
-                    continue;
-                }
-
-                int validInstanceCount = GetValidPacketInstanceCount(pageRecordIndex, resolvedPacketIndex);
-                if (validInstanceCount <= 0)
-                {
-                    continue;
-                }
-
-                if (packetFrustumMask == 0)
-                {
-                    packetFrustumMask = visibilityFrustumMask;
-                }
-
-                _ = resolvedPacketIndex;
-                _ = packetFrustumMask;
-                packetCost += packet.WorkCost;
-                packetInstances += validInstanceCount;
-                matchingPacketCount++;
-            }
-
-            if (matchingPacketCount == 0 ||
-                (chargeBudget && (packetCost > remainingWorkBudget || packetInstances > remainingInstanceBudget)))
-            {
-                return false;
-            }
-
-            for (int rangeOffset = 0; rangeOffset < packetRange.Count; rangeOffset++)
-            {
-                int packetIndex = packetLookupIndices[packetRange.Start + rangeOffset];
-                if (!TryResolveSelectablePacket(pageRecord.Page, packetIndex, passMode, explicitFrustum, explicitFrustumCount, visibilityFrustumMask, out FoliageRepresentationPacket packet, out int resolvedPacketIndex, out int packetFrustumMask))
-                {
-                    continue;
-                }
-
-                int validInstanceCount = GetValidPacketInstanceCount(pageRecordIndex, resolvedPacketIndex);
-                if (validInstanceCount <= 0)
-                {
-                    continue;
-                }
-
-                if (packetFrustumMask == 0)
-                {
-                    packetFrustumMask = visibilityFrustumMask;
-                }
-
-                AddSelectedPacket(new PacketSelection(pageRecordIndex, resolvedPacketIndex, validInstanceCount));
-                int worldGroupIndex = ResolveWorldGroupIndex(pageRecord.ProviderIndex, packet.AssetGroupIndex);
-                if (worldGroupIndex >= 0 && worldGroupIndex < groupInstanceCounts.Length)
-                {
-                    if (groupInstanceCounts[worldGroupIndex] == 0)
-                    {
-                        AddActiveGroupIndex(worldGroupIndex);
-                    }
-
-                    groupInstanceCounts[worldGroupIndex] += validInstanceCount;
-                    if (packetFrustumMask != 0 && worldGroupIndex < groupFrustumMasks.Length)
-                    {
-                        groupFrustumMasks[worldGroupIndex] |= packetFrustumMask;
-                        preparedFrustumMask |= packetFrustumMask;
-                    }
-                }
-
-                if (packet.Residency == FoliagePacketResidency.NearDetail)
-                {
-                    nearDetailLastUsedCellFrame[cellRecordIndex] = residencyFrameIndex;
-                    preparedNearDetailPacketCount++;
-                    IncrementNearDetailTierCounter(packet.RepresentationKind);
-                }
-                else
-                {
-                    preparedHlodPacketCount++;
-                }
-
-                if (passMode == VegetationRenderPassMode.Shadow)
-                {
-                    preparedShadowPacketCount++;
-                }
-            }
-
-            if (chargeBudget)
-            {
-                remainingWorkBudget -= packetCost;
-                remainingInstanceBudget -= packetInstances;
-            }
-
-            preparedPacketCount += matchingPacketCount;
-            return true;
-        }
-
-        private int ResolveVisibilityFrustumMask(int pageRecordIndex, int cellRecordIndex, int explicitFrustumCount)
-        {
-            if (explicitFrustumCount <= 0)
-            {
-                return 0;
-            }
-
-            int validFrustumMask = AllFrustumBits(explicitFrustumCount);
-            if (cellRecordIndex >= 0 && cellRecordIndex < visibleCellFrustumMasks.Length)
-            {
-                return visibleCellFrustumMasks[cellRecordIndex] & validFrustumMask;
-            }
-
-            if (pageRecordIndex >= 0 && pageRecordIndex < visiblePageFrustumMasks.Length)
-            {
-                return visiblePageFrustumMasks[pageRecordIndex] & validFrustumMask;
-            }
-
-            return validFrustumMask;
-        }
-
-        private static int ResolveBatchRendererVisibilityFrustumMask(
-            BatchCullingScratch scratch,
-            int pageRecordIndex,
-            int cellRecordIndex,
-            int explicitFrustumCount)
-        {
-            if (explicitFrustumCount <= 0)
-            {
-                return 0;
-            }
-
-            int validFrustumMask = AllFrustumBits(explicitFrustumCount);
-            if (cellRecordIndex >= 0 && cellRecordIndex < scratch.VisibleCellFrustumMasks.Length)
-            {
-                return scratch.VisibleCellFrustumMasks[cellRecordIndex] & validFrustumMask;
-            }
-
-            if (pageRecordIndex >= 0 && pageRecordIndex < scratch.VisiblePageFrustumMasks.Length)
-            {
-                return scratch.VisiblePageFrustumMasks[pageRecordIndex] & validFrustumMask;
-            }
-
-            return validFrustumMask;
-        }
-
-        private void IncrementNearDetailTierCounter(FoliageRepresentationKind representationKind)
-        {
-            if (representationKind == FoliageRepresentationKind.TreeL0)
-            {
-                preparedTreeL0PacketCount++;
-                return;
-            }
-
-            if (representationKind == FoliageRepresentationKind.TreeL1)
-            {
-                preparedTreeL1PacketCount++;
-                return;
-            }
-
-            if (representationKind == FoliageRepresentationKind.TreeL2)
-            {
-                preparedTreeL2PacketCount++;
-            }
-        }
-
-        private bool IsNearDetailCellResident(int cellRecordIndex)
-        {
-            return cellRecordIndex >= 0 &&
-                   cellRecordIndex < nearDetailResidentCellMask.Length &&
-                   nearDetailResidentCellMask[cellRecordIndex];
-        }
-
-        private static bool IsNearDetailRepresentation(FoliageRepresentationKind representationKind)
-        {
-            return representationKind == FoliageRepresentationKind.TreeL0 ||
-                   representationKind == FoliageRepresentationKind.TreeL1 ||
-                   representationKind == FoliageRepresentationKind.TreeL2;
-        }
-
-        private bool TryResolveSelectablePacket(
-            FoliagePageAsset page,
-            int packetIndex,
-            VegetationRenderPassMode passMode,
-            Plane[]? explicitFrustum,
-            int explicitFrustumCount,
-            int visibilityFrustumMask,
-            out FoliageRepresentationPacket packet,
-            out int resolvedPacketIndex,
-            out int packetFrustumMask)
-        {
-            packet = null!;
-            resolvedPacketIndex = -1;
-            packetFrustumMask = 0;
-            if (packetIndex < 0 || packetIndex >= page.Packets.Count)
-            {
-                return false;
-            }
-
-            packet = page.Packets[packetIndex];
-            if (packet == null)
-            {
-                return false;
-            }
-
-            resolvedPacketIndex = packetIndex;
-            if (explicitFrustum != null && visibilityFrustumMask == 0)
-            {
-                return false;
-            }
-
-            if (passMode != VegetationRenderPassMode.Shadow)
-            {
-                if (explicitFrustum == null)
-                {
-                    return true;
-                }
-
-                packetFrustumMask = TestBoundsFrustumMask(
-                    explicitFrustum,
-                    visibilityFrustumMask,
-                    explicitFrustumCount,
-                    packet.WorldBounds);
-                return packetFrustumMask != 0;
-            }
-
-            if (packet.ShadowMode == FoliageShadowPacketMode.None)
-            {
-                return false;
-            }
-
-            int shadowPacketIndex = packet.ShadowPacketIndex;
-            if (shadowPacketIndex < 0 || shadowPacketIndex >= page.Packets.Count)
-            {
-                return false;
-            }
-
-            packet = page.Packets[shadowPacketIndex];
-            if (packet == null)
-            {
-                return false;
-            }
-
-            resolvedPacketIndex = shadowPacketIndex;
-            if (packet.ShadowMode == FoliageShadowPacketMode.None)
-            {
-                return false;
-            }
-
-            if (explicitFrustum == null)
-            {
-                return true;
-            }
-
-            packetFrustumMask = TestBoundsFrustumMask(
-                explicitFrustum,
-                visibilityFrustumMask,
-                explicitFrustumCount,
-                packet.WorldBounds);
-            return packetFrustumMask != 0;
-        }
-
-        private static bool TryResolveSelectablePacket(
-            BatchRendererPacketRecord[] packets,
-            int packetIndex,
-            VegetationRenderPassMode passMode,
-            int explicitFrustumCount,
-            int visibilityFrustumMask,
-            out BatchRendererPacketRecord packet,
-            out int resolvedPacketIndex,
-            out int packetFrustumMask)
-        {
-            packet = default;
-            resolvedPacketIndex = -1;
-            packetFrustumMask = 0;
-            if (packetIndex < 0 || packetIndex >= packets.Length)
-            {
-                return false;
-            }
-
-            packet = packets[packetIndex];
-            if (!packet.IsValid)
-            {
-                return false;
-            }
-
-            resolvedPacketIndex = packetIndex;
-            if (explicitFrustumCount > 0 && visibilityFrustumMask == 0)
-            {
-                return false;
-            }
-
-            if (passMode != VegetationRenderPassMode.Shadow)
-            {
-                packetFrustumMask = visibilityFrustumMask;
-                return true;
-            }
-
-            if (packet.ShadowMode == FoliageShadowPacketMode.None)
-            {
-                return false;
-            }
-
-            int shadowPacketIndex = packet.ShadowPacketIndex;
-            if (shadowPacketIndex < 0 || shadowPacketIndex >= packets.Length)
-            {
-                return false;
-            }
-
-            packet = packets[shadowPacketIndex];
-            if (!packet.IsValid || packet.ShadowMode == FoliageShadowPacketMode.None)
-            {
-                return false;
-            }
-
-            resolvedPacketIndex = shadowPacketIndex;
-            packetFrustumMask = visibilityFrustumMask;
-            return true;
-        }
-
         private int ResolveWorldGroupIndex(int providerIndex, int localGroupIndex)
         {
             if (providerIndex < 0 || providerIndex >= providers.Count || localGroupIndex < 0)
@@ -3486,162 +2211,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             return providers[providerIndex].AssetGroupOffset + localGroupIndex;
-        }
-
-        private static int ResolveWorldGroupIndex(BatchRendererState state, int providerIndex, int localGroupIndex)
-        {
-            if (providerIndex < 0 ||
-                providerIndex >= state.ProviderAssetGroupOffsets.Length ||
-                localGroupIndex < 0)
-            {
-                return -1;
-            }
-
-            return state.ProviderAssetGroupOffsets[providerIndex] + localGroupIndex;
-        }
-
-        private bool UploadPreparedFrame(VegetationFoliageFeatureSettings settings, VegetationRenderPassMode passMode)
-        {
-            preparedInstanceCount = 0;
-            int minActiveGroupIndex = int.MaxValue;
-            int maxActiveGroupIndex = -1;
-            using (PrepareUploadLayoutMarker.Auto())
-            {
-                for (int i = 0; i < activeGroupIndexCount; i++)
-                {
-                    int groupIndex = activeGroupIndices[i];
-                    if (groupIndex < 0 || groupIndex >= groupInstanceCounts.Length)
-                    {
-                        continue;
-                    }
-
-                    int groupInstanceCount = groupInstanceCounts[groupIndex];
-                    if (groupInstanceCount <= 0)
-                    {
-                        continue;
-                    }
-
-                    groupStartInstances[groupIndex] = preparedInstanceCount;
-                    groupWriteOffsets[groupIndex] = 0;
-                    preparedInstanceCount += groupInstanceCount;
-                    preparedActiveGroupCount++;
-                    minActiveGroupIndex = Mathf.Min(minActiveGroupIndex, groupIndex);
-                    maxActiveGroupIndex = Mathf.Max(maxActiveGroupIndex, groupIndex);
-                }
-
-                if (preparedInstanceCount <= 0 || minActiveGroupIndex == int.MaxValue || maxActiveGroupIndex < minActiveGroupIndex)
-                {
-                    ClearPreparedFrame();
-                    return false;
-                }
-
-                EnsureGpuBuffers(preparedInstanceCount, groups.Count);
-                EnsureInstanceUploadCapacity(preparedInstanceCount);
-                EnsureArgsUploadCapacity(groups.Count * IndirectArgsUIntCount);
-            }
-
-            using (PrepareUploadCopyInstancesMarker.Auto())
-            {
-                for (int selectionIndex = 0; selectionIndex < selectedPacketCount; selectionIndex++)
-                {
-                    PacketSelection selection = selectedPackets[selectionIndex];
-                    PageRecord pageRecord = pages[selection.PageRecordIndex];
-                    FoliageRepresentationPacket packet = pageRecord.Page.Packets[selection.PacketIndex];
-                    int worldGroupIndex = ResolveWorldGroupIndex(pageRecord.ProviderIndex, packet.AssetGroupIndex);
-                    if (worldGroupIndex < 0 || worldGroupIndex >= groupWriteOffsets.Length)
-                    {
-                        continue;
-                    }
-
-                    int groupStart = groupStartInstances[worldGroupIndex];
-                    int groupOffset = groupWriteOffsets[worldGroupIndex];
-                    int selectionWriteLimit = groupOffset + selection.InstanceCount;
-                    for (int instanceOffset = 0; instanceOffset < packet.InstanceCount; instanceOffset++)
-                    {
-                        if (groupOffset >= selectionWriteLimit ||
-                            groupOffset >= groupInstanceCounts[worldGroupIndex])
-                        {
-                            break;
-                        }
-
-                        if (!TryResolvePacketLocalInstance(
-                                pageRecord,
-                                selection.PageRecordIndex,
-                                packet,
-                                instanceOffset,
-                                worldGroupIndex,
-                                out int sourceInstanceIndex,
-                                out _))
-                        {
-                            continue;
-                        }
-
-                        int writeIndex = groupStart + groupOffset;
-                        if (writeIndex >= 0 && writeIndex < preparedInstanceCount)
-                        {
-                            instanceData[writeIndex] = ConvertInstance(pageRecord.Page.Instances[sourceInstanceIndex]);
-                            groupOffset++;
-                        }
-                    }
-
-                    groupWriteOffsets[worldGroupIndex] = groupOffset;
-                }
-            }
-
-            int argsStart = minActiveGroupIndex * IndirectArgsUIntCount;
-            int argsCount = (maxActiveGroupIndex - minActiveGroupIndex + 1) * IndirectArgsUIntCount;
-            using (PrepareUploadArgsMarker.Auto())
-            {
-                for (int groupIndex = minActiveGroupIndex; groupIndex <= maxActiveGroupIndex; groupIndex++)
-                {
-                    WriteArgs(argsData, groupIndex * IndirectArgsUIntCount, groupIndex, 0);
-                }
-
-                for (int i = 0; i < activeGroupIndexCount; i++)
-                {
-                    int groupIndex = activeGroupIndices[i];
-                    if (groupIndex < minActiveGroupIndex || groupIndex > maxActiveGroupIndex)
-                    {
-                        continue;
-                    }
-
-                    WriteArgs(
-                        argsData,
-                        groupIndex * IndirectArgsUIntCount,
-                        groupIndex,
-                        groupInstanceCounts[groupIndex]);
-                }
-            }
-
-            using (PrepareUploadSetDataMarker.Auto())
-            {
-                instanceBuffer!.SetData(instanceData, 0, 0, preparedInstanceCount);
-                argsBuffer!.SetData(argsData, argsStart, argsStart, argsCount);
-            }
-
-            ApplyGlobalShaderSettings(settings);
-            hasPreparedFrame = true;
-            return true;
-        }
-
-        private void ApplyGlobalShaderSettings(VegetationFoliageFeatureSettings settings)
-        {
-            preparedWindStrength = Mathf.Max(0f, settings.WindStrength);
-            preparedWindFrequency = Mathf.Max(0f, settings.WindFrequency);
-            Vector3 windDirection = settings.WindDirection.sqrMagnitude > 0.0001f
-                ? settings.WindDirection.normalized
-                : Vector3.right;
-            preparedWindDirection = new Vector4(windDirection.x, windDirection.y, windDirection.z, 0f);
-            preparedLeafFlutterSettings = new Vector4(
-                Mathf.Max(0f, settings.LeafFlutterStrength),
-                Mathf.Max(0f, settings.LeafFlutterFrequencyMultiplier),
-                Mathf.Max(0f, settings.LeafFlutterSpatialScale),
-                Mathf.Max(0f, settings.LeafFlutterSecondaryStrength));
-
-            Shader.SetGlobalFloat(WindStrengthId, preparedWindStrength);
-            Shader.SetGlobalFloat(WindFrequencyId, preparedWindFrequency);
-            Shader.SetGlobalVector(WindDirectionId, preparedWindDirection);
-            Shader.SetGlobalVector(LeafFlutterSettingsId, preparedLeafFlutterSettings);
         }
 
         private static VegetationIndirectInstanceData ConvertInstance(FoliagePacketInstance instance)
@@ -3657,53 +2226,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 Padding2 = 0u,
                 Wind = new Vector4(wind.Phase01, wind.TrunkBendWeight, wind.BranchFlutterWeight, wind.AnchorHeight)
             };
-        }
-
-        private void WriteArgs(NativeArray<uint> targetArgs, int baseOffset, int groupIndex, int instanceCount)
-        {
-            GroupRecord group = groups[groupIndex];
-            targetArgs[baseOffset] = group.IndexCount;
-            targetArgs[baseOffset + 1] = (uint)Mathf.Max(0, instanceCount);
-            targetArgs[baseOffset + 2] = group.IndexStart;
-            targetArgs[baseOffset + 3] = group.BaseVertex;
-            // Keep backend instance IDs local to the draw; the shader applies the grouped instance-buffer offset explicitly.
-            targetArgs[baseOffset + 4] = 0u;
-        }
-
-        private void EnsureInstanceUploadCapacity(int requiredCount)
-        {
-            if (instanceData.IsCreated && instanceData.Length >= requiredCount)
-            {
-                return;
-            }
-
-            if (instanceData.IsCreated)
-            {
-                instanceData.Dispose();
-            }
-
-            instanceData = new NativeArray<VegetationIndirectInstanceData>(
-                Mathf.NextPowerOfTwo(Mathf.Max(1, requiredCount)),
-                Allocator.Persistent,
-                NativeArrayOptions.UninitializedMemory);
-        }
-
-        private void EnsureArgsUploadCapacity(int requiredCount)
-        {
-            if (argsData.IsCreated && argsData.Length >= requiredCount)
-            {
-                return;
-            }
-
-            if (argsData.IsCreated)
-            {
-                argsData.Dispose();
-            }
-
-            argsData = new NativeArray<uint>(
-                Mathf.NextPowerOfTwo(Mathf.Max(1, requiredCount)),
-                Allocator.Persistent,
-                NativeArrayOptions.ClearMemory);
         }
 
         private void EnsureGpuBuffers(int requiredInstanceCount, int requiredGroupCount)
@@ -3731,7 +2253,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private void ClearPreparedFrame()
         {
-            selectedPacketCount = 0;
             ClearActiveGroupSelection();
             preparedInstanceCount = 0;
             preparedPacketCount = 0;
@@ -3749,142 +2270,36 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             preparedNearDetailEvictedCellCount = 0;
             preparedNearDetailLoadedBytes = 0L;
             hasPreparedFrame = false;
-            InvalidatePreparedCameraCache();
+            InvalidatePreparationFrameCaches();
         }
 
         private void ClearActiveGroupSelection()
         {
-            for (int i = 0; i < activeGroupIndexCount; i++)
+            if (groupInstanceCounts.Length > 0)
             {
-                int groupIndex = activeGroupIndices[i];
-                if (groupIndex >= 0 && groupIndex < groupInstanceCounts.Length)
-                {
-                    groupInstanceCounts[groupIndex] = 0;
-                }
+                Array.Clear(groupInstanceCounts, 0, groupInstanceCounts.Length);
+            }
 
-                if (groupIndex >= 0 && groupIndex < groupFrustumMasks.Length)
-                {
-                    groupFrustumMasks[groupIndex] = 0;
-                }
+            if (groupStartInstances.Length > 0)
+            {
+                Array.Clear(groupStartInstances, 0, groupStartInstances.Length);
+            }
+
+            if (groupFrustumMasks.Length > 0)
+            {
+                Array.Clear(groupFrustumMasks, 0, groupFrustumMasks.Length);
             }
 
             activeGroupIndexCount = 0;
         }
 
-        private void DisposeUploadArrays()
-        {
-            if (instanceData.IsCreated)
-            {
-                instanceData.Dispose();
-            }
-
-            if (argsData.IsCreated)
-            {
-                argsData.Dispose();
-            }
-        }
-
         private void ReleaseGpuBuffers()
         {
+            CompletePreparationSlots();
             ReleaseGraphicsBuffer(ref instanceBuffer);
             ReleaseGraphicsBuffer(ref argsBuffer);
             instanceCapacity = 0;
             argsGroupCapacity = 0;
-        }
-
-        private void ReleaseBatchRendererResources()
-        {
-            BatchRendererState? state = batchRendererState;
-            BatchRendererGroup? orphanRendererGroup = batchRendererGroup;
-            VegetationBrgBatch[] orphanBatches = brgBatches;
-            batchRendererState = null;
-            batchRendererGroup = null;
-            brgBatches = Array.Empty<VegetationBrgBatch>();
-            if (state == null)
-            {
-                DisposeBatchRendererResourcesImmediate(orphanRendererGroup, orphanBatches);
-                return;
-            }
-
-            if (!Application.isPlaying)
-            {
-                DisposeBatchRendererStateImmediate(state);
-                return;
-            }
-
-            state.RetireFrame = Time.renderedFrameCount;
-            int slot = retiredBatchRendererStateCursor;
-            retiredBatchRendererStateCursor = (retiredBatchRendererStateCursor + 1) % retiredBatchRendererStates.Length;
-            DisposeBatchRendererStateImmediate(retiredBatchRendererStates[slot]);
-            retiredBatchRendererStates[slot] = state;
-        }
-
-        private void FlushRetiredBatchRendererResources(bool force)
-        {
-            int frame = Time.renderedFrameCount;
-            for (int i = 0; i < retiredBatchRendererStates.Length; i++)
-            {
-                BatchRendererState? state = retiredBatchRendererStates[i];
-                if (state == null)
-                {
-                    continue;
-                }
-
-                if (!force && frame - state.RetireFrame < BatchRendererRetireFrameDelay)
-                {
-                    continue;
-                }
-
-                DisposeBatchRendererStateImmediate(state);
-                retiredBatchRendererStates[i] = null;
-            }
-        }
-
-        private static void DisposeBatchRendererStateImmediate(BatchRendererState? state)
-        {
-            if (state == null)
-            {
-                return;
-            }
-
-            DisposeBatchRendererResourcesImmediate(state.RendererGroup, state.Batches);
-            state.RendererGroup = null;
-            state.Batches = Array.Empty<VegetationBrgBatch>();
-            if (state.Handle.IsAllocated)
-            {
-                state.Handle.Free();
-            }
-        }
-
-        private static void DisposeBatchRendererResourcesImmediate(
-            BatchRendererGroup? rendererGroup,
-            VegetationBrgBatch[] batches)
-        {
-            for (int i = 0; i < batches.Length; i++)
-            {
-                VegetationBrgBatch batch = batches[i];
-                if (!batch.IsValid)
-                {
-                    continue;
-                }
-
-                if (rendererGroup != null)
-                {
-                    rendererGroup.RemoveBatch(batch.BatchId);
-                    rendererGroup.UnregisterMesh(batch.MeshId);
-                    rendererGroup.UnregisterMaterial(batch.MaterialId);
-                }
-
-                batch.InstanceDataBuffer?.Release();
-            }
-
-            rendererGroup?.Dispose();
-        }
-
-        private void ReleaseCullingGroup()
-        {
-            cullingGroup?.Dispose();
-            cullingGroup = null;
         }
 
         private static void ReleaseGraphicsBuffer(ref GraphicsBuffer? buffer)
@@ -3910,35 +2325,48 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
         private void MarkGraphDirty()
         {
             graphDirty = true;
-            batchRendererFaulted = false;
             invalidCompiledPacketsLogged = false;
             unchecked
             {
                 graphVersion++;
             }
 
-            InvalidatePreparedCameraCache();
+            InvalidatePreparationFrameCaches();
         }
 
-        private void InvalidatePreparedCameraCache()
+        private void InvalidatePreparationFrameCaches()
         {
-            cachedCameraFrame = -1;
-            cachedCameraId = -1;
-            cachedCameraSettingsHash = 0;
+            renderGraphCameraFrame = -1;
+            renderGraphCameraId = -1;
+            renderGraphCameraSettingsHash = 0;
+            renderGraphCameraPreparationSlot = -1;
+            renderGraphCameraPreparationVersion = 0;
+            pendingCameraFrame = -1;
+            pendingCameraId = -1;
+            pendingCameraSettingsHash = 0;
+            renderGraphShadowFrame = -1;
+            renderGraphShadowSettingsHash = 0;
+            renderGraphShadowPreparationSlot = -1;
+            renderGraphShadowPreparationVersion = 0;
+            completedCameraPreparationSlot = -1;
+            completedCameraPreparationVersion = 0;
+            completedShadowPreparationSlot = -1;
+            completedShadowPreparationVersion = 0;
             lastPrepareUsedCameraCache = false;
         }
 
-        private int ComputeCameraPrepareSettingsHash(VegetationFoliageFeatureSettings settings)
+        private int ComputePrepareSettingsHash(VegetationFoliageFeatureSettings settings, VegetationRenderPassMode passMode)
         {
             unchecked
             {
                 int hash = 17;
                 hash = hash * 31 + graphVersion;
                 hash = hash * 31 + settings.NearDetailDistance.GetHashCode();
-                hash = hash * 31 + settings.ColorWorkBudget;
+                hash = hash * 31 + settings.GetWorkBudget(passMode);
                 hash = hash * 31 + settings.MaxVisiblePacketInstances;
                 hash = hash * 31 + settings.NearDetailResidentByteBudget;
                 hash = hash * 31 + settings.NearDetailUploadByteBudget;
+                hash = hash * 31 + (passMode == VegetationRenderPassMode.Shadow ? (int)settings.ShadowMode : 0);
                 hash = hash * 31 + settings.WindStrength.GetHashCode();
                 hash = hash * 31 + settings.WindFrequency.GetHashCode();
                 hash = hash * 31 + settings.WindDirection.x.GetHashCode();
@@ -3967,531 +2395,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             return result;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct PackedMatrix
-        {
-            public PackedMatrix(Matrix4x4 matrix)
-            {
-                C0X = matrix.m00;
-                C0Y = matrix.m10;
-                C0Z = matrix.m20;
-                C1X = matrix.m01;
-                C1Y = matrix.m11;
-                C1Z = matrix.m21;
-                C2X = matrix.m02;
-                C2Y = matrix.m12;
-                C2Z = matrix.m22;
-                C3X = matrix.m03;
-                C3Y = matrix.m13;
-                C3Z = matrix.m23;
-            }
-
-            public float C0X;
-            public float C0Y;
-            public float C0Z;
-            public float C1X;
-            public float C1Y;
-            public float C1Z;
-            public float C2X;
-            public float C2Y;
-            public float C2Z;
-            public float C3X;
-            public float C3Y;
-            public float C3Z;
-        }
-
-        private sealed class BatchRendererState
-        {
-            public BatchRendererState(
-                BatchRendererSettingsSnapshot settings,
-                int[] providerAssetGroupOffsets,
-                BatchRendererPageRecord[] pages,
-                CellRecord[] cells,
-                BatchRendererPacketRecord[][] pagePackets,
-                int[][] pageInstanceAssetGroupIndices,
-                PacketRange[] pagePacketRanges,
-                PacketRange[] cellPacketRanges,
-                int[] packetLookupIndices,
-                int[] groupTotalInstanceCounts,
-                int[][] pageInstanceGroupLocalIndices,
-                int[][] pagePacketValidInstanceCounts)
-            {
-                Settings = settings;
-                ProviderAssetGroupOffsets = providerAssetGroupOffsets;
-                Pages = pages;
-                Cells = cells;
-                PagePackets = pagePackets;
-                PageInstanceAssetGroupIndices = pageInstanceAssetGroupIndices;
-                PagePacketRanges = pagePacketRanges;
-                CellPacketRanges = cellPacketRanges;
-                PacketLookupIndices = packetLookupIndices;
-                GroupTotalInstanceCounts = groupTotalInstanceCounts;
-                PageInstanceGroupLocalIndices = pageInstanceGroupLocalIndices;
-                PagePacketValidInstanceCounts = pagePacketValidInstanceCounts;
-            }
-
-            public BatchRendererSettingsSnapshot Settings;
-            public BatchRendererGroup? RendererGroup;
-            public GCHandle Handle;
-            public VegetationBrgBatch[] Batches = Array.Empty<VegetationBrgBatch>();
-            public int RetireFrame;
-            public int CullingDiagnosticsLogCount;
-            public readonly int[] ProviderAssetGroupOffsets;
-            public readonly BatchRendererPageRecord[] Pages;
-            public readonly CellRecord[] Cells;
-            public readonly BatchRendererPacketRecord[][] PagePackets;
-            public readonly int[][] PageInstanceAssetGroupIndices;
-            public readonly PacketRange[] PagePacketRanges;
-            public readonly PacketRange[] CellPacketRanges;
-            public readonly int[] PacketLookupIndices;
-            public readonly int[] GroupTotalInstanceCounts;
-            public readonly int[][] PageInstanceGroupLocalIndices;
-            public readonly int[][] PagePacketValidInstanceCounts;
-
-            public int PageCount => Pages.Length;
-
-            public int CellCount => Cells.Length;
-
-            public int GroupCount => GroupTotalInstanceCounts.Length;
-
-            public int PacketLookupCount => PacketLookupIndices.Length;
-
-            public Bounds CalculateGlobalBounds()
-            {
-                if (Pages.Length == 0)
-                {
-                    return new Bounds(Vector3.zero, Vector3.one);
-                }
-
-                Bounds bounds = Pages[0].WorldBounds;
-                for (int i = 1; i < Pages.Length; i++)
-                {
-                    bounds.Encapsulate(Pages[i].WorldBounds);
-                }
-
-                return bounds;
-            }
-        }
-
-        private readonly struct BatchRendererSettingsSnapshot
-        {
-            private BatchRendererSettingsSnapshot(
-                VegetationShadowMode shadowMode,
-                float nearDetailDistance,
-                int colorWorkBudget,
-                int shadowWorkBudget,
-                int maxVisiblePacketInstances,
-                bool enableDiagnostics,
-                GraphicsDeviceType graphicsApi)
-            {
-                ShadowMode = shadowMode;
-                NearDetailDistance = nearDetailDistance;
-                ColorWorkBudget = colorWorkBudget;
-                ShadowWorkBudget = shadowWorkBudget;
-                MaxVisiblePacketInstances = maxVisiblePacketInstances;
-                EnableDiagnostics = enableDiagnostics;
-                GraphicsApi = graphicsApi;
-            }
-
-            public VegetationShadowMode ShadowMode { get; }
-
-            public float NearDetailDistance { get; }
-
-            public int ColorWorkBudget { get; }
-
-            public int ShadowWorkBudget { get; }
-
-            public int MaxVisiblePacketInstances { get; }
-
-            public bool EnableDiagnostics { get; }
-
-            public GraphicsDeviceType GraphicsApi { get; }
-
-            public bool ShouldLogBatchRendererDiagnostics =>
-                EnableDiagnostics;
-
-            public bool UsesBatchRendererLightCulling =>
-                ShadowMode == VegetationShadowMode.CheapTree;
-
-            public static BatchRendererSettingsSnapshot From(VegetationFoliageFeatureSettings settings)
-            {
-                return new BatchRendererSettingsSnapshot(
-                    settings.ShadowMode,
-                    settings.NearDetailDistance,
-                    settings.ColorWorkBudget,
-                    settings.ShadowWorkBudget,
-                    settings.MaxVisiblePacketInstances,
-                    settings.EnableDiagnostics,
-                    SystemInfo.graphicsDeviceType);
-            }
-
-            public int GetWorkBudget(VegetationRenderPassMode passMode)
-            {
-                return passMode == VegetationRenderPassMode.Shadow
-                    ? Mathf.Max(1, ShadowWorkBudget)
-                    : Mathf.Max(1, ColorWorkBudget);
-            }
-        }
-
-        private readonly struct BatchRendererPageRecord
-        {
-            public BatchRendererPageRecord(
-                int providerIndex,
-                int pageRecordIndex,
-                Bounds worldBounds,
-                int firstCellRecord,
-                int cellCount)
-            {
-                ProviderIndex = providerIndex;
-                PageRecordIndex = pageRecordIndex;
-                WorldBounds = worldBounds;
-                FirstCellRecord = firstCellRecord;
-                CellCount = cellCount;
-            }
-
-            public int ProviderIndex { get; }
-
-            public int PageRecordIndex { get; }
-
-            public Bounds WorldBounds { get; }
-
-            public int FirstCellRecord { get; }
-
-            public int CellCount { get; }
-        }
-
-        private readonly struct BatchRendererPacketRecord
-        {
-            public BatchRendererPacketRecord(FoliageRepresentationPacket packet)
-            {
-                RepresentationKind = packet.RepresentationKind;
-                CellIndex = packet.CellIndex;
-                AssetGroupIndex = packet.AssetGroupIndex;
-                FirstInstance = packet.FirstInstance;
-                InstanceCount = packet.InstanceCount;
-                WorldBounds = packet.WorldBounds;
-                WorkCost = packet.WorkCost;
-                Residency = packet.Residency;
-                ShadowMode = packet.ShadowMode;
-                ShadowPacketIndex = packet.ShadowPacketIndex;
-            }
-
-            public FoliageRepresentationKind RepresentationKind { get; }
-
-            public int CellIndex { get; }
-
-            public int AssetGroupIndex { get; }
-
-            public int FirstInstance { get; }
-
-            public int InstanceCount { get; }
-
-            public Bounds WorldBounds { get; }
-
-            public int WorkCost { get; }
-
-            public FoliagePacketResidency Residency { get; }
-
-            public FoliageShadowPacketMode ShadowMode { get; }
-
-            public int ShadowPacketIndex { get; }
-
-            public bool IsValid => FirstInstance >= 0 && InstanceCount > 0;
-        }
-
-        private readonly struct VegetationBrgBatch
-        {
-            public VegetationBrgBatch(
-                int groupIndex,
-                string debugLabel,
-                string meshName,
-                string materialName,
-                string shaderName,
-                int forwardPassIndex,
-                int depthPassIndex,
-                int shadowPassIndex,
-                int objectToWorldByteAddress,
-                int worldToObjectByteAddress,
-                int packedLeafTintByteAddress,
-                int windByteAddress,
-                int bufferBytes,
-                BatchID batchId,
-                BatchMeshID meshId,
-                BatchMaterialID materialId,
-                GraphicsBuffer instanceDataBuffer,
-                int instanceCount)
-            {
-                GroupIndex = groupIndex;
-                DebugLabel = debugLabel;
-                MeshName = meshName;
-                MaterialName = materialName;
-                ShaderName = shaderName;
-                ForwardPassIndex = forwardPassIndex;
-                DepthPassIndex = depthPassIndex;
-                ShadowPassIndex = shadowPassIndex;
-                ObjectToWorldByteAddress = objectToWorldByteAddress;
-                WorldToObjectByteAddress = worldToObjectByteAddress;
-                PackedLeafTintByteAddress = packedLeafTintByteAddress;
-                WindByteAddress = windByteAddress;
-                BufferBytes = bufferBytes;
-                BatchId = batchId;
-                MeshId = meshId;
-                MaterialId = materialId;
-                InstanceDataBuffer = instanceDataBuffer;
-                InstanceCount = instanceCount;
-            }
-
-            public int GroupIndex { get; }
-
-            public string? DebugLabel { get; }
-
-            public string? MeshName { get; }
-
-            public string? MaterialName { get; }
-
-            public string? ShaderName { get; }
-
-            public int ForwardPassIndex { get; }
-
-            public int DepthPassIndex { get; }
-
-            public int ShadowPassIndex { get; }
-
-            public int ObjectToWorldByteAddress { get; }
-
-            public int WorldToObjectByteAddress { get; }
-
-            public int PackedLeafTintByteAddress { get; }
-
-            public int WindByteAddress { get; }
-
-            public int BufferBytes { get; }
-
-            public BatchID BatchId { get; }
-
-            public BatchMeshID MeshId { get; }
-
-            public BatchMaterialID MaterialId { get; }
-
-            public GraphicsBuffer? InstanceDataBuffer { get; }
-
-            public int InstanceCount { get; }
-
-            public bool IsValid => InstanceCount > 0 && InstanceDataBuffer != null;
-        }
-
-        private sealed class BatchCullingScratch
-        {
-            public bool[] VisiblePageMask = Array.Empty<bool>();
-            public bool[] VisibleCellMask = Array.Empty<bool>();
-            public int[] VisiblePageFrustumMasks = Array.Empty<int>();
-            public int[] VisibleCellFrustumMasks = Array.Empty<int>();
-            public int[] GroupInstanceCounts = Array.Empty<int>();
-            public int[] GroupFrustumMasks = Array.Empty<int>();
-            public int[] GroupStartInstances = Array.Empty<int>();
-            public int[] GroupWriteOffsets = Array.Empty<int>();
-            public CellCandidate[] CellCandidates = Array.Empty<CellCandidate>();
-            public PacketSelection[] SelectedPackets = Array.Empty<PacketSelection>();
-            public int[] ActiveGroupIndices = Array.Empty<int>();
-            public Plane[] CullingPlanes = Array.Empty<Plane>();
-            public int[] SplitPlaneOffsets = Array.Empty<int>();
-            public int[] SplitPlaneCounts = Array.Empty<int>();
-            public int CellCandidateCount;
-            public int SelectedPacketCount;
-            public int ActiveGroupIndexCount;
-            public int PreparedInstanceCount;
-            public int PreparedPacketCount;
-            public int PreparedNearDetailPacketCount;
-            public int PreparedTreeL0PacketCount;
-            public int PreparedTreeL1PacketCount;
-            public int PreparedTreeL2PacketCount;
-            public int PreparedHlodPacketCount;
-            public int PreparedShadowPacketCount;
-            public int PreparedActiveGroupCount;
-            public int PreparedFrustumMask;
-            private int pageCount;
-            private int cellCount;
-            private int groupCount;
-
-            public void ResetVisibility(
-                int requiredPageCount,
-                int requiredCellCount,
-                int requiredGroupCount,
-                int requiredPacketSelectionCount,
-                int requiredSplitCount,
-                int requiredPlaneCount)
-            {
-                EnsureCapacity(
-                    requiredPageCount,
-                    requiredCellCount,
-                    requiredGroupCount,
-                    requiredPacketSelectionCount,
-                    requiredSplitCount,
-                    requiredPlaneCount);
-                if (pageCount > 0)
-                {
-                    Array.Clear(VisiblePageMask, 0, pageCount);
-                    Array.Clear(VisiblePageFrustumMasks, 0, pageCount);
-                }
-
-                if (cellCount > 0)
-                {
-                    Array.Clear(VisibleCellMask, 0, cellCount);
-                    Array.Clear(VisibleCellFrustumMasks, 0, cellCount);
-                }
-
-                if (groupCount > 0)
-                {
-                    Array.Clear(GroupInstanceCounts, 0, groupCount);
-                    Array.Clear(GroupFrustumMasks, 0, groupCount);
-                    Array.Clear(GroupStartInstances, 0, groupCount);
-                    Array.Clear(GroupWriteOffsets, 0, groupCount);
-                }
-
-                pageCount = requiredPageCount;
-                cellCount = requiredCellCount;
-                groupCount = requiredGroupCount;
-                ResetSelection(requiredGroupCount);
-            }
-
-            public void ResetSelection(int requiredGroupCount)
-            {
-                if (groupCount > 0)
-                {
-                    Array.Clear(GroupInstanceCounts, 0, groupCount);
-                    Array.Clear(GroupFrustumMasks, 0, groupCount);
-                    Array.Clear(GroupStartInstances, 0, groupCount);
-                    Array.Clear(GroupWriteOffsets, 0, groupCount);
-                }
-
-                groupCount = requiredGroupCount;
-                CellCandidateCount = 0;
-                SelectedPacketCount = 0;
-                ActiveGroupIndexCount = 0;
-                PreparedInstanceCount = 0;
-                PreparedPacketCount = 0;
-                PreparedNearDetailPacketCount = 0;
-                PreparedTreeL0PacketCount = 0;
-                PreparedTreeL1PacketCount = 0;
-                PreparedTreeL2PacketCount = 0;
-                PreparedHlodPacketCount = 0;
-                PreparedShadowPacketCount = 0;
-                PreparedActiveGroupCount = 0;
-                PreparedFrustumMask = 0;
-            }
-
-            public void MarkPageVisible(int pageRecordIndex)
-            {
-                if (pageRecordIndex < 0 || pageRecordIndex >= pageCount || VisiblePageMask[pageRecordIndex])
-                {
-                    return;
-                }
-
-                VisiblePageMask[pageRecordIndex] = true;
-            }
-
-            public void MarkCellVisible(int cellRecordIndex, int pageRecordIndex)
-            {
-                if (cellRecordIndex < 0 || cellRecordIndex >= cellCount || VisibleCellMask[cellRecordIndex])
-                {
-                    return;
-                }
-
-                VisibleCellMask[cellRecordIndex] = true;
-                MarkPageVisible(pageRecordIndex);
-            }
-
-            public void AddCellCandidate(CellCandidate candidate)
-            {
-                if (CellCandidateCount >= CellCandidates.Length)
-                {
-                    Array.Resize(
-                        ref CellCandidates,
-                        Mathf.NextPowerOfTwo(Mathf.Max(1, CellCandidateCount + 1)));
-                }
-
-                CellCandidates[CellCandidateCount++] = candidate;
-            }
-
-            public void AddSelectedPacket(PacketSelection selection)
-            {
-                if (SelectedPacketCount >= SelectedPackets.Length)
-                {
-                    Array.Resize(
-                        ref SelectedPackets,
-                        Mathf.NextPowerOfTwo(Mathf.Max(1, SelectedPacketCount + 1)));
-                }
-
-                SelectedPackets[SelectedPacketCount++] = selection;
-            }
-
-            public void AddActiveGroupIndex(int groupIndex)
-            {
-                if (ActiveGroupIndexCount >= ActiveGroupIndices.Length)
-                {
-                    Array.Resize(
-                        ref ActiveGroupIndices,
-                        Mathf.NextPowerOfTwo(Mathf.Max(1, ActiveGroupIndexCount + 1)));
-                }
-
-                ActiveGroupIndices[ActiveGroupIndexCount++] = groupIndex;
-            }
-
-            public void IncrementNearDetailTierCounter(FoliageRepresentationKind representationKind)
-            {
-                if (representationKind == FoliageRepresentationKind.TreeL0)
-                {
-                    PreparedTreeL0PacketCount++;
-                    return;
-                }
-
-                if (representationKind == FoliageRepresentationKind.TreeL1)
-                {
-                    PreparedTreeL1PacketCount++;
-                    return;
-                }
-
-                if (representationKind == FoliageRepresentationKind.TreeL2)
-                {
-                    PreparedTreeL2PacketCount++;
-                }
-            }
-
-            private void EnsureCapacity(
-                int requiredPageCount,
-                int requiredCellCount,
-                int requiredGroupCount,
-                int requiredPacketSelectionCount,
-                int requiredSplitCount,
-                int requiredPlaneCount)
-            {
-                EnsureArray(ref VisiblePageMask, requiredPageCount);
-                EnsureArray(ref VisibleCellMask, requiredCellCount);
-                EnsureArray(ref VisiblePageFrustumMasks, requiredPageCount);
-                EnsureArray(ref VisibleCellFrustumMasks, requiredCellCount);
-                EnsureArray(ref GroupInstanceCounts, requiredGroupCount);
-                EnsureArray(ref GroupFrustumMasks, requiredGroupCount);
-                EnsureArray(ref GroupStartInstances, requiredGroupCount);
-                EnsureArray(ref GroupWriteOffsets, requiredGroupCount);
-                EnsureArray(ref CellCandidates, requiredCellCount);
-                EnsureArray(ref SelectedPackets, requiredPacketSelectionCount);
-                EnsureArray(ref ActiveGroupIndices, requiredGroupCount);
-                EnsureArray(ref CullingPlanes, requiredPlaneCount);
-                EnsureArray(ref SplitPlaneOffsets, requiredSplitCount);
-                EnsureArray(ref SplitPlaneCounts, requiredSplitCount);
-            }
-
-            private static void EnsureArray<T>(ref T[] array, int requiredLength)
-            {
-                if (array.Length >= requiredLength)
-                {
-                    return;
-                }
-
-                array = new T[Mathf.NextPowerOfTwo(Mathf.Max(1, requiredLength))];
-            }
         }
 
         private struct ProviderRecord
@@ -4526,14 +2429,12 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
                 int providerIndex,
                 int providerPageIndex,
                 FoliagePageAsset page,
-                int pageSphereIndex,
                 int firstCellRecord,
                 int cellCount)
             {
                 ProviderIndex = providerIndex;
                 ProviderPageIndex = providerPageIndex;
                 Page = page;
-                PageSphereIndex = pageSphereIndex;
                 FirstCellRecord = firstCellRecord;
                 CellCount = cellCount;
                 PageRecordIndex = pageRecordIndex;
@@ -4542,7 +2443,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             public int ProviderIndex;
             public int ProviderPageIndex;
             public FoliagePageAsset Page;
-            public int PageSphereIndex;
             public int FirstCellRecord;
             public int CellCount;
             public int PageRecordIndex;
@@ -4550,26 +2450,23 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
 
         private struct CellRecord
         {
-            public CellRecord(int pageRecordIndex, int cellIndex, int sphereIndex, Bounds worldBounds)
+            public CellRecord(int pageRecordIndex, int cellIndex, Bounds worldBounds)
             {
                 PageRecordIndex = pageRecordIndex;
                 CellIndex = cellIndex;
-                SphereIndex = sphereIndex;
                 WorldBounds = worldBounds;
             }
 
             public int PageRecordIndex;
             public int CellIndex;
-            public int SphereIndex;
             public Bounds WorldBounds;
         }
 
         private struct GroupRecord
         {
-            public GroupRecord(FoliageAssetGroup assetGroup, int groupIndex)
+            public GroupRecord(FoliageAssetGroup assetGroup)
             {
                 AssetGroup = assetGroup;
-                ArgsBufferOffset = checked(groupIndex * GraphicsBuffer.IndirectDrawIndexedArgs.size);
                 Mesh mesh = assetGroup.Mesh;
                 IndexCount = (uint)mesh.GetIndexCount(0);
                 IndexStart = (uint)mesh.GetIndexStart(0);
@@ -4577,7 +2474,6 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
 
             public FoliageAssetGroup AssetGroup;
-            public int ArgsBufferOffset;
             public uint IndexCount;
             public uint IndexStart;
             public uint BaseVertex;
@@ -4601,61 +2497,1012 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             }
         }
 
-        private readonly struct SphereRecord
+        private sealed class PreparationSlot : IDisposable
         {
-            private SphereRecord(SphereKind kind, int recordIndex)
+            public PreparationSlot(int slotIndex)
             {
-                Kind = kind;
-                RecordIndex = recordIndex;
+                SlotIndex = slotIndex;
             }
 
-            public SphereKind Kind { get; }
+            public int SlotIndex { get; }
 
-            public int RecordIndex { get; }
+            public JobHandle JobHandle;
+            public int Version;
+            public int UploadedVersion;
+            public int CompletedVersion;
+            public VegetationRenderPassMode PassMode;
+            public int RenderFrame;
+            public int CameraId;
+            public int SettingsHash;
+            public int GraphVersion;
+            public int LastRecordedFrame = -1;
+            public int GroupCount;
+            public int ArgsEntryCount;
+            public int FrustumCount;
+            public NativeArray<Vector4> FrustumPlanes;
+            public NativeArray<PreparationCellCandidate> CellCandidates;
+            public NativeArray<PreparationPacketSelection> SelectedPackets;
+            public NativeArray<int> PageVisibleMask;
+            public NativeArray<VegetationIndirectInstanceData> InstanceData;
+            public NativeArray<uint> ArgsData;
+            public NativeArray<int> GroupInstanceCounts;
+            public NativeArray<int> GroupStartInstances;
+            public NativeArray<int> GroupWriteOffsets;
+            public NativeArray<int> GroupFrustumMasks;
+            public NativeArray<int> Counters;
+            public NativeArray<long> LongCounters;
+            public float WindStrength;
+            public float WindFrequency;
+            public Vector4 WindDirection;
+            public Vector4 LeafFlutterSettings;
 
-            public static SphereRecord Page(int pageRecordIndex)
+            public void Dispose()
             {
-                return new SphereRecord(SphereKind.Page, pageRecordIndex);
-            }
-
-            public static SphereRecord Cell(int cellRecordIndex)
-            {
-                return new SphereRecord(SphereKind.Cell, cellRecordIndex);
+                JobHandle.Complete();
+                DisposeNativeArray(ref FrustumPlanes);
+                DisposeNativeArray(ref CellCandidates);
+                DisposeNativeArray(ref SelectedPackets);
+                DisposeNativeArray(ref PageVisibleMask);
+                DisposeNativeArray(ref InstanceData);
+                DisposeNativeArray(ref ArgsData);
+                DisposeNativeArray(ref GroupInstanceCounts);
+                DisposeNativeArray(ref GroupStartInstances);
+                DisposeNativeArray(ref GroupWriteOffsets);
+                DisposeNativeArray(ref GroupFrustumMasks);
+                DisposeNativeArray(ref Counters);
+                DisposeNativeArray(ref LongCounters);
+                Version = 0;
+                UploadedVersion = 0;
+                CompletedVersion = 0;
+                PassMode = default;
+                RenderFrame = 0;
+                CameraId = 0;
+                SettingsHash = 0;
+                GraphVersion = 0;
+                LastRecordedFrame = -1;
+                GroupCount = 0;
+                ArgsEntryCount = 0;
+                FrustumCount = 0;
             }
         }
 
-        private readonly struct CellCandidate : IComparable<CellCandidate>
+        private struct PreparationPageRecord
         {
-            public CellCandidate(int cellRecordIndex, float distanceSqr)
+            public Vector3 BoundsCenter;
+            public Vector3 BoundsExtents;
+            public int FirstCellRecord;
+            public int CellCount;
+            public int PageHlodStart;
+            public int PageHlodCount;
+        }
+
+        private struct PreparationCellRecord
+        {
+            public Vector3 BoundsCenter;
+            public Vector3 BoundsExtents;
+            public int PageRecordIndex;
+            public int CellHlodStart;
+            public int CellHlodCount;
+            public int TreeL0Start;
+            public int TreeL0Count;
+            public int TreeL1Start;
+            public int TreeL1Count;
+            public int TreeL2Start;
+            public int TreeL2Count;
+            public long NearDetailBytes;
+        }
+
+        private struct PreparationPacketRecord
+        {
+            public Vector3 BoundsCenter;
+            public Vector3 BoundsExtents;
+            public int WorldGroupIndex;
+            public int FirstInstance;
+            public int InstanceCount;
+            public int WorkCost;
+            public int Residency;
+            public int RepresentationKind;
+            public int ShadowMode;
+            public int ShadowPacketIndex;
+        }
+
+        private struct PreparationGroupRecord
+        {
+            public uint IndexCount;
+            public uint IndexStart;
+            public uint BaseVertex;
+        }
+
+        private readonly struct PreparationCellCandidate : IComparable<PreparationCellCandidate>
+        {
+            public PreparationCellCandidate(int cellRecordIndex, float distanceSqr, int frustumMask)
             {
                 CellRecordIndex = cellRecordIndex;
                 DistanceSqr = distanceSqr;
+                FrustumMask = frustumMask;
             }
 
             public int CellRecordIndex { get; }
 
             public float DistanceSqr { get; }
 
-            public int CompareTo(CellCandidate other)
+            public int FrustumMask { get; }
+
+            public int CompareTo(PreparationCellCandidate other)
             {
                 return DistanceSqr.CompareTo(other.DistanceSqr);
             }
         }
 
-        private readonly struct PacketSelection
+        private readonly struct PreparationPacketSelection
         {
-            public PacketSelection(int pageRecordIndex, int packetIndex, int instanceCount)
+            public PreparationPacketSelection(int packetRecordIndex, int frustumMask)
             {
-                PageRecordIndex = pageRecordIndex;
-                PacketIndex = packetIndex;
-                InstanceCount = instanceCount;
+                PacketRecordIndex = packetRecordIndex;
+                FrustumMask = frustumMask;
             }
 
-            public int PageRecordIndex { get; }
+            public int PacketRecordIndex { get; }
 
-            public int PacketIndex { get; }
+            public int FrustumMask { get; }
+        }
 
-            public int InstanceCount { get; }
+        private struct PrepareFrameJob : IJob
+        {
+            public NativeArray<PreparationPageRecord> Pages;
+            public NativeArray<PreparationCellRecord> Cells;
+            public NativeArray<PreparationPacketRecord> Packets;
+            public NativeArray<int> PacketLookupIndices;
+            public NativeArray<PreparationGroupRecord> Groups;
+            public NativeArray<VegetationIndirectInstanceData> StaticInstances;
+            public NativeArray<int> NearDetailResidentCellMask;
+            public NativeArray<int> NearDetailRequestedCellMask;
+            public NativeArray<int> NearDetailLastUsedCellFrame;
+            public NativeArray<Vector4> FrustumPlanes;
+            public NativeArray<PreparationCellCandidate> CellCandidates;
+            public NativeArray<PreparationPacketSelection> SelectedPackets;
+            public NativeArray<int> PageVisibleMask;
+            public NativeArray<VegetationIndirectInstanceData> InstanceData;
+            public NativeArray<uint> ArgsData;
+            public NativeArray<int> GroupInstanceCounts;
+            public NativeArray<int> GroupStartInstances;
+            public NativeArray<int> GroupWriteOffsets;
+            public NativeArray<int> GroupFrustumMasks;
+            public NativeArray<int> Counters;
+            public NativeArray<long> LongCounters;
+            public Vector3 CameraWorldPosition;
+            public int PassMode;
+            public int FrustumCount;
+            public int AllFrustumMask;
+            public int GroupCount;
+            public int ArgsEntryCount;
+            public int CellCount;
+            public int ResidencyFrameIndex;
+            public int WorkBudget;
+            public int InstanceBudget;
+            public long ResidentByteBudget;
+            public long UploadByteBudget;
+            public float NearDistanceSqr;
+
+            private int remainingWorkBudget;
+            private int remainingInstanceBudget;
+            private long remainingUploadByteBudget;
+            private long residentBytes;
+            private int residentCellCount;
+            private int visiblePageCount;
+            private int visibleCellCount;
+            private int cellCandidateCount;
+            private int selectedPacketCount;
+            private int preparedPacketCount;
+            private int preparedNearDetailPacketCount;
+            private int preparedTreeL0PacketCount;
+            private int preparedTreeL1PacketCount;
+            private int preparedTreeL2PacketCount;
+            private int preparedHlodPacketCount;
+            private int preparedShadowPacketCount;
+            private int preparedFrustumMask;
+            private int preparedNearDetailLoadRequestCount;
+            private int preparedNearDetailEvictedCellCount;
+            private long preparedNearDetailLoadedBytes;
+
+            public void Execute()
+            {
+                remainingWorkBudget = WorkBudget;
+                remainingInstanceBudget = Math.Max(1, InstanceBudget);
+                remainingUploadByteBudget = Math.Max(0L, UploadByteBudget);
+                RefreshResidentStateFromMask();
+                visiblePageCount = 0;
+                visibleCellCount = 0;
+                cellCandidateCount = 0;
+                selectedPacketCount = 0;
+                preparedPacketCount = 0;
+                preparedNearDetailPacketCount = 0;
+                preparedTreeL0PacketCount = 0;
+                preparedTreeL1PacketCount = 0;
+                preparedTreeL2PacketCount = 0;
+                preparedHlodPacketCount = 0;
+                preparedShadowPacketCount = 0;
+                preparedFrustumMask = 0;
+                preparedNearDetailLoadRequestCount = 0;
+                preparedNearDetailEvictedCellCount = 0;
+                preparedNearDetailLoadedBytes = 0L;
+
+                ClearFrameOutputs();
+                EvictNearDetailCellsToBudget(ResidentByteBudget, 0L);
+                SelectVisiblePackets();
+                SortCellCandidates();
+                SelectCellCandidates();
+                CompactSelectedPackets();
+                WriteCounters();
+            }
+
+            private void RefreshResidentStateFromMask()
+            {
+                residentBytes = 0L;
+                residentCellCount = 0;
+                int count = Math.Min(CellCount, NearDetailResidentCellMask.Length);
+                for (int cellIndex = 0; cellIndex < count; cellIndex++)
+                {
+                    if (NearDetailResidentCellMask[cellIndex] == 0)
+                    {
+                        continue;
+                    }
+
+                    residentCellCount++;
+                    if (cellIndex < Cells.Length)
+                    {
+                        residentBytes += Math.Max(0L, Cells[cellIndex].NearDetailBytes);
+                    }
+                }
+            }
+
+            private void ClearFrameOutputs()
+            {
+                for (int i = 0; i < Counters.Length; i++)
+                {
+                    Counters[i] = 0;
+                }
+
+                for (int i = 0; i < LongCounters.Length; i++)
+                {
+                    LongCounters[i] = 0L;
+                }
+
+                for (int i = 0; i < PageVisibleMask.Length; i++)
+                {
+                    PageVisibleMask[i] = 0;
+                }
+
+                for (int i = 0; i < NearDetailRequestedCellMask.Length; i++)
+                {
+                    NearDetailRequestedCellMask[i] = 0;
+                }
+
+                int safeGroupEntryCount = ResolveSafeGroupEntryCount();
+                for (int entryIndex = 0; entryIndex < safeGroupEntryCount; entryIndex++)
+                {
+                    GroupInstanceCounts[entryIndex] = 0;
+                    GroupStartInstances[entryIndex] = 0;
+                    GroupWriteOffsets[entryIndex] = 0;
+                    WriteArgs(entryIndex, ResolveGroupIndexFromEntry(entryIndex), 0);
+                }
+
+                int safeGroupCount = Math.Min(GroupCount, GroupFrustumMasks.Length);
+                for (int groupIndex = 0; groupIndex < safeGroupCount; groupIndex++)
+                {
+                    GroupFrustumMasks[groupIndex] = 0;
+                }
+            }
+
+            private void SelectVisiblePackets()
+            {
+                int pageCount = Pages.Length;
+                for (int pageIndex = 0; pageIndex < pageCount; pageIndex++)
+                {
+                    PreparationPageRecord page = Pages[pageIndex];
+                    int pageFrustumMask = TestBoundsFrustumMask(page.BoundsCenter, page.BoundsExtents, AllFrustumMask);
+                    if (pageFrustumMask == 0)
+                    {
+                        continue;
+                    }
+
+                    MarkPageVisible(pageIndex);
+                    bool hasVisibleCell = false;
+                    for (int cellOffset = 0; cellOffset < page.CellCount; cellOffset++)
+                    {
+                        int cellRecordIndex = page.FirstCellRecord + cellOffset;
+                        if (cellRecordIndex < 0 || cellRecordIndex >= CellCount || cellRecordIndex >= Cells.Length)
+                        {
+                            continue;
+                        }
+
+                        PreparationCellRecord cell = Cells[cellRecordIndex];
+                        int cellFrustumMask = TestBoundsFrustumMask(cell.BoundsCenter, cell.BoundsExtents, pageFrustumMask);
+                        if (cellFrustumMask == 0)
+                        {
+                            continue;
+                        }
+
+                        hasVisibleCell = true;
+                        visibleCellCount++;
+                        AddCellCandidate(new PreparationCellCandidate(
+                            cellRecordIndex,
+                            CalculateBoundsDistanceSqr(cell.BoundsCenter, cell.BoundsExtents, CameraWorldPosition),
+                            cellFrustumMask));
+                    }
+
+                    if (!hasVisibleCell)
+                    {
+                        TrySelectRange(page.PageHlodStart, page.PageHlodCount, pageFrustumMask, chargeBudget: false, cellRecordIndex: -1);
+                    }
+                }
+            }
+
+            private void SortCellCandidates()
+            {
+                if (cellCandidateCount <= 1)
+                {
+                    return;
+                }
+
+                for (int i = 1; i < cellCandidateCount; i++)
+                {
+                    PreparationCellCandidate value = CellCandidates[i];
+                    int j = i - 1;
+                    while (j >= 0 && CellCandidates[j].CompareTo(value) > 0)
+                    {
+                        CellCandidates[j + 1] = CellCandidates[j];
+                        j--;
+                    }
+
+                    CellCandidates[j + 1] = value;
+                }
+            }
+
+            private void SelectCellCandidates()
+            {
+                for (int i = 0; i < cellCandidateCount; i++)
+                {
+                    PreparationCellCandidate candidate = CellCandidates[i];
+                    if (candidate.CellRecordIndex < 0 || candidate.CellRecordIndex >= Cells.Length)
+                    {
+                        continue;
+                    }
+
+                    PreparationCellRecord cell = Cells[candidate.CellRecordIndex];
+                    if (candidate.DistanceSqr <= NearDistanceSqr)
+                    {
+                        if (TryEnsureNearDetailCellResident(candidate.CellRecordIndex))
+                        {
+                            int desiredTier = ResolveTier(candidate.DistanceSqr, NearDistanceSqr);
+                            if (TrySelectNearDetailTierCascade(cell, desiredTier, candidate.FrustumMask, candidate.CellRecordIndex))
+                            {
+                                continue;
+                            }
+                        }
+                    }
+
+                    TrySelectRange(cell.CellHlodStart, cell.CellHlodCount, candidate.FrustumMask, chargeBudget: false, candidate.CellRecordIndex);
+                }
+            }
+
+            private bool TrySelectNearDetailTierCascade(
+                PreparationCellRecord cell,
+                int desiredTier,
+                int frustumMask,
+                int cellRecordIndex)
+            {
+                if (desiredTier == (int)FoliageRepresentationKind.TreeL0 &&
+                    TrySelectRange(cell.TreeL0Start, cell.TreeL0Count, frustumMask, chargeBudget: true, cellRecordIndex))
+                {
+                    return true;
+                }
+
+                if ((desiredTier == (int)FoliageRepresentationKind.TreeL0 ||
+                     desiredTier == (int)FoliageRepresentationKind.TreeL1) &&
+                    TrySelectRange(cell.TreeL1Start, cell.TreeL1Count, frustumMask, chargeBudget: true, cellRecordIndex))
+                {
+                    return true;
+                }
+
+                return TrySelectRange(cell.TreeL2Start, cell.TreeL2Count, frustumMask, chargeBudget: true, cellRecordIndex);
+            }
+
+            private bool TrySelectRange(
+                int rangeStart,
+                int rangeCount,
+                int visibilityFrustumMask,
+                bool chargeBudget,
+                int cellRecordIndex)
+            {
+                if (rangeCount <= 0 || rangeStart < 0 || visibilityFrustumMask == 0)
+                {
+                    return false;
+                }
+
+                int packetCost = 0;
+                int packetInstances = 0;
+                int matchingPacketCount = 0;
+                for (int rangeOffset = 0; rangeOffset < rangeCount; rangeOffset++)
+                {
+                    int lookupIndex = rangeStart + rangeOffset;
+                    if (lookupIndex < 0 || lookupIndex >= PacketLookupIndices.Length)
+                    {
+                        continue;
+                    }
+
+                    if (!TryResolveSelectablePacket(
+                            PacketLookupIndices[lookupIndex],
+                            visibilityFrustumMask,
+                            out int resolvedPacketIndex,
+                            out _))
+                    {
+                        continue;
+                    }
+
+                    PreparationPacketRecord packet = Packets[resolvedPacketIndex];
+                    if (packet.InstanceCount <= 0)
+                    {
+                        continue;
+                    }
+
+                    packetCost += Math.Max(1, packet.WorkCost);
+                    packetInstances += packet.InstanceCount;
+                    matchingPacketCount++;
+                }
+
+                if (matchingPacketCount == 0 ||
+                    (chargeBudget && (packetCost > remainingWorkBudget || packetInstances > remainingInstanceBudget)))
+                {
+                    return false;
+                }
+
+                for (int rangeOffset = 0; rangeOffset < rangeCount; rangeOffset++)
+                {
+                    int lookupIndex = rangeStart + rangeOffset;
+                    if (lookupIndex < 0 || lookupIndex >= PacketLookupIndices.Length)
+                    {
+                        continue;
+                    }
+
+                    if (!TryResolveSelectablePacket(
+                            PacketLookupIndices[lookupIndex],
+                            visibilityFrustumMask,
+                            out int resolvedPacketIndex,
+                            out int packetFrustumMask))
+                    {
+                        continue;
+                    }
+
+                    PreparationPacketRecord packet = Packets[resolvedPacketIndex];
+                    if (packet.InstanceCount <= 0)
+                    {
+                        continue;
+                    }
+
+                    AddSelectedPacket(new PreparationPacketSelection(resolvedPacketIndex, packetFrustumMask));
+                    AddGroupInstanceCounts(packet.WorldGroupIndex, packet.InstanceCount, packetFrustumMask);
+
+                    preparedFrustumMask |= packetFrustumMask;
+                    if (packet.Residency == (int)FoliagePacketResidency.NearDetail)
+                    {
+                        if (cellRecordIndex >= 0 && cellRecordIndex < NearDetailLastUsedCellFrame.Length)
+                        {
+                            NearDetailLastUsedCellFrame[cellRecordIndex] = ResidencyFrameIndex;
+                        }
+
+                        preparedNearDetailPacketCount++;
+                        IncrementNearDetailTierCounter(packet.RepresentationKind);
+                    }
+                    else
+                    {
+                        preparedHlodPacketCount++;
+                    }
+
+                    if (PassMode == (int)VegetationRenderPassMode.Shadow)
+                    {
+                        preparedShadowPacketCount++;
+                    }
+                }
+
+                if (chargeBudget)
+                {
+                    remainingWorkBudget -= packetCost;
+                    remainingInstanceBudget -= packetInstances;
+                }
+
+                preparedPacketCount += matchingPacketCount;
+                return true;
+            }
+
+            private bool TryResolveSelectablePacket(
+                int packetIndex,
+                int visibilityFrustumMask,
+                out int resolvedPacketIndex,
+                out int packetFrustumMask)
+            {
+                resolvedPacketIndex = -1;
+                packetFrustumMask = 0;
+                if (packetIndex < 0 || packetIndex >= Packets.Length || visibilityFrustumMask == 0)
+                {
+                    return false;
+                }
+
+                PreparationPacketRecord source = Packets[packetIndex];
+                if (PassMode == (int)VegetationRenderPassMode.Shadow)
+                {
+                    if (source.ShadowMode == (int)FoliageShadowPacketMode.None ||
+                        !IsCheapShadowPacketMode(source.ShadowMode) ||
+                        source.ShadowPacketIndex < 0 ||
+                        source.ShadowPacketIndex >= Packets.Length)
+                    {
+                        return false;
+                    }
+
+                    PreparationPacketRecord shadowPacket = Packets[source.ShadowPacketIndex];
+                    if (shadowPacket.ShadowMode == (int)FoliageShadowPacketMode.None ||
+                        shadowPacket.WorldGroupIndex < 0)
+                    {
+                        return false;
+                    }
+
+                    packetFrustumMask = TestBoundsFrustumMask(
+                        shadowPacket.BoundsCenter,
+                        shadowPacket.BoundsExtents,
+                        visibilityFrustumMask);
+                    resolvedPacketIndex = source.ShadowPacketIndex;
+                    return packetFrustumMask != 0;
+                }
+
+                if (source.WorldGroupIndex < 0)
+                {
+                    return false;
+                }
+
+                packetFrustumMask = TestBoundsFrustumMask(source.BoundsCenter, source.BoundsExtents, visibilityFrustumMask);
+                resolvedPacketIndex = packetIndex;
+                return packetFrustumMask != 0;
+            }
+
+            private static bool IsCheapShadowPacketMode(int shadowMode)
+            {
+                return shadowMode == (int)FoliageShadowPacketMode.CheapTree ||
+                       shadowMode == (int)FoliageShadowPacketMode.Hlod;
+            }
+
+            private bool TryEnsureNearDetailCellResident(int cellRecordIndex)
+            {
+                if (cellRecordIndex < 0 || cellRecordIndex >= Cells.Length)
+                {
+                    return false;
+                }
+
+                long cellBytes = Cells[cellRecordIndex].NearDetailBytes;
+                if (cellBytes <= 0L)
+                {
+                    return true;
+                }
+
+                if (cellRecordIndex < NearDetailRequestedCellMask.Length &&
+                    NearDetailRequestedCellMask[cellRecordIndex] == 0)
+                {
+                    NearDetailRequestedCellMask[cellRecordIndex] = 1;
+                    preparedNearDetailLoadRequestCount++;
+                }
+
+                if (cellBytes > ResidentByteBudget)
+                {
+                    UnloadNearDetailCell(cellRecordIndex, countEviction: IsNearDetailCellResident(cellRecordIndex));
+                    return false;
+                }
+
+                if (IsNearDetailCellResident(cellRecordIndex))
+                {
+                    NearDetailLastUsedCellFrame[cellRecordIndex] = ResidencyFrameIndex;
+                    return true;
+                }
+
+                if (cellBytes > remainingUploadByteBudget)
+                {
+                    return false;
+                }
+
+                EvictNearDetailCellsToBudget(ResidentByteBudget, cellBytes);
+                if (residentBytes + cellBytes > ResidentByteBudget)
+                {
+                    return false;
+                }
+
+                NearDetailResidentCellMask[cellRecordIndex] = 1;
+                NearDetailLastUsedCellFrame[cellRecordIndex] = ResidencyFrameIndex;
+                residentBytes += cellBytes;
+                residentCellCount++;
+                remainingUploadByteBudget -= cellBytes;
+                preparedNearDetailLoadedBytes += cellBytes;
+                return true;
+            }
+
+            private void EvictNearDetailCellsToBudget(long residentByteBudget, long incomingBytes)
+            {
+                while (residentBytes + incomingBytes > residentByteBudget)
+                {
+                    int candidateCellIndex = -1;
+                    int oldestFrame = int.MaxValue;
+                    int count = Math.Min(CellCount, NearDetailResidentCellMask.Length);
+                    for (int cellIndex = 0; cellIndex < count; cellIndex++)
+                    {
+                        if (NearDetailResidentCellMask[cellIndex] == 0 ||
+                            NearDetailRequestedCellMask[cellIndex] != 0)
+                        {
+                            continue;
+                        }
+
+                        int lastUsedFrame = NearDetailLastUsedCellFrame[cellIndex];
+                        if (lastUsedFrame < oldestFrame)
+                        {
+                            oldestFrame = lastUsedFrame;
+                            candidateCellIndex = cellIndex;
+                        }
+                    }
+
+                    if (candidateCellIndex < 0)
+                    {
+                        return;
+                    }
+
+                    UnloadNearDetailCell(candidateCellIndex, countEviction: true);
+                }
+            }
+
+            private void UnloadNearDetailCell(int cellRecordIndex, bool countEviction)
+            {
+                if (!IsNearDetailCellResident(cellRecordIndex))
+                {
+                    return;
+                }
+
+                NearDetailResidentCellMask[cellRecordIndex] = 0;
+                NearDetailLastUsedCellFrame[cellRecordIndex] = 0;
+                long cellBytes = cellRecordIndex < Cells.Length ? Cells[cellRecordIndex].NearDetailBytes : 0L;
+                residentBytes = Math.Max(0L, residentBytes - cellBytes);
+                residentCellCount = Math.Max(0, residentCellCount - 1);
+                if (countEviction)
+                {
+                    preparedNearDetailEvictedCellCount++;
+                }
+            }
+
+            private bool IsNearDetailCellResident(int cellRecordIndex)
+            {
+                return cellRecordIndex >= 0 &&
+                       cellRecordIndex < NearDetailResidentCellMask.Length &&
+                       NearDetailResidentCellMask[cellRecordIndex] != 0;
+            }
+
+            private void CompactSelectedPackets()
+            {
+                int preparedInstanceCount = 0;
+                int preparedActiveGroupCount = 0;
+                int safeGroupEntryCount = ResolveSafeGroupEntryCount();
+                for (int entryIndex = 0; entryIndex < safeGroupEntryCount; entryIndex++)
+                {
+                    int groupIndex = ResolveGroupIndexFromEntry(entryIndex);
+                    int groupInstanceCount = GroupInstanceCounts[entryIndex];
+                    if (groupInstanceCount <= 0)
+                    {
+                        WriteArgs(entryIndex, groupIndex, 0);
+                        continue;
+                    }
+
+                    if (preparedInstanceCount >= InstanceData.Length)
+                    {
+                        GroupInstanceCounts[entryIndex] = 0;
+                        GroupStartInstances[entryIndex] = 0;
+                        WriteArgs(entryIndex, groupIndex, 0);
+                        continue;
+                    }
+
+                    int clampedCount = Math.Min(groupInstanceCount, InstanceData.Length - preparedInstanceCount);
+                    GroupInstanceCounts[entryIndex] = clampedCount;
+                    GroupStartInstances[entryIndex] = preparedInstanceCount;
+                    GroupWriteOffsets[entryIndex] = 0;
+                    preparedInstanceCount += clampedCount;
+                    preparedActiveGroupCount++;
+                    WriteArgs(entryIndex, groupIndex, clampedCount);
+                }
+
+                for (int selectionIndex = 0; selectionIndex < selectedPacketCount; selectionIndex++)
+                {
+                    PreparationPacketSelection selection = SelectedPackets[selectionIndex];
+                    if (selection.PacketRecordIndex < 0 || selection.PacketRecordIndex >= Packets.Length)
+                    {
+                        continue;
+                    }
+
+                    PreparationPacketRecord packet = Packets[selection.PacketRecordIndex];
+                    int groupIndex = packet.WorldGroupIndex;
+                    if (groupIndex < 0 || groupIndex >= GroupCount)
+                    {
+                        continue;
+                    }
+
+                    if (PassMode == (int)VegetationRenderPassMode.Shadow)
+                    {
+                        CopyPacketInstancesToShadowEntries(packet, groupIndex, selection.FrustumMask);
+                        continue;
+                    }
+
+                    CopyPacketInstancesToEntry(packet, groupIndex);
+                }
+
+                Counters[PreparationCounterPreparedInstanceCount] = preparedInstanceCount;
+                Counters[PreparationCounterPreparedActiveGroupCount] = preparedActiveGroupCount;
+            }
+
+            private void AddGroupInstanceCounts(int groupIndex, int instanceCount, int frustumMask)
+            {
+                if (groupIndex < 0 || groupIndex >= GroupCount || instanceCount <= 0)
+                {
+                    return;
+                }
+
+                if (groupIndex < GroupFrustumMasks.Length)
+                {
+                    GroupFrustumMasks[groupIndex] |= frustumMask;
+                }
+
+                if (PassMode != (int)VegetationRenderPassMode.Shadow)
+                {
+                    if (groupIndex < GroupInstanceCounts.Length)
+                    {
+                        GroupInstanceCounts[groupIndex] += instanceCount;
+                    }
+
+                    return;
+                }
+
+                int frustumLimit = Math.Min(FrustumCount, 30);
+                for (int frustumIndex = 0; frustumIndex < frustumLimit; frustumIndex++)
+                {
+                    int frustumBit = 1 << frustumIndex;
+                    if ((frustumMask & frustumBit) == 0)
+                    {
+                        continue;
+                    }
+
+                    int entryIndex = groupIndex + frustumIndex * GroupCount;
+                    if (entryIndex >= 0 && entryIndex < GroupInstanceCounts.Length)
+                    {
+                        GroupInstanceCounts[entryIndex] += instanceCount;
+                    }
+                }
+            }
+
+            private void CopyPacketInstancesToShadowEntries(PreparationPacketRecord packet, int groupIndex, int frustumMask)
+            {
+                int frustumLimit = Math.Min(FrustumCount, 30);
+                for (int frustumIndex = 0; frustumIndex < frustumLimit; frustumIndex++)
+                {
+                    int frustumBit = 1 << frustumIndex;
+                    if ((frustumMask & frustumBit) == 0)
+                    {
+                        continue;
+                    }
+
+                    CopyPacketInstancesToEntry(packet, groupIndex + frustumIndex * GroupCount);
+                }
+            }
+
+            private void CopyPacketInstancesToEntry(PreparationPacketRecord packet, int entryIndex)
+            {
+                if (entryIndex < 0 || entryIndex >= GroupInstanceCounts.Length)
+                {
+                    return;
+                }
+
+                int groupOffset = GroupWriteOffsets[entryIndex];
+                int groupLimit = GroupInstanceCounts[entryIndex];
+                int groupStart = GroupStartInstances[entryIndex];
+                for (int instanceOffset = 0; instanceOffset < packet.InstanceCount; instanceOffset++)
+                {
+                    if (groupOffset >= groupLimit)
+                    {
+                        break;
+                    }
+
+                    int sourceIndex = packet.FirstInstance + instanceOffset;
+                    int writeIndex = groupStart + groupOffset;
+                    if (sourceIndex >= 0 &&
+                        sourceIndex < StaticInstances.Length &&
+                        writeIndex >= 0 &&
+                        writeIndex < InstanceData.Length)
+                    {
+                        InstanceData[writeIndex] = StaticInstances[sourceIndex];
+                        groupOffset++;
+                    }
+                }
+
+                GroupWriteOffsets[entryIndex] = groupOffset;
+            }
+
+            private void WriteCounters()
+            {
+                Counters[PreparationCounterPreparedPacketCount] = preparedPacketCount;
+                Counters[PreparationCounterPreparedNearDetailPacketCount] = preparedNearDetailPacketCount;
+                Counters[PreparationCounterPreparedTreeL0PacketCount] = preparedTreeL0PacketCount;
+                Counters[PreparationCounterPreparedTreeL1PacketCount] = preparedTreeL1PacketCount;
+                Counters[PreparationCounterPreparedTreeL2PacketCount] = preparedTreeL2PacketCount;
+                Counters[PreparationCounterPreparedHlodPacketCount] = preparedHlodPacketCount;
+                Counters[PreparationCounterPreparedShadowPacketCount] = preparedShadowPacketCount;
+                Counters[PreparationCounterPreparedFrustumMask] = preparedFrustumMask;
+                Counters[PreparationCounterVisiblePageCount] = visiblePageCount;
+                Counters[PreparationCounterVisibleCellCount] = visibleCellCount;
+                Counters[PreparationCounterNearDetailLoadRequestCount] = preparedNearDetailLoadRequestCount;
+                Counters[PreparationCounterNearDetailEvictedCellCount] = preparedNearDetailEvictedCellCount;
+                Counters[PreparationCounterNearDetailResidentCellCount] = residentCellCount;
+                LongCounters[PreparationLongCounterNearDetailResidentBytes] = residentBytes;
+                LongCounters[PreparationLongCounterNearDetailLoadedBytes] = preparedNearDetailLoadedBytes;
+            }
+
+            private void AddCellCandidate(PreparationCellCandidate candidate)
+            {
+                if (cellCandidateCount >= CellCandidates.Length)
+                {
+                    return;
+                }
+
+                CellCandidates[cellCandidateCount++] = candidate;
+            }
+
+            private void AddSelectedPacket(PreparationPacketSelection selection)
+            {
+                if (selectedPacketCount >= SelectedPackets.Length)
+                {
+                    return;
+                }
+
+                SelectedPackets[selectedPacketCount++] = selection;
+            }
+
+            private void MarkPageVisible(int pageIndex)
+            {
+                if (pageIndex < 0 || pageIndex >= PageVisibleMask.Length || PageVisibleMask[pageIndex] != 0)
+                {
+                    return;
+                }
+
+                PageVisibleMask[pageIndex] = 1;
+                visiblePageCount++;
+            }
+
+            private void IncrementNearDetailTierCounter(int representationKind)
+            {
+                if (representationKind == (int)FoliageRepresentationKind.TreeL0)
+                {
+                    preparedTreeL0PacketCount++;
+                    return;
+                }
+
+                if (representationKind == (int)FoliageRepresentationKind.TreeL1)
+                {
+                    preparedTreeL1PacketCount++;
+                    return;
+                }
+
+                if (representationKind == (int)FoliageRepresentationKind.TreeL2)
+                {
+                    preparedTreeL2PacketCount++;
+                }
+            }
+
+            private int ResolveSafeGroupEntryCount()
+            {
+                int requestedCount = ArgsEntryCount > 0 ? ArgsEntryCount : GroupCount;
+                return Math.Min(Math.Min(requestedCount, GroupInstanceCounts.Length), ArgsData.Length / IndirectArgsUIntCount);
+            }
+
+            private int ResolveGroupIndexFromEntry(int entryIndex)
+            {
+                if (GroupCount <= 0)
+                {
+                    return -1;
+                }
+
+                return entryIndex % GroupCount;
+            }
+
+            private void WriteArgs(int entryIndex, int groupIndex, int instanceCount)
+            {
+                int argsOffset = entryIndex * IndirectArgsUIntCount;
+                if (entryIndex < 0 ||
+                    groupIndex < 0 ||
+                    groupIndex >= Groups.Length ||
+                    argsOffset < 0 ||
+                    argsOffset + 4 >= ArgsData.Length)
+                {
+                    return;
+                }
+
+                PreparationGroupRecord group = Groups[groupIndex];
+                ArgsData[argsOffset] = group.IndexCount;
+                ArgsData[argsOffset + 1] = (uint)Math.Max(0, instanceCount);
+                ArgsData[argsOffset + 2] = group.IndexStart;
+                ArgsData[argsOffset + 3] = group.BaseVertex;
+                ArgsData[argsOffset + 4] = 0u;
+            }
+
+            private int TestBoundsFrustumMask(Vector3 center, Vector3 extents, int frustumMask)
+            {
+                int visibleMask = 0;
+                for (int frustumIndex = 0; frustumIndex < FrustumCount; frustumIndex++)
+                {
+                    int frustumBit = 1 << frustumIndex;
+                    if ((frustumMask & frustumBit) == 0)
+                    {
+                        continue;
+                    }
+
+                    if (TestBoundsFrustum(center, extents, frustumIndex * 6))
+                    {
+                        visibleMask |= frustumBit;
+                    }
+                }
+
+                return visibleMask;
+            }
+
+            private bool TestBoundsFrustum(Vector3 center, Vector3 extents, int planeOffset)
+            {
+                for (int planeIndex = 0; planeIndex < 6; planeIndex++)
+                {
+                    int index = planeOffset + planeIndex;
+                    if (index < 0 || index >= FrustumPlanes.Length)
+                    {
+                        return false;
+                    }
+
+                    Vector4 plane = FrustumPlanes[index];
+                    float radius =
+                        extents.x * Abs(plane.x) +
+                        extents.y * Abs(plane.y) +
+                        extents.z * Abs(plane.z);
+                    if (plane.x * center.x + plane.y * center.y + plane.z * center.z + plane.w + radius < 0f)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            private static float CalculateBoundsDistanceSqr(Vector3 center, Vector3 extents, Vector3 point)
+            {
+                float dx = Math.Max(Abs(point.x - center.x) - extents.x, 0f);
+                float dy = Math.Max(Abs(point.y - center.y) - extents.y, 0f);
+                float dz = Math.Max(Abs(point.z - center.z) - extents.z, 0f);
+                return dx * dx + dy * dy + dz * dz;
+            }
+
+            private static int ResolveTier(float distanceSqr, float nearDistanceSqr)
+            {
+                float nearThird = nearDistanceSqr * 0.11111111f;
+                if (distanceSqr <= nearThird)
+                {
+                    return (int)FoliageRepresentationKind.TreeL0;
+                }
+
+                if (distanceSqr <= nearDistanceSqr * 0.44444444f)
+                {
+                    return (int)FoliageRepresentationKind.TreeL1;
+                }
+
+                return (int)FoliageRepresentationKind.TreeL2;
+            }
+
+            private static float Abs(float value)
+            {
+                return value < 0f ? -value : value;
+            }
         }
 
         private struct PacketRange
@@ -4664,10 +3511,5 @@ namespace VoxGeoFol.Features.Vegetation.Rendering
             public int Count;
         }
 
-        private enum SphereKind
-        {
-            Page = 0,
-            Cell = 1
-        }
     }
 }

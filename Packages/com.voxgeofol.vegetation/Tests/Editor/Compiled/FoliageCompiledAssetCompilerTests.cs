@@ -332,7 +332,7 @@ public sealed class FoliageCompiledAssetCompilerTests
     }
 
     [Test]
-    public void RenderWorld_PrepareForCamera_SelectsNearDetailThroughCompiledPages()
+    public void RenderWorld_RenderGraphPrepareCamera_SelectsNearDetailThroughCompiledPages()
     {
         VegetationRuntimeContainer container = CreateContainer(
             "RenderWorldNearContainer",
@@ -348,7 +348,7 @@ public sealed class FoliageCompiledAssetCompilerTests
 
         Assert.IsTrue(result.Succeeded, string.Join("; ", result.FailureMessages));
         VegetationRenderWorld.Shared.RegisterProvider("near-provider", "near-provider", result.AssemblyAsset!, result.PageAssets);
-        bool prepared = VegetationRenderWorld.Shared.PrepareForCamera(camera, VegetationRenderPassMode.Color, settings);
+        bool prepared = VegetationRenderWorld.Shared.PrepareRenderGraphCameraImmediateForTests(camera, VegetationRenderPassMode.Color, settings);
 
         Assert.IsTrue(prepared);
         Assert.Greater(VegetationRenderWorld.Shared.LastPreparedVisiblePageCount, 0);
@@ -362,7 +362,7 @@ public sealed class FoliageCompiledAssetCompilerTests
     }
 
     [Test]
-    public void RenderWorld_PrepareForCamera_UsesHlodWhenNearDetailStreamBudgetBlocksLoad()
+    public void RenderWorld_RenderGraphPrepareCamera_UsesHlodWhenNearDetailStreamBudgetBlocksLoad()
     {
         VegetationRuntimeContainer container = CreateContainer(
             "RenderWorldStreamBlockedContainer",
@@ -380,7 +380,7 @@ public sealed class FoliageCompiledAssetCompilerTests
 
         Assert.IsTrue(result.Succeeded, string.Join("; ", result.FailureMessages));
         VegetationRenderWorld.Shared.RegisterProvider("stream-blocked-provider", "stream-blocked-provider", result.AssemblyAsset!, result.PageAssets);
-        bool prepared = VegetationRenderWorld.Shared.PrepareForCamera(camera, VegetationRenderPassMode.Color, settings);
+        bool prepared = VegetationRenderWorld.Shared.PrepareRenderGraphCameraImmediateForTests(camera, VegetationRenderPassMode.Color, settings);
 
         Assert.IsTrue(prepared);
         Assert.Greater(VegetationRenderWorld.Shared.LastPreparedNearDetailLoadRequestCount, 0);
@@ -391,7 +391,7 @@ public sealed class FoliageCompiledAssetCompilerTests
     }
 
     [Test]
-    public void RenderWorld_PrepareForCamera_LoadsNearestCellWhenWholePageExceedsUploadBudget()
+    public void RenderWorld_RenderGraphPrepareCamera_LoadsNearestCellWhenWholePageExceedsUploadBudget()
     {
         VegetationRuntimeContainer container = CreateContainer(
             "RenderWorldCellUploadContainer",
@@ -413,7 +413,7 @@ public sealed class FoliageCompiledAssetCompilerTests
 
         Assert.Greater(pageNearDetailBytes, uploadBudget);
         VegetationRenderWorld.Shared.RegisterProvider("cell-upload-provider", "cell-upload-provider", result.AssemblyAsset!, result.PageAssets);
-        bool prepared = VegetationRenderWorld.Shared.PrepareForCamera(camera, VegetationRenderPassMode.Color, settings);
+        bool prepared = VegetationRenderWorld.Shared.PrepareRenderGraphCameraImmediateForTests(camera, VegetationRenderPassMode.Color, settings);
 
         Assert.IsTrue(prepared);
         Assert.Greater(VegetationRenderWorld.Shared.LastPreparedNearDetailPacketCount, 0);
@@ -422,7 +422,7 @@ public sealed class FoliageCompiledAssetCompilerTests
     }
 
     [Test]
-    public void RenderWorld_PrepareForCamera_UsesCellBoundsDistanceForNearTierSelection()
+    public void RenderWorld_RenderGraphPrepareCamera_UsesCellBoundsDistanceForNearTierSelection()
     {
         VegetationRuntimeContainer container = CreateContainer(
             "RenderWorldCellBoundsDistanceContainer",
@@ -448,7 +448,7 @@ public sealed class FoliageCompiledAssetCompilerTests
         Assert.IsTrue(result.Succeeded, string.Join("; ", result.FailureMessages));
         Assert.AreEqual(1, result.PageAssets[0].Cells.Count);
         VegetationRenderWorld.Shared.RegisterProvider("cell-bounds-distance-provider", "cell-bounds-distance-provider", result.AssemblyAsset!, result.PageAssets);
-        bool prepared = VegetationRenderWorld.Shared.PrepareForCamera(camera, VegetationRenderPassMode.Color, settings);
+        bool prepared = VegetationRenderWorld.Shared.PrepareRenderGraphCameraImmediateForTests(camera, VegetationRenderPassMode.Color, settings);
 
         Assert.IsTrue(prepared);
         Assert.Greater(VegetationRenderWorld.Shared.LastPreparedTreeL0PacketCount, 0);
@@ -458,7 +458,7 @@ public sealed class FoliageCompiledAssetCompilerTests
     }
 
     [Test]
-    public void RenderWorld_PrepareForCamera_RendersHlodWhenNearDetailWorkBudgetIsExhausted()
+    public void RenderWorld_RenderGraphPrepareCamera_RendersHlodWhenNearDetailWorkBudgetIsExhausted()
     {
         VegetationRuntimeContainer container = CreateContainer(
             "RenderWorldBudgetFallbackContainer",
@@ -477,7 +477,7 @@ public sealed class FoliageCompiledAssetCompilerTests
 
         Assert.IsTrue(result.Succeeded, string.Join("; ", result.FailureMessages));
         VegetationRenderWorld.Shared.RegisterProvider("budget-fallback-provider", "budget-fallback-provider", result.AssemblyAsset!, result.PageAssets);
-        bool prepared = VegetationRenderWorld.Shared.PrepareForCamera(camera, VegetationRenderPassMode.Color, settings);
+        bool prepared = VegetationRenderWorld.Shared.PrepareRenderGraphCameraImmediateForTests(camera, VegetationRenderPassMode.Color, settings);
 
         Assert.IsTrue(prepared);
         Assert.AreEqual(0, VegetationRenderWorld.Shared.LastPreparedNearDetailPacketCount);
@@ -486,7 +486,7 @@ public sealed class FoliageCompiledAssetCompilerTests
     }
 
     [Test]
-    public void RenderWorld_PrepareForCamera_DegradesCloseCellToCheaperNearDetailBeforeHlod()
+    public void RenderWorld_RenderGraphPrepareCamera_DegradesCloseCellToCheaperNearDetailBeforeHlod()
     {
         VegetationRuntimeContainer container = CreateContainer(
             "RenderWorldBudgetDegradeContainer",
@@ -509,7 +509,7 @@ public sealed class FoliageCompiledAssetCompilerTests
 
         Assert.IsTrue(result.Succeeded, string.Join("; ", result.FailureMessages));
         VegetationRenderWorld.Shared.RegisterProvider("budget-degrade-provider", "budget-degrade-provider", result.AssemblyAsset!, result.PageAssets);
-        bool prepared = VegetationRenderWorld.Shared.PrepareForCamera(camera, VegetationRenderPassMode.Color, settings);
+        bool prepared = VegetationRenderWorld.Shared.PrepareRenderGraphCameraImmediateForTests(camera, VegetationRenderPassMode.Color, settings);
 
         Assert.IsTrue(prepared);
         Assert.Greater(VegetationRenderWorld.Shared.LastPreparedNearDetailPacketCount, 0);
@@ -518,7 +518,7 @@ public sealed class FoliageCompiledAssetCompilerTests
     }
 
     [Test]
-    public void RenderWorld_PrepareForCamera_ReusesDepthSelectionForColorPassInSameFrame()
+    public void RenderWorld_RenderGraphPrepareCamera_ReusesDepthSelectionForColorPassInSameFrame()
     {
         VegetationRuntimeContainer container = CreateContainer(
             "RenderWorldCacheContainer",
@@ -535,14 +535,14 @@ public sealed class FoliageCompiledAssetCompilerTests
         Assert.IsTrue(result.Succeeded, string.Join("; ", result.FailureMessages));
         VegetationRenderWorld.Shared.RegisterProvider("cache-provider", "cache-provider", result.AssemblyAsset!, result.PageAssets);
 
-        Assert.IsTrue(VegetationRenderWorld.Shared.PrepareForCamera(camera, VegetationRenderPassMode.Depth, settings));
+        Assert.IsTrue(VegetationRenderWorld.Shared.PrepareRenderGraphCameraImmediateForTests(camera, VegetationRenderPassMode.Depth, settings));
         Assert.IsFalse(VegetationRenderWorld.Shared.LastPrepareUsedCameraCache);
-        Assert.IsTrue(VegetationRenderWorld.Shared.PrepareForCamera(camera, VegetationRenderPassMode.Color, settings));
+        Assert.IsTrue(VegetationRenderWorld.Shared.PrepareRenderGraphCameraImmediateForTests(camera, VegetationRenderPassMode.Color, settings));
         Assert.IsTrue(VegetationRenderWorld.Shared.LastPrepareUsedCameraCache);
     }
 
     [Test]
-    public void RenderWorld_PrepareForCamera_EvictsNearDetailWhenResidentBudgetShrinks()
+    public void RenderWorld_RenderGraphPrepareCamera_EvictsNearDetailWhenResidentBudgetShrinks()
     {
         VegetationRuntimeContainer container = CreateContainer(
             "RenderWorldStreamEvictContainer",
@@ -560,12 +560,12 @@ public sealed class FoliageCompiledAssetCompilerTests
 
         Assert.IsTrue(result.Succeeded, string.Join("; ", result.FailureMessages));
         VegetationRenderWorld.Shared.RegisterProvider("stream-evict-provider", "stream-evict-provider", result.AssemblyAsset!, result.PageAssets);
-        Assert.IsTrue(VegetationRenderWorld.Shared.PrepareForCamera(camera, VegetationRenderPassMode.Color, settings));
+        Assert.IsTrue(VegetationRenderWorld.Shared.PrepareRenderGraphCameraImmediateForTests(camera, VegetationRenderPassMode.Color, settings));
         Assert.Greater(VegetationRenderWorld.Shared.NearDetailResidentPageCount, 0);
 
         settings.NearDetailResidentByteBudget = 1;
         settings.NearDetailUploadByteBudget = 1;
-        bool prepared = VegetationRenderWorld.Shared.PrepareForCamera(camera, VegetationRenderPassMode.Color, settings);
+        bool prepared = VegetationRenderWorld.Shared.PrepareRenderGraphCameraImmediateForTests(camera, VegetationRenderPassMode.Color, settings);
 
         Assert.IsTrue(prepared);
         Assert.Greater(VegetationRenderWorld.Shared.LastPreparedNearDetailEvictedCellCount, 0);
@@ -575,7 +575,7 @@ public sealed class FoliageCompiledAssetCompilerTests
     }
 
     [Test]
-    public void RenderWorld_PrepareForCamera_FallsBackToHlodOutsideNearDetailDistance()
+    public void RenderWorld_RenderGraphPrepareCamera_FallsBackToHlodOutsideNearDetailDistance()
     {
         VegetationRuntimeContainer container = CreateContainer(
             "RenderWorldHlodContainer",
@@ -591,7 +591,7 @@ public sealed class FoliageCompiledAssetCompilerTests
 
         Assert.IsTrue(result.Succeeded, string.Join("; ", result.FailureMessages));
         VegetationRenderWorld.Shared.RegisterProvider("hlod-provider", "hlod-provider", result.AssemblyAsset!, result.PageAssets);
-        bool prepared = VegetationRenderWorld.Shared.PrepareForCamera(camera, VegetationRenderPassMode.Color, settings);
+        bool prepared = VegetationRenderWorld.Shared.PrepareRenderGraphCameraImmediateForTests(camera, VegetationRenderPassMode.Color, settings);
 
         Assert.IsTrue(prepared);
         Assert.Greater(VegetationRenderWorld.Shared.LastPreparedHlodPacketCount, 0);
@@ -599,7 +599,7 @@ public sealed class FoliageCompiledAssetCompilerTests
     }
 
     [Test]
-    public void RenderWorld_PrepareForFrustum_UsesCompiledCheapTreeShadowPackets()
+    public void RenderWorld_RenderGraphPrepareFrustum_UsesCompiledCheapTreeShadowPackets()
     {
         VegetationRuntimeContainer container = CreateContainer(
             "RenderWorldShadowContainer",
@@ -617,7 +617,7 @@ public sealed class FoliageCompiledAssetCompilerTests
 
         Assert.IsTrue(result.Succeeded, string.Join("; ", result.FailureMessages));
         VegetationRenderWorld.Shared.RegisterProvider("shadow-provider", "shadow-provider", result.AssemblyAsset!, result.PageAssets);
-        bool prepared = VegetationRenderWorld.Shared.PrepareForFrustum(camera.transform.position, planes, settings);
+        bool prepared = VegetationRenderWorld.Shared.PrepareRenderGraphFrustumImmediateForTests(camera.transform.position, planes, settings);
 
         Assert.IsTrue(prepared);
         Assert.Greater(VegetationRenderWorld.Shared.LastPreparedShadowPacketCount, 0);

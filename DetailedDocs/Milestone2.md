@@ -1,31 +1,33 @@
 # Milestone 2
 
-Status: active. The compiled renderer is complete; this milestone now tracks production hardening.
+Status: active. The compiled renderer is in production cleanup with a single RenderGraph runtime path.
 
 ## Goal
 
-Turn the shipped baseline into a production-usable opaque foliage package.
+Turn the shipped baseline into a production-usable opaque foliage package without reintroducing parallel renderer paths.
 
 ## Current Production Baseline
 
-The renderer is now one compiled packet path:
+The renderer is one compiled packet path:
 
 ```text
 VegetationTreeAuthoring
 -> FoliageAssemblyAsset + FoliagePageAsset[]
 -> VegetationRuntimeContainer or closed SubScene provider
 -> VegetationRenderWorld
--> BatchRendererGroup batches by compiled FoliageAssetGroup on supported non-D3D12 APIs
--> RenderGraph grouped-indirect passes on Direct3D12 and unsupported/faulted BRG APIs
--> page/cell broad phase
--> packet budgets
+-> RenderGraph-owned jobified preparation
+   -> page/cell broad phase
+   -> packet budgets
+   -> compaction and indirect args generation
+   -> completed-frame slot handoff
+-> URP RenderGraph compute preparation contract
+   -> grouped instance/args buffer upload without job completion
+-> RenderGraph grouped-indirect depth/color/shadow passes
 -> shader wind
--> BRG or grouped indirect draw commands
+-> grouped indirect draw commands
 ```
 
-Direct3D12 now runs the RenderGraph grouped-indirect backend. D3D12 diagnostics proved the Unity `6000.3.15f1` native shadow extraction crash happens immediately after custom vegetation BRG batch registration, before vegetation BRG culling output, even with BRG light views and registered shadow caster passes disabled.
-
-The renderer does not maintain a parallel tree-first runtime path.
+The C# BRG backend was deleted. The active runtime should not branch by graphics API and should not maintain a fallback renderer.
 
 ## Completed
 
@@ -36,25 +38,29 @@ The renderer does not maintain a parallel tree-first runtime path.
 5. Classic-scene runtime registration landed. `VegetationRuntimeContainer` registers generated assembly/pages with `VegetationRenderWorld`; `VegetationRendererFeature` consumes that world directly.
 6. Public shadow settings are `VegetationShadowMode.Off` and `VegetationShadowMode.CheapTree`.
 7. Closed `SubScene` bootstrap bakes compiled assembly/page references and registers/unregisters providers with `VegetationRenderWorld`.
-8. The retired tree-first runtime family, old runtime tests, independent proxy shadow authoring surfaces, and demo compute surface were physically deleted.
+8. The retired tree-first runtime family, old runtime tests, independent proxy shadow authoring surfaces, demo compute surface, and C# BRG backend were physically deleted.
 9. Sample/demo authoring assets were cut over to baked impostor HLOD inputs and generated mesh settings.
-10. Authoring preview and bake controls now expose only the active branch/trunk tier workflow.
-11. Near-detail packet residency is budgeted in `VegetationRenderWorld`: visible near cells request cell-level residency under resident/upload byte budgets and fall back to HLOD when blocked.
-12. Generated page/cell aggregate HLOD mesh assets were cut out; HLOD now uses baked per-tree impostor meshes and recompilation deletes stale generated HLOD mesh assets for the container.
-13. Grouped indirect instance lookup is backend-stable: indirect args use zero `startInstance`, and `VegetationRenderWorld` binds `_VegetationInstanceDataBaseOffset` per group so DirectX does not read trunk payload records for canopy draws.
-14. BRG production slice landed on supported raw-buffer BRG APIs: `VegetationRenderWorld` creates one `BatchRendererGroup` batch per compiled `FoliageAssetGroup`, uploads batch-owned matrix/tint/wind metadata once per graph rebuild, emits compacted visible instance indices from the BRG culling callback, and `VegetationRendererFeature` skips custom RenderGraph camera/depth/color passes when BRG initializes. Direct3D12 is explicitly routed to the RenderGraph grouped-indirect backend because Unity native shadow extraction crashes from the presence of custom vegetation BRG batches.
+10. Near-detail packet residency is budgeted in `VegetationRenderWorld`: visible near cells request cell-level residency under resident/upload byte budgets and fall back to HLOD when blocked.
+11. Generated page/cell aggregate HLOD mesh assets were cut out; HLOD now uses baked per-tree impostor meshes and recompilation deletes stale generated HLOD mesh assets for the container.
+12. Grouped indirect instance lookup is backend-stable: indirect args use zero `startInstance`, and `VegetationRenderWorld` binds `_VegetationInstanceDataBaseOffset` per group.
+13. RenderGraph vertical slice landed: `VegetationRendererFeature` imports prepared buffers, records `VegetationRenderGraphPreparationContract`, and makes depth/color/shadow raster passes consume the compute contract.
+14. Depth/color RenderGraph passes no longer call vegetation prepare inside render functions and no longer opt into global-state mutation.
+15. Cull/select/budget/compaction/indirect-args generation moved into a scheduled preparation job; RenderGraph now consumes only already-completed preparation slots and uploads compacted instance/args buffers without completing jobs during graph execution.
+16. Shadow compaction now writes per-cascade grouped-indirect args and instance spans, instead of submitting one whole group-wide shadow args range into every matching cascade.
+17. Runtime `CheapTree` shadows now admit only compiled cheap/HLOD shadow packets; `SameAsColor` packets are rejected so shadows cannot replay near-detail color geometry.
 
 ## Current Blockers
 
 1. Runtime LOD selection is still distance-band based inside `VegetationRenderWorld`; screen-error and hysteresis remain production hardening.
 2. Procedural placement outputs do not yet compile directly into page providers.
 3. Externalized async near-detail payload providers for disk/Addressables-backed pages are not implemented.
-4. BRG culling/draw-command generation is not Burst/jobified yet; the RenderGraph stall is removed only on supported raw-buffer BRG APIs. Direct3D12 performance still depends on optimizing the RenderGraph grouped-indirect path without registering custom vegetation BRG batches.
+4. Shadow submit still mutates URP-compatible global cascade state while appending into the main shadow atlas.
 5. Dense-scene, mobile, VR, shadow, and wind validation are still pending on the compiled render-world path.
+6. The current preparation implementation is one scheduled job plus command-buffer buffer upload and one-frame completed-frame latency; replacing it with true GPU compute kernels is still pending after packet renderer validation.
 
 ## Next Tasks
 
-1. Optimize the Direct3D12 RenderGraph grouped-indirect path by reducing prepare/upload work, then separately Burst/jobify BRG culling and draw-command generation for supported BRG APIs.
+1. Replace the scheduled preparation job with GPU compute kernels for cull, admission, compaction, and indirect-args writes after validating the packet renderer contract.
 2. Replace distance-only packet selection with screen-error plus hysteresis and budget pressure.
 3. Add procedural placement output as compiled page providers.
 4. Add externalized async near-detail payload providers when pages move out of direct ScriptableObject references.

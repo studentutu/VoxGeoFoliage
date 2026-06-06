@@ -1,0 +1,25 @@
+#pragma kernel WriteVegetationFrameContract
+
+RWStructuredBuffer<uint> _VegetationRenderGraphContract;
+
+uint _VegetationRenderGraphContractMagic;
+uint _VegetationRenderGraphFrameIndex;
+uint _VegetationRenderGraphPassMode;
+uint _VegetationRenderGraphInstanceCount;
+uint _VegetationRenderGraphPacketCount;
+uint _VegetationRenderGraphActiveGroupCount;
+uint _VegetationRenderGraphFrustumMask;
+uint _VegetationRenderGraphGraphVersion;
+
+[numthreads(1, 1, 1)]
+void WriteVegetationFrameContract(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    _VegetationRenderGraphContract[0] = _VegetationRenderGraphContractMagic;
+    _VegetationRenderGraphContract[1] = _VegetationRenderGraphFrameIndex;
+    _VegetationRenderGraphContract[2] = _VegetationRenderGraphPassMode;
+    _VegetationRenderGraphContract[3] = _VegetationRenderGraphInstanceCount;
+    _VegetationRenderGraphContract[4] = _VegetationRenderGraphPacketCount;
+    _VegetationRenderGraphContract[5] = _VegetationRenderGraphActiveGroupCount;
+    _VegetationRenderGraphContract[6] = _VegetationRenderGraphFrustumMask;
+    _VegetationRenderGraphContract[7] = _VegetationRenderGraphGraphVersion;
+}
