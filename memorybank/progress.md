@@ -10,6 +10,8 @@ Purpose: current milestone, current blockers, next tasks. Nothing else.
   now includes full ASCII bake, registration, color/depth, and shadow pipelines with payload ownership, jobified preparation ownership, and resident-memory surfaces
 - Strategic redesign authority: [VegetationGenerationalRedesign.md](../DetailedDocs/VegetationGenerationalRedesign.md)
   defines the current non-HZB production baseline: compiled page assets -> global render world -> URP RenderGraph preparation contract -> scheduled page/cell culling, packet selection, budgets, compaction, and args generation -> grouped-indirect depth/color/shadow passes -> shader wind -> draw commands. Target scale is 100k to 1M loaded instances with streaming. No parallel renderer, no maintained tree-first bridge, no telemetry-gated CPU submission list, no BRG backend, and no HZB before packet renderer production verification. Branch placement matrices, bounds, packet costs, shadow mapping, wind metadata, command bounds, and page/cell split decisions belong to the editor compiler.
+- GPU-driven RenderGraph target: [VegetationRenderGraphGpuDrivenPlan.md](../DetailedDocs/VegetationRenderGraphGpuDrivenPlan.md)
+  defines the next cutout: persistent compiled-data GPU buffers -> RenderGraph compute passes for clear, page/cell visibility, packet admission/budgeting, prefix/compaction, and indirect args -> raster passes that draw all group entries with zero-count args for inactive entries. No C# preparation job, no CPU active-group list, no synchronous diagnostics readback.
 - Finished baseline: [Milestone1.md](../DetailedDocs/Milestone1.md)
 - Current runtime baseline: classic-scene and closed `SubScene` providers register generated `FoliageAssemblyAsset` / `FoliagePageAsset[]` with the global `VegetationRenderWorld`. The only C# rendering backend is RenderGraph grouped-indirect color/depth/shadow with an explicit compute preparation contract that every raster pass consumes. Cull/select/budget/compaction/args generation is scheduled as a preparation job; RenderGraph records only already-completed preparation frames and uploads them without completing jobs in graph execution. Public shadow settings are `Off` and `CheapTree`; HLOD collapses to the baked tree impostor mesh, not branch/trunk L3 replay.
 
@@ -24,7 +26,7 @@ Purpose: current milestone, current blockers, next tasks. Nothing else.
 
 Goal: harden the single RenderGraph packet renderer without reintroducing retired renderer paths.
 
-1. Validate the scheduled RenderGraph preparation job at dense scale, then replace broad phase, packet admission, compaction, and indirect-args writes with GPU compute kernels if profiling demands it.
+1. Implement the GPU-driven RenderGraph Slice 1: make args/compaction graph-owned and remove CPU active-group state from raster submission.
 2. Replace distance-only packet selection with screen-error plus hysteresis and budget pressure.
 3. Add procedural placement output as compiled page providers.
 4. Add externalized async near-detail payload providers when pages move out of direct ScriptableObject references.

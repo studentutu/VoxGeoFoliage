@@ -60,7 +60,7 @@ The C# BRG backend was deleted. The active runtime should not branch by graphics
 
 ## Next Tasks
 
-1. Replace the scheduled preparation job with GPU compute kernels for cull, admission, compaction, and indirect-args writes after validating the packet renderer contract.
+1. Implement [VegetationRenderGraphGpuDrivenPlan.md](VegetationRenderGraphGpuDrivenPlan.md) Slice 1: make args/compaction graph-owned and remove CPU active-group state from raster submission.
 2. Replace distance-only packet selection with screen-error plus hysteresis and budget pressure.
 3. Add procedural placement output as compiled page providers.
 4. Add externalized async near-detail payload providers when pages move out of direct ScriptableObject references.
