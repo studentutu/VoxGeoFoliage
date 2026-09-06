@@ -84,35 +84,8 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## Compilation verification
 
-- Build commands (use these exact entry points to match local tooling) see [vscode-tasks](.vscode/tasks.json):
-  - Must use one of after all edits are done (mandatory): "Compile by Rider MSBuild" task or "Fully Compile by Unity" task. They will update [CompileErrorsAfterUnityRun.txt](CI/CompileErrorsAfterUnityRun.txt) which can show all compile time errors, if the text file is not empty.
-    - Use "Compile by Rider MSBuild" (see .vscode/tasks.json) for a fast compile check when no new .cs/asmdef files were added. Does not use Unity editor(preferred way).
-    - Use "Fully Compile by Unity" when new files/asmdefs were added. Requires to close editor and compilation will use new headless Editor process. This takes  1-4 minutes.
-  - IMPORTANT: xxxx-unity.sln will not see new .cs files, you will need to rebuild solution from within Unity Editor by running rebuildSolutionFromUnityItself.sh, see [Fully Compile by Unity](.vscode/tasks.json).
-  - "Compile by Rider MSBuild" task is the fast compile check but won't work if new script files/asmdefs were added to the solution. Use it when fixing failed tests or doing quick compile validation.
-
-- Test execution is Git Bash–centric and directory-sensitive:
-  1. Before any test run, compile  project with one of: "Compile by Rider MSBuild" task or "Fully Compile by Unity" task (.vscode/tasks.json) and make sure no compile time errors exists in [CompileErrorsAfterUnityRun.txt](CI/CompileErrorsAfterUnityRun.txt).
-  2. Tests are run via Unity Editor Test Runner, but that is a long process, as Unity will need to open/import/recompile project, and only then run actual tests. This process can take up to several minutes. Prefer to ask user to manually run test, as to avoid eating agents daily/weekly limits on the process/bash use.
-  3. Always run tests via the wrapper [runTestsFromRoot.sh](runTestsFromRoot.sh).
-  - The underlying runner is [runTestsBash.sh](.runTestsBash.sh); it shells Unity with -runTests and writes CI/CITestOutput.xml and CI/UnityLogs.log.
-  4. Always run [runParsetests.sh](runParsetests.sh) in order to get both potential [Unity Editor compiler errors](CI/CompileErrorsAfterUnityRun.txt) as well as a list of the actual failed tests. See [CI/RunUnityTestsReadme.md](CI/RunUnityTestsReadme.md)
-  - IMPORTANT: Unity Editor for this project must be CLOSED before running tests (scripts launch their own instance). See [CI/RunUnityTestsReadme.md](CI/RunUnityTestsReadme.md).
-
-- Non-obvious environment requirements:
-  - Unity editor path is hardcoded for Git Bash in [runTestsBash.sh](.runTestsBash.sh). Update if Editor is installed elsewhere.
-  - VS Code tasks invoke Git Bash explicitly; use those on Windows: [Run Unity Tests](.vscode/tasks.json) and [Parse Unity Tests](.vscode/tasks.json).
-  - Rider path (along with it's MSbuild tools) is hardcoded: see [Compile by Rider MSbuild](rebuildSolutionWithRiderMsBuild.sh). Update if Rider version is installed elsewhere.
-  - We use edit-mode tests, it has limitation that no unity methods will be automatically invoked, so we should always expose API and treat unity methods as redundant (but necessary) initialization.
-
-- CI output and failure detection:
-  - Authoritative results live in [CI/CITestOutput.xml](CI/CITestOutput.xml). Logs in [CI/UnityLogs.log](CI/UnityLogs.log).
-  - Unity may not exit on tests failure, but will exit the process and will close opened Unity Editor instance; [parseTestErrors.sh](.parseTestErrors.sh) parses the XML and returns exit code 2 if any <stack-trace> appears. Treat that as the truth. This will also update [CompileErrorsAfterUnityRun.txt](CI/CompileErrorsAfterUnityRun.txt) which can show Unity Editor compile time errors, if the text file is not empty.
-
-- Running a single test (not built into scripts):
-  - Add -testFilter "Namespace.ClassName.TestName" to the Unity CLI line in [runTestsBash.sh](.runTestsBash.sh) when needed.
-  - Keep the rest of flags identical so CI/CITestOutput.xml stays authoritative and still parsed by parseTestErrors.sh.
-
+- Build entry points are defined in `.vscode/tasks.json`.
+- Use kiss-unity-mcp for CI/Compilation/Verification/Shaders-compilation/Tests.
 - Code style and architectural constraints that are easy to miss:
   - Use one class per file and keep summaries explicit and compact.
   - Clear separation of Authoring data from Runtime data. Do not store runtime references in Authoring data.
@@ -196,13 +169,8 @@ flowchart TD
 
 ## CI/Tests/Verification
 
-- See: [vscode.tasks.json](.vscode/tasks.json), [RunUnityTestsReadme.md](/CI/RunUnityTestsReadme.md)
-- Build(rebuild solution): [Fully Compile by Unity](.vscode/tasks.json) and check [CompileErrorsAfterUnityRun.txt](CI/CompileErrorsAfterUnityRun.txt) for any compilation errors (will be empty if no errors), only full rebuild or running unity tests require Unity Editor, so it is required all unity editors with current project to be closed.
-- Tests (from repo root, it is required all unity editors with current project to be closed): `"C:\Program Files\Git\bin\bash.exe" ./runTestsFromRoot.sh`
-  - Ensures `CI/CITestOutput.xml` refreshed
-- Run [runParsetests.sh](runParsetests.sh):
-  - Ensure [Unity Editor compiler errors](CI/CompileErrorsAfterUnityRun.txt) is empty (no compilation errors while running Unity Editor).
-  - See output of [runParsetests.sh](runParsetests.sh) to check if there are any failed tests, it will also enumerate them if failed tests exists.
+- Build entry points are defined in `.vscode/tasks.json`.
+- Use kiss-unity-mcp for CI/Compilation/Verification/Shaders-compilation/Tests.
 
 ## When finished with task/job
 

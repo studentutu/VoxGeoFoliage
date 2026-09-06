@@ -104,9 +104,7 @@ Purpose: compact cross-module rules, runtime authorities, and wiring hubs.
 
 - EditMode suite in [`Assets/EditorTests`](../Assets/EditorTests) is the primary behavioral safety net.
 - Vegetation authoring coverage currently starts in [`Packages/com.voxgeofol.vegetation/Tests/Editor`](../Packages/com.voxgeofol.vegetation/Tests/Editor).
-- `CI/CITestOutput.xml` is authoritative for test results.
-- `CI/CompileErrorsAfterUnityRun.txt` is authoritative for Unity and Burst compile errors.
-- Use `Fully Compile by Unity` when files were added, removed, or renamed.
-- Use the Rider MSBuild compile path for quick feedback only.
+- Build entry points are defined in `.vscode/tasks.json`.
+- Use kiss-unity-mcp for CI/Compilation/Verification/Shaders-compilation/Tests.
 
 --

@@ -52,8 +52,13 @@ Purpose: always-read routing index. Use this after the compact top-level memory-
 - Triggers:
   - tests
   - ci
+  - kiss-unity-mcp
+  - tooling setup
 - Read:
-  - [RunUnityTestsReadme](../CI/RunUnityTestsReadme.md)
+  - [Technical context verification flow](techContext.md#compilation--verification-flow) - installed tooling, configuration, and first-import requirement.
+  - Build entry points are defined in `.vscode/tasks.json`.
+  - Use kiss-unity-mcp for CI/Compilation/Verification/Shaders-compilation/Tests.
+
 
 ## Scene Placement Utilities
 

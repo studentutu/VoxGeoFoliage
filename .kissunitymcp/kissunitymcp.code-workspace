@@ -1,0 +1,113 @@
+{
+  "folders": [
+    {
+      "path": ".."
+    }
+  ],
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "kiss-unity-mcp: Check tool paths",
+        "type": "process",
+        "command": "git",
+        "args": [
+          "-c",
+          "alias.unity-bash=!bash",
+          "unity-bash",
+          "${workspaceFolder}/.kissunitymcp/scripts/unity.sh",
+          "doctor",
+          "${workspaceFolder}"
+        ],
+        "group": "build",
+        "problemMatcher": []
+      },
+      {
+        "label": "kiss-unity-mcp: unity-import-long-compile",
+        "type": "process",
+        "command": "git",
+        "args": [
+          "-c",
+          "alias.unity-bash=!bash",
+          "unity-bash",
+          "${workspaceFolder}/.kissunitymcp/scripts/unity.sh",
+          "unity-import-long-compile",
+          "${workspaceFolder}"
+        ],
+        "group": "build",
+        "problemMatcher": "$msCompile"
+      },
+      {
+        "label": "kiss-unity-mcp: Fast MSBuild",
+        "type": "process",
+        "command": "git",
+        "args": [
+          "-c",
+          "alias.unity-bash=!bash",
+          "unity-bash",
+          "${workspaceFolder}/.kissunitymcp/scripts/unity.sh",
+          "build",
+          "${workspaceFolder}"
+        ],
+        "group": "build",
+        "problemMatcher": "$msCompile"
+      },
+      {
+        "label": "kiss-unity-mcp: EditMode tests",
+        "type": "process",
+        "command": "git",
+        "args": [
+          "-c",
+          "alias.unity-bash=!bash",
+          "unity-bash",
+          "${workspaceFolder}/.kissunitymcp/scripts/unity.sh",
+          "tests",
+          "${workspaceFolder}"
+        ],
+        "group": "build",
+        "problemMatcher": []
+      },
+      {
+        "label": "kiss-unity-mcp: Parse test results",
+        "type": "process",
+        "command": "git",
+        "args": [
+          "-c",
+          "alias.unity-bash=!bash",
+          "unity-bash",
+          "${workspaceFolder}/.kissunitymcp/scripts/unity.sh",
+          "parse-tests",
+          "${workspaceFolder}"
+        ],
+        "group": "build",
+        "problemMatcher": []
+      },
+      {
+        "label": "kiss-unity-mcp: Compile shaders",
+        "type": "process",
+        "command": "git",
+        "args": [
+          "-c",
+          "alias.unity-bash=!bash",
+          "unity-bash",
+          "${workspaceFolder}/.kissunitymcp/scripts/unity.sh",
+          "shaders",
+          "${workspaceFolder}"
+        ],
+        "group": "build",
+        "problemMatcher": []
+      },
+      {
+        "label": "kiss-unity-mcp: Open tool settings",
+        "type": "process",
+        "command": "code",
+        "args": [
+          "--reuse-window",
+          "${workspaceFolder}/.kissunitymcp/tools.env"
+        ],
+        "group": "build",
+        "problemMatcher": []
+      }
+    ]
+  }
+}

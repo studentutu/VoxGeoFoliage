@@ -4,7 +4,7 @@ Purpose: compact toolchain, package, and verification reference for the current 
 
 ## Engine and Language
 
-- Unity: `6000.3.7f1`
+- Unity: `6000.3.15f1` (exact version from `ProjectSettings/ProjectVersion.txt`)
 - C#: `8` target style, current generated projects report `LangVersion 9.0`
 - API compatibility: `.NET Standard 2.1`
 
@@ -24,7 +24,7 @@ Purpose: compact toolchain, package, and verification reference for the current 
 
 Repo-used libraries and plugins:
 
-- none
+- `kiss-unity-mcp 0.6.0`: embedded editor package at `Packages/com.studentutu.kissunitymcp` and standalone Bash tooling at `.kissunitymcp`.
 
 ## Repo Structure
 
@@ -66,16 +66,14 @@ Repo-used libraries and plugins:
 - `memorybank`
   - compact cross-cutting repo guidance and routing
 
-## Build / Verification Flow
+## Compilation / Verification Flow
 
 - Build entry points are defined in `.vscode/tasks.json`.
-- Fast compile: `Compile by Rider MSBuild`
-- Mandatory full compile when new `.cs` or `.asmdef` files are added: `Fully Compile by Unity`
-- Test runner wrapper: `runTestsFromRoot.sh`
-- Result parser: `runParsetests.sh`
-- Authoritative outputs:
-  - `CI/CITestOutput.xml`
-  - `CI/CompileErrorsAfterUnityRun.txt` (search for `error CS...` lines plus `## Script Compilation Error` blocks with a 50-line capture window of Burst generated error)
+- Use kiss-unity-mcp for CI/Compilation/Verification/Shaders-compilation/Tests.
+- Dedicated VS Code workspace: `.vscode/kissunitymcp.code-workspace`; manual dispatcher: `.kissunitymcp/scripts/unity.sh`; tool overrides: `.kissunitymcp/tools.env` (parsed as data, never sourced).
+- Setup inspection and doctor passed on 2026-09-06 with Unity `6000.3.15f1` and Rider `2025.1.4` MSBuild resolved automatically. No path overrides were needed.
+- Setup does not establish compilation success or a fast-build snapshot. Close interactive Unity and run `kiss-unity-mcp: unity-import-long-compile` before the first fast MSBuild; use full import again after asset, package, or project-membership changes.
+- Full verification logs, test XML, and import snapshots live under ignored `Logs/kissunitymcp`.
 
 ## Constraints
 

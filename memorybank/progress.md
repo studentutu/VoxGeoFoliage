@@ -15,6 +15,7 @@ Purpose: current milestone, current blockers, next tasks. Nothing else.
 
 ## Current Blockers
 
+- Tooling setup is complete and path checks passed; the initial kiss-unity-mcp Unity import/compile is pending. See [verification flow](techContext.md#compilation--verification-flow).
 - shadow target is now `ShadowMode.Off` / `ShadowMode.CheapTree`, but current code still exposes legacy `RenderMainLightShadows` / `AllowExpandedTreePromotionInShadows`
 - shadow currently reuses the same default budget shape as color, so explicit-frustum/shadow preparation doubles fixed residency without proving it needs to
 - camera and explicit-frustum preparation still keep two full GPU pipelines per active container instead of the target pooled prepared-view residency

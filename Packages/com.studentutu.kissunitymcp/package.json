@@ -1,0 +1,15 @@
+{
+  "name": "com.studentutu.kissunitymcp",
+  "displayName": "kissunitymcp",
+  "version": "0.6.0",
+  "unity": "2023.1",
+  "description": "Simple and minimal unity MCP for buildings, testing, and verifying code and shaders.",
+  "dependencies": {},
+  "author": {
+    "name": "Roman",
+    "url": "https://github.com/studentutu",
+    "email": "studentutu@email.com"
+  },
+  "changelogUrl": "https://github.com/studentutu/kiss-unity-mcp/blob/master/com.studentutu.kissunitymcp/CHANGELOG.md",
+  "documentationUrl": "https://github.com/studentutu/kiss-unity-mcp/blob/master/com.studentutu.kissunitymcp/README.md"
+}
